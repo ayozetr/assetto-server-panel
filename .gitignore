@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Environment — never commit real credentials
+.env
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+
+# Artefacts
+*.zip
+*.sh
+
+# Python
+bot.py
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

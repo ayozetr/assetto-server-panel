@@ -199,7 +199,16 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                     </div>
                     <div>
                       <div className="player-name">{p.name}</div>
-                      <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
+                      <div className="row" style={{gap:4, alignItems:'center', marginTop:2}}>
+                        <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
+                        {p.steam && (
+                          <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
+                            style={{display:'flex', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
+                            title="Ver perfil de Steam">
+                            <I2P.IconSteam size={11}/>
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -264,7 +273,16 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                 <td><div className={`player-pos ${i === 0 ? 'p1' : ''}`}>{i + 1}</div></td>
                 <td>
                   <div className="player-name">{p.name}</div>
-                  <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
+                  <div className="row" style={{gap: 4, alignItems:'center', marginTop:2}}>
+                    <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
+                    {p.steam && (
+                      <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
+                        style={{display:'flex', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
+                        title="Ver perfil de Steam">
+                        <I2P.IconSteam size={11}/>
+                      </a>
+                    )}
+                  </div>
                 </td>
                 <td className="muted">{p.car}</td>
                 <td>{p.laps}</td>

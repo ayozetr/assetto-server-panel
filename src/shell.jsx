@@ -64,7 +64,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
       <div className="brand">
         <div className="brand-mark">AC</div>
         <div>
-          <div className="brand-name">Assetto Server</div>
+          <div className="brand-name">Assetto Server Panel</div>
           <div className="brand-sub" style={{display:'flex', alignItems:'center', gap: 4}}>
             <I.IconOS size={10}/>
             {osInfo ? `${osInfo.name} ${osInfo.version}` : 'Linux'}

@@ -51,11 +51,12 @@ const IconChevronDown = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9"/><
 const IconUser = (p) => <Icon {...p}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></Icon>;
 const IconLock = (p) => <Icon {...p}><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></Icon>;
 const IconOS = (p) => <Icon {...p}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></Icon>;
+const IconSteam = (p) => <Icon {...p} fill="currentColor" stroke="none"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879L8.5 17.5a2.5 2.5 0 1 1 2.236-3.584L13 14.5a3.5 3.5 0 1 0 3.5-3.5h-.26l1.12-2.686A2 2 0 1 0 14.5 7.5l-3.064 7.35A2.5 2.5 0 0 1 8.5 17.5l2.124 3.97C5.405 20.73 2 16.76 2 12 2 6.477 6.477 2 12 2z"/></Icon>;
 
 window.AppIcons = {
   IconDashboard, IconCar, IconTrack, IconFlag, IconSettings, IconUsers, IconPlayers,
   IconTerminal, IconSearch, IconBell, IconSun, IconMoon, IconPlay, IconStop, IconRefresh,
   IconCheck, IconX, IconPlus, IconEdit, IconTrash, IconLogout, IconDownload, IconShield,
   IconKick, IconClock, IconCloud, IconChevronDown, IconUser, IconLock,
-  IconReload, IconPower, IconTimer, IconHistory, IconChip, IconFolder, IconOS
+  IconReload, IconPower, IconTimer, IconHistory, IconChip, IconFolder, IconOS, IconSteam
 };

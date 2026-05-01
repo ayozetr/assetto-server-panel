@@ -26,6 +26,11 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
 
         {/* Header */}
         <div className="modal-header">
+          {car.brandLogo && (
+            <img src={car.brandLogo} alt={car.brand}
+              style={{height:28, width:'auto', objectFit:'contain', marginRight:4, flexShrink:0}}
+              onError={e => { e.target.style.display='none'; }}/>
+          )}
           <div style={{flex: 1, minWidth: 0}}>
             <div className="modal-title" style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
               {car.name}
@@ -199,7 +204,14 @@ function CarCard({ car, count, onOpen }) {
       </div>
 
       <div className="car-meta">
-        <div className="car-name">{car.name}</div>
+        <div style={{display:'flex', alignItems:'center', gap:6, minWidth:0}}>
+          {car.brandLogo && (
+            <img src={car.brandLogo} alt={car.brand}
+              style={{height:14, width:'auto', objectFit:'contain', flexShrink:0, opacity:0.85}}
+              onError={e => { e.target.style.display='none'; }}/>
+          )}
+          <div className="car-name" style={{minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{car.name}</div>
+        </div>
         <div className="car-brand">{[car.brand, car.year].filter(Boolean).join(' · ')}</div>
         <div className="car-stats">
           {car.specs?.bhp    && <span className="car-stat">{car.specs.bhp}</span>}
@@ -251,7 +263,8 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose }) {
             <div className="modal-title" style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
               {name}
             </div>
-            <div style={{fontSize:12, color:'var(--text-muted)', marginTop:2}}>
+            <div style={{fontSize:12, color:'var(--text-muted)', marginTop:2, display:'flex', alignItems:'center', gap:5}}>
+              {track.flag && <img src={track.flag} alt={track.country} style={{height:10, width:'auto', borderRadius:1, opacity:0.85}} onError={e=>{e.target.style.display='none'}}/>}
               {[track.city, length > 0 ? `${length} km` : null, pits ? `${pits} pits` : null].filter(Boolean).join(' · ')}
             </div>
           </div>
@@ -380,19 +393,38 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
     }
   };
 
+  const [imgFailed, setImgFailed] = useStateB(false);
+  const trackInitial = track.name.slice(0,2).toUpperCase();
+
   return (
     <div className={`track-card ${selected ? 'selected' : ''}`} onClick={handleClick}>
       <div className="track-thumb">
-        <img src={track.thumb} alt={track.name}
-          style={{width:'100%', height:'100%', objectFit:'cover'}}
-          onError={e => { e.target.style.display='none'; }}
-        />
+        {!imgFailed ? (
+          <img src={track.thumb} alt={track.name}
+            style={{width:'100%', height:'100%', objectFit:'cover'}}
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <div style={{
+            width:'100%', height:'100%', display:'flex', alignItems:'center',
+            justifyContent:'center', background:'var(--bg-3)', color:'var(--text-faint)',
+          }}>
+            <span style={{fontSize:20, fontWeight:700, letterSpacing:'-0.03em', opacity:0.35}}>{trackInitial}</span>
+          </div>
+        )}
       </div>
       <div className="track-meta">
         <div className="row-between">
-          <div>
+          <div style={{minWidth:0}}>
             <div className="track-name">{track.name}</div>
-            <div className="track-loc">{track.city}</div>
+            <div className="track-loc" style={{display:'flex', alignItems:'center', gap:4}}>
+              {track.flag && (
+                <img src={track.flag} alt={track.country}
+                  style={{height:9, width:'auto', borderRadius:1, opacity:0.85}}
+                  onError={e => { e.target.style.display='none'; }}/>
+              )}
+              {track.city}
+            </div>
           </div>
           <div style={{display:'flex', gap:4, alignItems:'center', flexShrink:0}}>
             {hasLayouts && <span className="badge" style={{fontSize:10}}>{track.layouts.length} layouts</span>}

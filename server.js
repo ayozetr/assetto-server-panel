@@ -303,6 +303,39 @@ function isValidSkinName(name) {
     !name.includes('..') && !name.includes('/') && !name.includes('\\') && !name.includes('\0');
 }
 
+// ── Brand logo + country flag helpers ─────────────────────────────────────────
+const BRAND_LOGO_MAP = {
+  'Audi': 'Audi', 'BMW': 'BMW', 'Citroen': 'Citroen', 'Fiat': 'Fiat',
+  'Ford': 'Ford', 'Lancia': 'Lancia', 'Mercedes-Benz': 'Mercedes-Benz',
+  'Mitsubishi': 'Mitsubishi', 'Opel': 'Opel', 'Peugeot': 'Peugeot',
+  'Renault': 'Renault', 'Seat': 'SEAT', 'Simca': 'Simca',
+  'Skoda': 'Skoda', 'Talbot': 'Talbot', 'Volkswagen': 'Volkswagen',
+};
+function brandLogoUrl(brand) {
+  const slug = BRAND_LOGO_MAP[brand];
+  return slug ? `https://www.carlogos.org/logo/${slug}-logo.png` : null;
+}
+
+const COUNTRY_ISO2 = {
+  'Spain': 'es', 'Italy': 'it', 'Germany': 'de', 'France': 'fr',
+  'United Kingdom': 'gb', 'UK': 'gb', 'England': 'gb',
+  'Japan': 'jp', 'USA': 'us', 'United States': 'us',
+  'Austria': 'at', 'Belgium': 'be', 'Portugal': 'pt',
+  'Hungary': 'hu', 'Monaco': 'mc', 'Brazil': 'br',
+  'Australia': 'au', 'Netherlands': 'nl', 'Sweden': 'se',
+  'Switzerland': 'ch', 'Finland': 'fi', 'China': 'cn',
+  'Czech Republic': 'cz', 'Czechia': 'cz', 'Poland': 'pl',
+  'Canada': 'ca', 'Mexico': 'mx', 'Argentina': 'ar',
+  'South Africa': 'za', 'Romania': 'ro', 'Slovakia': 'sk',
+  // Regional/island values used in track data
+  'Tenerife': 'es', 'Canary Islands': 'es', 'Gran Canaria': 'es',
+};
+function countryFlag(country) {
+  if (!country) return null;
+  const iso = COUNTRY_ISO2[country] || COUNTRY_ISO2[country.trim()];
+  return iso ? `https://flagcdn.com/16x12/${iso}.png` : null;
+}
+
 function stripHtml(html) {
   if (!html) return '';
   return html
@@ -623,6 +656,7 @@ async function apiCars(res) {
           id,
           name:        ui.name  || formatName(id),
           brand:       ui.brand || '',
+          brandLogo:   brandLogoUrl(ui.brand || ''),
           cls,
           year:        ui.year  || '',
           description: stripHtml(ui.description || '').slice(0, 500),
@@ -690,10 +724,14 @@ async function apiTracks(res) {
         }
       }
 
+      const rawCountry = mainJson.country || '';
+      const rawCity    = mainJson.city    || '';
       return {
         id,
         name:          mainJson.name    || formatName(id),
-        city:          mainJson.city    || mainJson.country || '',
+        city:          rawCity || rawCountry,
+        country:       rawCountry,
+        flag:          countryFlag(rawCountry),
         length:        parseTrackLength(mainJson.length),
         pits:          parseInt(mainJson.pitboxes) || 0,
         layouts,

@@ -350,6 +350,14 @@ function getCPUName() {
   } catch { return os.cpus()[0]?.model || 'Unknown'; }
 }
 
+function getOSInfo() {
+  try {
+    const raw  = fs.readFileSync('/etc/os-release', 'utf8');
+    const get  = k => { const m = raw.match(new RegExp(`^${k}="?([^"\\n]+)"?`, 'm')); return m ? m[1] : ''; };
+    return { name: get('NAME') || os.type(), version: get('VERSION_ID') || '' };
+  } catch { return { name: os.type(), version: '' }; }
+}
+
 function getCPU() {
   return new Promise(resolve => {
     const read = () => {
@@ -422,7 +430,7 @@ function parseLine(raw, id) {
 async function apiMetrics(res) {
   try {
     const [cpu, ram, running] = await Promise.all([getCPU(), Promise.resolve(getRAM()), checkACRunning()]);
-    json(res, 200, { cpu, ram, running, uptime: getACUptime(), cpuName: getCPUName() });
+    json(res, 200, { cpu, ram, running, uptime: getACUptime(), cpuName: getCPUName(), osInfo: getOSInfo() });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -601,10 +609,15 @@ async function apiCars(res) {
           skins = entries.filter(e => e.isDirectory()).map(e => e.name);
         } catch {}
 
-        const cls   = ui.class || ui.tags?.[0] || '';
-        const thumb = skins.length > 0
-          ? `/api/content/cars/${encodeURIComponent(id)}/skins/${encodeURIComponent(skins[0])}/preview`
-          : `/api/content/cars/${encodeURIComponent(id)}/thumb`;
+        const cls = ui.class || ui.tags?.[0] || '';
+
+        let thumb = null;
+        if (skins.length > 0) {
+          thumb = `/api/content/cars/${encodeURIComponent(id)}/skins/${encodeURIComponent(skins[0])}/preview`;
+        } else {
+          const badgePath = path.join(AC_CARS_DIR, id, 'ui', 'badge.png');
+          try { await fsp.access(badgePath); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; } catch {}
+        }
 
         return {
           id,
@@ -660,15 +673,33 @@ async function apiTracks(res) {
       if (!layouts.length) layouts = [''];
       if (!mainJson) mainJson = {};
 
+      // Per-layout details (only for multi-layout tracks)
+      let layoutDetails = {};
+      if (layouts.length > 1 || (layouts.length === 1 && layouts[0] !== '')) {
+        for (const layout of layouts) {
+          if (!layout) continue;
+          let lJson = {};
+          try { lJson = JSON.parse(await fsp.readFile(path.join(uiDir, layout, 'ui_track.json'), 'utf8')); } catch {}
+          layoutDetails[layout] = {
+            name:        lJson.name        || mainJson.name    || formatName(id),
+            description: stripHtml(lJson.description || mainJson.description || '').slice(0, 400),
+            length:      parseTrackLength(lJson.length  || mainJson.length),
+            pits:        parseInt(lJson.pitboxes || mainJson.pitboxes) || 0,
+            thumb:       `/api/content/tracks/${encodeURIComponent(id)}/layout/${encodeURIComponent(layout)}/thumb`,
+          };
+        }
+      }
+
       return {
         id,
-        name:        mainJson.name    || formatName(id),
-        city:        mainJson.city    || mainJson.country || '',
-        length:      parseTrackLength(mainJson.length),
-        pits:        parseInt(mainJson.pitboxes) || 0,
+        name:          mainJson.name    || formatName(id),
+        city:          mainJson.city    || mainJson.country || '',
+        length:        parseTrackLength(mainJson.length),
+        pits:          parseInt(mainJson.pitboxes) || 0,
         layouts,
-        description: stripHtml(mainJson.description || '').slice(0, 400),
-        thumb:       `/api/content/tracks/${encodeURIComponent(id)}/thumb`,
+        layoutDetails,
+        description:   stripHtml(mainJson.description || '').slice(0, 400),
+        thumb:         `/api/content/tracks/${encodeURIComponent(id)}/thumb`,
       };
     }));
     json(res, 200, tracks.sort((a, b) => a.name.localeCompare(b.name)));
@@ -720,6 +751,19 @@ function apiTrackThumb(trackId, res) {
   });
 }
 
+// Serve a specific layout's preview.png
+function apiTrackLayoutThumb(trackId, layout, res) {
+  if (!isValidContentId(trackId) || !isValidContentId(layout))
+    return respond(res, 400, 'text/plain', 'Invalid ID');
+  const imgPath = path.join(AC_TRACKS_DIR, trackId, 'ui', layout, 'preview.png');
+  if (!imgPath.startsWith(AC_TRACKS_DIR + path.sep))
+    return respond(res, 403, 'text/plain', 'Forbidden');
+  fs.readFile(imgPath, (err, data) => {
+    if (err) return respond(res, 404, 'text/plain', 'Not found');
+    respondImage(res, data);
+  });
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
   const urlPath = req.url.split('?')[0];
@@ -735,12 +779,14 @@ function handler(req, res) {
     }
 
     // Content image endpoints
-    const carSkinMatch    = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);
-    const carThumbMatch   = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/thumb$/);
-    const trackThumbMatch = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/thumb$/);
-    if (carSkinMatch    && req.method === 'GET') return apiCarSkinPreview(decodeURIComponent(carSkinMatch[1]), decodeURIComponent(carSkinMatch[2]), res);
-    if (carThumbMatch   && req.method === 'GET') return apiCarThumb(decodeURIComponent(carThumbMatch[1]), res);
-    if (trackThumbMatch && req.method === 'GET') return apiTrackThumb(decodeURIComponent(trackThumbMatch[1]), res);
+    const carSkinMatch         = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);
+    const carThumbMatch        = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/thumb$/);
+    const trackThumbMatch      = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/thumb$/);
+    const trackLayoutThumbMatch= urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/layout\/([^/]+)\/thumb$/);
+    if (carSkinMatch         && req.method === 'GET') return apiCarSkinPreview(decodeURIComponent(carSkinMatch[1]), decodeURIComponent(carSkinMatch[2]), res);
+    if (carThumbMatch        && req.method === 'GET') return apiCarThumb(decodeURIComponent(carThumbMatch[1]), res);
+    if (trackLayoutThumbMatch && req.method === 'GET') return apiTrackLayoutThumb(decodeURIComponent(trackLayoutThumbMatch[1]), decodeURIComponent(trackLayoutThumbMatch[2]), res);
+    if (trackThumbMatch      && req.method === 'GET') return apiTrackThumb(decodeURIComponent(trackThumbMatch[1]), res);
 
     // Data endpoints
     if (urlPath === '/api/metrics'         && req.method === 'GET') return apiMetrics(res);

@@ -32,6 +32,7 @@ function App() {
     ramTotal: 0,
     uptime: '—',
   });
+  const [osInfo, setOsInfo] = uS(null);
 
   const [players,     setPlayers]     = uS([]);
   const [pastPlayers, setPastPlayers] = uS([]);
@@ -128,6 +129,7 @@ function App() {
             ramTotal: d.ram.total,
             uptime:   d.uptime,
           }));
+          if (d.osInfo) setOsInfo(d.osInfo);
         })
         .catch(() => {});
     };
@@ -154,6 +156,7 @@ function App() {
         cars={cars} tracks={tracks}
         sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}
         config={config} setConfig={setConfig}
+        osInfo={osInfo}
       />
     </ToastProvider>
   );
@@ -171,7 +174,7 @@ function AppInner(props) {
     user, page, setPage, theme, setTheme,
     server, setServer, players, setPlayers, pastPlayers,
     lapTimes, users, setUsers, cars, tracks,
-    sessionCfg, setSessionCfg, config, setConfig, setUser,
+    sessionCfg, setSessionCfg, config, setConfig, setUser, osInfo,
   } = props;
 
   const isAdmin = user.role === 'admin';
@@ -249,6 +252,7 @@ function AppInner(props) {
         user={user}
         onLogout={() => setUser(null)}
         playersCount={server.status === 'running' ? players.length : 0}
+        osInfo={osInfo}
       />
       <div className="main">
         <Topbar

@@ -35,7 +35,7 @@ function ToastProvider({ children }) {
 // ──────────────────────────────────────────────────────
 // Sidebar
 // ──────────────────────────────────────────────────────
-function Sidebar({ page, setPage, user, onLogout, playersCount }) {
+function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
   const items = [
     { id: 'dashboard', label: 'Dashboard', icon: I.IconDashboard, group: 'general' },
     { id: 'players', label: 'Jugadores', icon: I.IconPlayers, group: 'general', badge: playersCount },
@@ -65,7 +65,10 @@ function Sidebar({ page, setPage, user, onLogout, playersCount }) {
         <div className="brand-mark">AC</div>
         <div>
           <div className="brand-name">Assetto Server</div>
-          <div className="brand-sub">v0.4.2 · linux</div>
+          <div className="brand-sub" style={{display:'flex', alignItems:'center', gap: 4}}>
+            <I.IconOS size={10}/>
+            {osInfo ? `${osInfo.name} ${osInfo.version}` : 'Linux'}
+          </div>
         </div>
       </div>
 

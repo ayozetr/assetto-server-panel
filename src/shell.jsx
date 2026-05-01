@@ -116,7 +116,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
 // ──────────────────────────────────────────────────────
 // Topbar with server pill + theme toggle
 // ──────────────────────────────────────────────────────
-function Topbar({ pageTitle, theme, setTheme, server, onServerAction, user }) {
+function Topbar({ theme, setTheme, server, onServerAction, user }) {
   const statusLabel = {
     running: 'En ejecución',
     starting: 'Arrancando',
@@ -179,11 +179,6 @@ function Topbar({ pageTitle, theme, setTheme, server, onServerAction, user }) {
       >
         {theme === 'dark' ? <I.IconSun size={15}/> : <I.IconMoon size={15}/>}
       </button>
-      <button className="icon-btn" title="Notificaciones">
-        <I.IconBell size={15}/>
-      </button>
-
-      <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -250,7 +245,7 @@ function Login({ onLogin }) {
         </button>
 
         <div className="login-hint">
-          Demo · entra con <code>admin</code> (admin) o <code>jorge_p</code> (user) · cualquier contraseña
+          Demo · entra con <code>admin</code> (admin) o <code>mattia</code> (admin) · cualquier contraseña
         </div>
       </form>
     </div>

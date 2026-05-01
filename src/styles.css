@@ -653,6 +653,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .toast.success { border-left-color: #16a34a; }
 .toast.warn { border-left-color: #f59e0b; }
 @keyframes slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* Players */
 .player-row {

@@ -142,13 +142,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   );
 }
 
-const fmtMs = (ms) => {
-  if (ms == null) return '—';
-  const m = Math.floor(ms / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  const t = ms % 1000;
-  return `${m}:${String(s).padStart(2,'0')}.${String(t).padStart(3,'0')}`;
-};
+const fmtMs = window.AppUtils.fmtMs;
 
 // Players page
 function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, onKick, onBan }) {

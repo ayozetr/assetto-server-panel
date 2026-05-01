@@ -244,3 +244,14 @@ window.AppData = {
   LOG_TEMPLATES,
   LAP_TIMES,
 };
+
+// Shared utilities used across page files
+window.AppUtils = {
+  fmtMs: (ms) => {
+    if (ms == null || ms < 0) return '—';
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    const t = ms % 1000;
+    return `${m}:${String(s).padStart(2,'0')}.${String(t).padStart(3,'0')}`;
+  },
+};

@@ -2,14 +2,7 @@
 const { useState: uSt, useMemo: uMt } = React;
 const ITi = window.AppIcons;
 
-const fmtMs = (ms) => {
-  if (ms == null) return '—';
-  const totalSec = ms / 1000;
-  const m = Math.floor(totalSec / 60);
-  const s = Math.floor(totalSec % 60);
-  const t = Math.floor(ms % 1000);
-  return `${m}:${String(s).padStart(2,'0')}.${String(t).padStart(3,'0')}`;
-};
+const fmtMs = window.AppUtils.fmtMs;
 const fmtDelta = (ms) => {
   if (ms == null) return '—';
   const sign = ms > 0 ? '+' : ms < 0 ? '−' : '';

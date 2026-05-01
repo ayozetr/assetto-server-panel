@@ -245,7 +245,6 @@ function AppInner(props) {
       />
       <div className="main">
         <Topbar
-          pageTitle={PAGES[page].title}
           theme={theme} setTheme={setTheme}
           server={server}
           onServerAction={handleServerAction}

@@ -459,18 +459,24 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
 function PageCars({ cars, sessionCfg, setSessionCfg }) {
   const [query,     setQuery]     = useStateB('');
   const [cls,       setCls]       = useStateB('all');
+  const [brand,     setBrand]     = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(false);
   const [modalCar,  setModalCar]  = useStateB(null);
 
   const kunosCount = useMemoB(() => cars.filter(c => c.id.startsWith('ks_')).length, [cars]);
   const classes    = useMemoB(() => ['all', ...Array.from(new Set(cars.map(c => c.cls).filter(Boolean))).sort()], [cars]);
+  const brands     = useMemoB(() => {
+    const base = cars.filter(c => showKunos || !c.id.startsWith('ks_'));
+    return ['all', ...Array.from(new Set(base.map(c => c.brand).filter(Boolean))).sort()];
+  }, [cars, showKunos]);
 
   const filtered = useMemoB(() => cars.filter(c => {
     if (!showKunos && c.id.startsWith('ks_')) return false;
     if (cls !== 'all' && c.cls !== cls) return false;
+    if (brand !== 'all' && c.brand !== brand) return false;
     if (query && !(`${c.brand} ${c.name} ${c.id}`).toLowerCase().includes(query.toLowerCase())) return false;
     return true;
-  }), [cars, cls, query, showKunos]);
+  }), [cars, cls, brand, query, showKunos]);
 
   const addCar = (id) => setSessionCfg(cfg => ({ ...cfg, carIds: [...cfg.carIds, id] }));
   const removeCar = (id) => setSessionCfg(cfg => {
@@ -530,6 +536,18 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
           </label>
         )}
       </div>
+      {brands.length > 1 && (
+        <div className="toolbar" style={{paddingTop: 0, gap: 8, flexWrap:'wrap'}}>
+          <div className="tag-row" style={{flexWrap:'wrap'}}>
+            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>Marca:</span>
+            {brands.map(b => (
+              <button key={b} className={`tag ${brand === b ? 'active' : ''}`} onClick={() => setBrand(b)}>
+                {b === 'all' ? 'Todas' : b}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="card"><div className="empty">No se encontraron coches con esos filtros.</div></div>
@@ -562,16 +580,22 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
 // ── PageTracks ────────────────────────────────────────────────────────────────
 function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
   const [query,      setQuery]      = useStateB('');
+  const [country,    setCountry]    = useStateB('all');
   const [showKunos,  setShowKunos]  = useStateB(false);
   const [modalTrack, setModalTrack] = useStateB(null);
 
   const kunosCount = useMemoB(() => tracks.filter(t => t.id.startsWith('ks_')).length, [tracks]);
+  const countries  = useMemoB(() => {
+    const base = tracks.filter(t => showKunos || !t.id.startsWith('ks_'));
+    return ['all', ...Array.from(new Set(base.map(t => t.countryEs || t.country).filter(Boolean))).sort()];
+  }, [tracks, showKunos]);
 
   const filtered = useMemoB(() => tracks.filter(t => {
     if (!showKunos && t.id.startsWith('ks_')) return false;
-    if (query && !(t.name + ' ' + t.city + ' ' + t.id).toLowerCase().includes(query.toLowerCase())) return false;
+    if (country !== 'all' && (t.countryEs || t.country) !== country) return false;
+    if (query && !(t.name + ' ' + (t.countryEs || t.country) + ' ' + t.id).toLowerCase().includes(query.toLowerCase())) return false;
     return true;
-  }), [tracks, query, showKunos]);
+  }), [tracks, country, query, showKunos]);
 
   return (
     <>
@@ -596,6 +620,18 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
           </label>
         )}
       </div>
+      {countries.length > 1 && (
+        <div className="toolbar" style={{paddingTop: 0, gap: 8, flexWrap:'wrap'}}>
+          <div className="tag-row" style={{flexWrap:'wrap'}}>
+            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>País:</span>
+            {countries.map(c => (
+              <button key={c} className={`tag ${country === c ? 'active' : ''}`} onClick={() => setCountry(c)}>
+                {c === 'all' ? 'Todos' : c}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="track-grid">
         {filtered.map(t => (

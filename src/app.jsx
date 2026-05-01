@@ -181,32 +181,21 @@ function AppInner(props) {
 
   const handleServerAction = (action) => {
     if (!isAdmin) { toast.push('No tienes permisos para esta acción', 'warn'); return; }
-    if (action === 'start') {
-      setServer(s => ({...s, status: 'starting'}));
-      toast.push('Arrancando servidor…', 'info');
-      setTimeout(() => {
-        setServer(s => ({...s, status: 'running', uptime: '0h 00m', cpu: 22, ram: 1100, players: players.length}));
-        toast.push('Servidor arrancado correctamente', 'success');
-      }, 1800);
-    } else if (action === 'stop') {
-      setServer(s => ({...s, status: 'stopping'}));
-      toast.push('Deteniendo servidor…', 'info');
-      setTimeout(() => {
-        setServer(s => ({...s, status: 'stopped', players: 0, cpu: 0, ram: 0, uptime: '—'}));
-        toast.push('Servidor detenido', 'success');
-      }, 1400);
-    } else if (action === 'restart') {
-      setServer(s => ({...s, status: 'stopping'}));
-      toast.push('Reiniciando servidor…', 'info');
-      setTimeout(() => setServer(s => ({...s, status: 'starting'})), 1200);
-      setTimeout(() => {
-        setServer(s => ({...s, status: 'running', uptime: '0h 00m'}));
-        toast.push('Servidor reiniciado', 'success');
-      }, 2600);
-    } else if (action === 'reload') {
+    if (action === 'reload') {
       toast.push('Recargando configuración…', 'info');
       setTimeout(() => toast.push('Configuración recargada sin reinicio', 'success'), 800);
+      return;
     }
+    const labels = { start: 'Arrancando', stop: 'Deteniendo', restart: 'Reiniciando' };
+    const transitional = action === 'stop' ? 'stopping' : 'starting';
+    setServer(s => ({...s, status: transitional}));
+    toast.push(`${labels[action]} servidor…`, 'info');
+    fetch(`/api/server/${action}`, { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) toast.push(`Error: ${d.error}`, 'error');
+      })
+      .catch(e => toast.push(`Error de red: ${e.message}`, 'error'));
   };
 
   const handleKick = (p) => {

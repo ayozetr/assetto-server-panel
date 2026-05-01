@@ -1,10 +1,11 @@
 require('dotenv').config();
 
-const http = require('http');
-const fs   = require('fs');
-const fsp  = fs.promises;
-const path = require('path');
-const os   = require('os');
+const http          = require('http');
+const fs            = require('fs');
+const fsp           = fs.promises;
+const path          = require('path');
+const os            = require('os');
+const { spawn }     = require('child_process');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const HOST         = process.env.HOST              || '0.0.0.0';
@@ -16,7 +17,11 @@ const AC_CFG_FILE  = path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'se
 const AC_CARS_DIR  = path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'cars');
 const AC_TRACKS_DIR= path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'tracks');
 const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
+const AC_BIN       = process.env.AC_SERVER_BIN || '/home/<user>/ac_server/acServer';
+const AC_BIN_DIR   = process.env.AC_SERVER_DIR || path.dirname(AC_BIN);
 const ROOT         = __dirname;
+
+let acChild = null; // tracked child process for the AC server
 
 // ── MIME ──────────────────────────────────────────────────────────────────────
 const MIME = {
@@ -923,6 +928,41 @@ function apiTrackLayoutThumb(trackId, layout, res) {
   });
 }
 
+// ── Server control ────────────────────────────────────────────────────────────
+function spawnAC() {
+  try {
+    acChild = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio: 'ignore', detached: false });
+    acChild.on('exit', () => { acChild = null; });
+  } catch (e) {
+    console.error('acServer spawn failed:', e.message);
+    acChild = null;
+  }
+}
+
+function killAC() {
+  if (acChild && !acChild.killed) {
+    try { acChild.kill('SIGTERM'); } catch {}
+    acChild = null;
+  }
+}
+
+function apiServerStart(res) {
+  if (acChild && !acChild.killed) return json(res, 409, { error: 'Ya en ejecución' });
+  spawnAC();
+  json(res, 200, { ok: true });
+}
+
+function apiServerStop(res) {
+  killAC();
+  json(res, 200, { ok: true });
+}
+
+function apiServerRestart(res) {
+  killAC();
+  setTimeout(spawnAC, 1500);
+  json(res, 200, { ok: true });
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
   const urlPath = req.url.split('?')[0];
@@ -931,11 +971,16 @@ function handler(req, res) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'GET,PUT',
+        'Access-Control-Allow-Methods': 'GET,PUT,POST',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       return res.end();
     }
+
+    // Server control
+    if (urlPath === '/api/server/start'   && req.method === 'POST') return apiServerStart(res);
+    if (urlPath === '/api/server/stop'    && req.method === 'POST') return apiServerStop(res);
+    if (urlPath === '/api/server/restart' && req.method === 'POST') return apiServerRestart(res);
 
     // Content image endpoints
     const carSkinMatch         = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);

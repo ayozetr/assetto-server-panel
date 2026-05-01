@@ -1,91 +1,188 @@
 // Pages: Cars, Tracks, Session
-const { useState: useStateB, useMemo: useMemoB } = React;
+const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB } = React;
 const I3 = window.AppIcons;
 
-// ── Car card with skin browsing ───────────────────────────────────────────────
-function CarCard({ car, selected, onToggle }) {
+// ── Car modal ─────────────────────────────────────────────────────────────────
+function CarModal({ car, selected, onToggle, onClose }) {
   const [skinIdx, setSkinIdx] = useStateB(0);
-  const [showDesc, setShowDesc] = useStateB(false);
 
-  const hasSkins   = car.skins && car.skins.length > 0;
+  useEffectB(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const hasSkins    = car.skins && car.skins.length > 0;
   const hasMultiple = car.skins && car.skins.length > 1;
+  const hasSpecs    = car.specs && Object.values(car.specs).some(Boolean);
 
   const imgSrc = hasSkins
     ? `/api/content/cars/${encodeURIComponent(car.id)}/skins/${encodeURIComponent(car.skins[skinIdx])}/preview`
     : `/api/content/cars/${encodeURIComponent(car.id)}/thumb`;
 
-  const prevSkin = (e) => {
-    e.stopPropagation();
-    setSkinIdx(i => (i - 1 + car.skins.length) % car.skins.length);
-  };
-  const nextSkin = (e) => {
-    e.stopPropagation();
-    setSkinIdx(i => (i + 1) % car.skins.length);
-  };
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{maxWidth: 740, width: '95vw'}}>
 
-  const arrowStyle = {
-    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
-    borderRadius: 4, width: 22, height: 30, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 18, lineHeight: 1, padding: 0, zIndex: 2,
-  };
+        {/* Header */}
+        <div className="modal-header">
+          <div style={{flex: 1, minWidth: 0}}>
+            <div className="modal-title" style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+              {car.name}
+            </div>
+            <div style={{fontSize: 12, color: 'var(--text-muted)', marginTop: 2}}>
+              {[car.brand, car.year, car.cls].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><I3.IconX size={14}/></button>
+        </div>
 
-  const descFull  = car.description || '';
-  const descShort = descFull.slice(0, 120);
+        {/* Two-column body */}
+        <div style={{display: 'grid', gridTemplateColumns: '54% 46%', minHeight: 260}}>
+
+          {/* ── Left: main preview + skin thumbnails ── */}
+          <div style={{padding: 18, borderRight: '1px solid var(--border)', display:'flex', flexDirection:'column', gap: 12}}>
+
+            {/* Main preview */}
+            <div style={{borderRadius: 6, overflow:'hidden', background:'var(--bg-3)', height: 168, flexShrink: 0}}>
+              <img
+                src={imgSrc}
+                alt={hasSkins ? car.skins[skinIdx] : car.name}
+                style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}}
+                onError={e => { e.target.style.display='none'; }}
+              />
+            </div>
+
+            {/* Skin indicator */}
+            {hasSkins && (
+              <div style={{fontSize: 11, color:'var(--text-muted)'}}>
+                Diseño: <strong style={{color:'var(--text)', fontWeight:500}}>{car.skins[skinIdx]}</strong>
+                {hasMultiple && <span style={{color:'var(--text-faint)', marginLeft: 6}}>{skinIdx + 1} / {car.skins.length}</span>}
+              </div>
+            )}
+
+            {/* Skin thumbnail grid */}
+            {hasMultiple && (
+              <div style={{display:'flex', flexWrap:'wrap', gap: 5, overflowY:'auto', maxHeight: 140}}>
+                {car.skins.map((skin, i) => (
+                  <button
+                    key={skin}
+                    title={skin}
+                    onClick={() => setSkinIdx(i)}
+                    style={{
+                      padding: 0,
+                      border: `2px solid ${i === skinIdx ? 'var(--red)' : 'var(--border)'}`,
+                      borderRadius: 5, overflow:'hidden', cursor:'pointer',
+                      background:'var(--bg-3)', width: 72, height: 45, flexShrink: 0,
+                      transition: 'border-color 120ms',
+                    }}
+                  >
+                    <img
+                      src={`/api/content/cars/${encodeURIComponent(car.id)}/skins/${encodeURIComponent(skin)}/preview`}
+                      alt={skin}
+                      style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}}
+                      onError={e => { e.target.style.display='none'; }}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Right: specs + description ── */}
+          <div style={{padding: 18, overflowY:'auto', maxHeight: 400}}>
+
+            {hasSpecs && (
+              <div style={{marginBottom: 16}}>
+                <div style={{fontSize:10.5, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10}}>
+                  Especificaciones
+                </div>
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 14px'}}>
+                  {car.specs.bhp      && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Potencia</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.bhp}</div></div>}
+                  {car.specs.torque   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Par motor</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.torque}</div></div>}
+                  {car.specs.weight   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Peso</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.weight}</div></div>}
+                  {car.specs.topspeed && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Vel. máx.</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.topspeed}</div></div>}
+                </div>
+              </div>
+            )}
+
+            {car.description && (
+              <div>
+                <div style={{fontSize:10.5, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8}}>
+                  Descripción
+                </div>
+                <div style={{fontSize:11.5, color:'var(--text-muted)', lineHeight:1.65}}>
+                  {car.description}
+                </div>
+              </div>
+            )}
+
+            {!hasSpecs && !car.description && (
+              <div style={{fontSize:12.5, color:'var(--text-faint)', lineHeight:1.6}}>
+                Sin información adicional disponible para este coche.
+              </div>
+            )}
+
+            <div className="mono" style={{fontSize:10, color:'var(--text-faint)', marginTop:14, wordBreak:'break-all'}}>
+              {car.id}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose}>Cerrar</button>
+          <button
+            className="btn btn-primary"
+            style={selected ? {background:'transparent', borderColor:'var(--red)', color:'var(--red)'} : {}}
+            onClick={onToggle}
+          >
+            {selected
+              ? <><I3.IconX size={12}/> Quitar de sesión</>
+              : <><I3.IconCheck size={12}/> Añadir a sesión</>
+            }
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ── Car card (simplified — opens modal on click) ───────────────────────────────
+function CarCard({ car, selected, onOpen }) {
+  const skinsCount = car.skins?.length || 0;
 
   return (
-    <div className={`car-card ${selected ? 'selected' : ''}`} onClick={onToggle}>
-
-      {/* Thumbnail with skin navigation */}
-      <div className="car-thumb" style={{position: 'relative', overflow: 'hidden'}}>
-        <img src={imgSrc} alt={car.name}
+    <div className={`car-card ${selected ? 'selected' : ''}`} onClick={onOpen}>
+      <div className="car-thumb" style={{position:'relative', overflow:'hidden'}}>
+        <img
+          src={car.thumb}
+          alt={car.name}
           style={{width:'100%', height:'100%', objectFit:'cover'}}
           onError={e => { e.target.style.display='none'; }}
         />
-        {hasMultiple && <>
-          <button style={{...arrowStyle, left: 4}} onClick={prevSkin}>‹</button>
-          <button style={{...arrowStyle, right: 4}} onClick={nextSkin}>›</button>
+        {skinsCount > 1 && (
           <span style={{
-            position:'absolute', bottom:4, left:'50%', transform:'translateX(-50%)',
-            background:'rgba(0,0,0,0.6)', color:'#fff', fontSize:9.5,
-            borderRadius:3, padding:'2px 6px', whiteSpace:'nowrap', maxWidth:'90%',
-            overflow:'hidden', textOverflow:'ellipsis',
+            position:'absolute', bottom:4, right:4,
+            background:'rgba(0,0,0,0.65)', color:'#fff',
+            fontSize:9.5, borderRadius:3, padding:'2px 5px',
           }}>
-            {car.skins[skinIdx]} · {skinIdx + 1}/{car.skins.length}
+            {skinsCount} skins
           </span>
-        </>}
+        )}
       </div>
 
       <div className="car-check">{selected && <I3.IconCheck size={12}/>}</div>
 
       <div className="car-meta">
         <div className="car-name">{car.name}</div>
-        <div className="car-brand">
-          {[car.brand, car.year].filter(Boolean).join(' · ')}
-        </div>
+        <div className="car-brand">{[car.brand, car.year].filter(Boolean).join(' · ')}</div>
         <div className="car-stats">
           {car.specs?.bhp    && <span className="car-stat">{car.specs.bhp}</span>}
           {car.specs?.weight && <span className="car-stat">{car.specs.weight}</span>}
           {car.cls && <span className="badge" style={{padding:'1px 6px', fontSize:10}}>{car.cls}</span>}
         </div>
-
-        {descFull && (
-          <div style={{marginTop: 5}}>
-            <div style={{fontSize:10.5, color:'var(--text-muted)', lineHeight:1.5}}>
-              {showDesc ? descFull : descShort + (descFull.length > 120 ? '…' : '')}
-            </div>
-            {descFull.length > 120 && (
-              <span
-                style={{fontSize:10, color:'var(--red)', cursor:'pointer', userSelect:'none'}}
-                onClick={e => { e.stopPropagation(); setShowDesc(s => !s); }}
-              >
-                {showDesc ? 'ver menos' : 'ver más'}
-              </span>
-            )}
-          </div>
-        )}
-
         <div className="mono" style={{fontSize:10, color:'var(--text-faint)', marginTop:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
           {car.id}
         </div>
@@ -138,7 +235,6 @@ function TrackCard({ track, sessionCfg, setSessionCfg }) {
           {track.layouts.length > 1 && <><span>·</span><span>{track.layouts.length} layouts</span></>}
         </div>
 
-        {/* Layout selector chips */}
         {track.layouts.length > 1 && (
           <div style={{display:'flex', flexWrap:'wrap', gap:4, marginTop:8}}>
             {track.layouts.map(l => (
@@ -154,7 +250,6 @@ function TrackCard({ track, sessionCfg, setSessionCfg }) {
           </div>
         )}
 
-        {/* Description */}
         {descFull && (
           <div style={{marginTop: 7}}>
             <div style={{fontSize:11, color:'var(--text-muted)', lineHeight:1.5}}>
@@ -182,6 +277,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
   const [query,     setQuery]     = useStateB('');
   const [cls,       setCls]       = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(true);
+  const [modalCar,  setModalCar]  = useStateB(null);
 
   const kunosCount = useMemoB(() => cars.filter(c => c.id.startsWith('ks_')).length, [cars]);
   const classes    = useMemoB(() => ['all', ...Array.from(new Set(cars.map(c => c.cls).filter(Boolean))).sort()], [cars]);
@@ -254,10 +350,19 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
               key={c.id}
               car={c}
               selected={sessionCfg.carIds.includes(c.id)}
-              onToggle={() => toggle(c.id)}
+              onOpen={() => setModalCar(c)}
             />
           ))}
         </div>
+      )}
+
+      {modalCar && (
+        <CarModal
+          car={modalCar}
+          selected={sessionCfg.carIds.includes(modalCar.id)}
+          onToggle={() => toggle(modalCar.id)}
+          onClose={() => setModalCar(null)}
+        />
       )}
     </>
   );
@@ -367,10 +472,8 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 <div className="field">
                   <label className="field-label">Clima</label>
                   <select className="select" value={sessionCfg.weather} onChange={e => set('weather', e.target.value)} disabled={!isAdmin}>
-                    <option>Soleado</option>
-                    <option>Nublado</option>
-                    <option>Niebla ligera</option>
-                    <option>Lluvia ligera</option>
+                    <option>Soleado</option><option>Nublado</option>
+                    <option>Niebla ligera</option><option>Lluvia ligera</option>
                     <option>Tormenta</option>
                   </select>
                 </div>
@@ -457,7 +560,8 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                     <div style={{fontSize: 12.5, fontWeight: 500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{c.name}</div>
                     <div className="muted" style={{fontSize: 11}}>{c.brand}</div>
                   </div>
-                  <button className="icon-btn" style={{width: 24, height: 24}} onClick={() => setSessionCfg(s => ({...s, carIds: s.carIds.filter(x => x !== c.id)}))}>
+                  <button className="icon-btn" style={{width: 24, height: 24}}
+                    onClick={() => setSessionCfg(s => ({...s, carIds: s.carIds.filter(x => x !== c.id)}))}>
                     <I3.IconX size={12}/>
                   </button>
                 </div>

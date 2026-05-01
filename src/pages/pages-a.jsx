@@ -135,8 +135,32 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   );
 }
 
+const fmtMs = (ms) => {
+  if (ms == null) return '—';
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const t = ms % 1000;
+  return `${m}:${String(s).padStart(2,'0')}.${String(t).padStart(3,'0')}`;
+};
+
 // Players page
-function PagePlayers({ players, pastPlayers, server, isAdmin, onKick, onBan }) {
+function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, onKick, onBan }) {
+  const [players, setPlayers] = useState(initialPlayers);
+  useEffect(() => {
+    if (server.status !== 'running') return;
+    const load = () => {
+      fetch('/api/players')
+        .then(r => r.json())
+        .then(d => {
+          if (d && d.length) setPlayers(d);
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, [server.status]);
+
   const I2P = window.AppIcons;
   const renderPast = (
     <div style={{marginTop: 20}}>
@@ -237,8 +261,8 @@ function PagePlayers({ players, pastPlayers, server, isAdmin, onKick, onBan }) {
                 </td>
                 <td className="muted">{p.car}</td>
                 <td>{p.laps}</td>
-                <td className="mono">{p.best}</td>
-                <td className="mono muted">{p.last}</td>
+                <td className="mono">{p.bestMs != null ? fmtMs(p.bestMs) : (p.best || '—')}</td>
+                <td className="mono muted">{p.lastMs != null ? fmtMs(p.lastMs) : (p.last || '—')}</td>
                 <td>
                   <span className={`badge ${p.ping > 70 ? 'badge-amber' : 'badge-green'}`}>
                     {p.ping}ms

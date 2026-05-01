@@ -35,6 +35,7 @@ function App() {
   });
 
   const [players, setPlayers] = uS(window.AppData.PLAYERS_LIVE);
+  const [lapTimes, setLapTimes] = uS(window.AppData.LAP_TIMES);
   const [users, setUsers] = uS(window.AppData.USERS_INITIAL);
 
   const [sessionCfg, setSessionCfg] = uS({
@@ -65,6 +66,9 @@ function App() {
     autoRestart: true,
   });
 
+  const [cars, setCars] = uS(window.AppData.CARS);
+  const [tracks, setTracks] = uS(window.AppData.TRACKS);
+
   // Persist theme & user
   uE(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -74,6 +78,37 @@ function App() {
     if (user) localStorage.setItem('ac-user', JSON.stringify(user));
     else localStorage.removeItem('ac-user');
   }, [user]);
+
+  // Load server config, results, cars, tracks from backend on mount
+  uE(() => {
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(d => setConfig(c => ({ ...c, ...d })))
+      .catch(() => {});
+
+    fetch('/api/results')
+      .then(r => r.json())
+      .then(d => { if (d.length) setLapTimes(d); })
+      .catch(() => {});
+
+    fetch('/api/cars')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.length) return;
+        const mockById = Object.fromEntries(window.AppData.CARS.map(c => [c.id, c]));
+        setCars(d.map(c => ({ ...c, thumb: mockById[c.id]?.thumb || c.thumb || '' })));
+      })
+      .catch(() => {});
+
+    fetch('/api/tracks')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.length) return;
+        const mockById = Object.fromEntries(window.AppData.TRACKS.map(t => [t.id, t]));
+        setTracks(d.map(t => ({ ...t, thumb: mockById[t.id]?.thumb || t.thumb || '' })));
+      })
+      .catch(() => {});
+  }, []);
 
   // Real metrics — poll /api/metrics every 4 s
   uE(() => {
@@ -111,7 +146,9 @@ function App() {
         theme={theme} setTheme={setTheme}
         server={serverDisplay} setServer={setServer}
         players={players} setPlayers={setPlayers}
+        lapTimes={lapTimes}
         users={users} setUsers={setUsers}
+        cars={cars} tracks={tracks}
         sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}
         config={config} setConfig={setConfig}
       />
@@ -128,7 +165,8 @@ function AppInner(props) {
   const toast = useToast();
 
   const { user, page, setPage, theme, setTheme, server, setServer, players, setPlayers,
-          users, setUsers, sessionCfg, setSessionCfg, config, setConfig, setUser } = props;
+          lapTimes, users, setUsers, cars, tracks,
+          sessionCfg, setSessionCfg, config, setConfig, setUser } = props;
 
   const isAdmin = user.role === 'admin';
 
@@ -177,17 +215,21 @@ function AppInner(props) {
     toast.push('Sesión aplicada — reinicio en 5s', 'success');
   };
   const handleSaveConfig = () => {
-    toast.push('Configuración guardada', 'success');
+    fetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+      .then(r => r.json())
+      .then(() => toast.push('Configuración guardada', 'success'))
+      .catch(() => toast.push('Error al guardar configuración', 'error'));
   };
-
-  const cars = window.AppData.CARS;
-  const tracks = window.AppData.TRACKS;
 
   let content = null;
   if (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
   else if (page === 'players') content = <PagePlayers players={players} pastPlayers={window.AppData.PLAYERS_PAST} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
   else if (page === 'logs') content = <PageLogs server={server}/>;
-  else if (page === 'times') content = <PageTimes cars={cars} tracks={tracks} lapTimes={window.AppData.LAP_TIMES}/>;
+  else if (page === 'times') content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes}/>;
   else if (page === 'cars') content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
   else if (page === 'tracks') content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
   else if (page === 'session') content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;

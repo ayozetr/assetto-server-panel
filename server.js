@@ -7,14 +7,15 @@ const path = require('path');
 const os   = require('os');
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const HOST         = process.env.HOST            || '0.0.0.0';
-const PORT         = parseInt(process.env.PORT   || '3000', 10);
+const HOST         = process.env.HOST              || '0.0.0.0';
+const PORT         = parseInt(process.env.PORT     || '3000', 10);
 const AC_HTTP_PORT = parseInt(process.env.AC_HTTP_PORT || '8081', 10);
-const AC_LOG_FILE  = process.env.AC_SERVER_LOG   || '/home/<user>/ac_server/server_output.log';
+const AC_LOG_FILE  = process.env.AC_SERVER_LOG     || '/home/<user>/ac_server/server_output.log';
 const AC_RESULTS   = process.env.AC_SERVER_RESULTS || '/home/<user>/ac_server/results';
 const AC_CFG_FILE  = path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'server_cfg.ini');
 const AC_CARS_DIR  = path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'cars');
 const AC_TRACKS_DIR= path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'tracks');
+const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
 const ROOT         = __dirname;
 
 // ── MIME ──────────────────────────────────────────────────────────────────────
@@ -32,6 +33,204 @@ const MIME = {
   '.woff': 'font/woff',
 };
 
+// ── Database ──────────────────────────────────────────────────────────────────
+let db = null;
+try {
+  const Database = require('better-sqlite3');
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS processed_files (
+      filename    TEXT PRIMARY KEY,
+      processed_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS players (
+      guid       TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      nation     TEXT DEFAULT '',
+      first_seen TEXT DEFAULT '',
+      last_seen  TEXT DEFAULT '',
+      total_laps INTEGER DEFAULT 0,
+      last_car   TEXT DEFAULT '',
+      last_track TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS laps (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_name   TEXT NOT NULL,
+      driver_guid   TEXT NOT NULL,
+      car           TEXT NOT NULL,
+      track         TEXT NOT NULL,
+      track_config  TEXT DEFAULT '',
+      ms            INTEGER NOT NULL,
+      lap_timestamp INTEGER DEFAULT 0,
+      s1            INTEGER DEFAULT 0,
+      s2            INTEGER DEFAULT 0,
+      s3            INTEGER DEFAULT 0,
+      cuts          INTEGER DEFAULT 0,
+      valid         INTEGER DEFAULT 1,
+      session_date  TEXT DEFAULT '',
+      source_file   TEXT DEFAULT '',
+      UNIQUE(driver_guid, car, track, track_config, lap_timestamp, source_file)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_laps_track  ON laps(track);
+    CREATE INDEX IF NOT EXISTS idx_laps_driver ON laps(driver_guid);
+    CREATE INDEX IF NOT EXISTS idx_laps_valid  ON laps(valid);
+  `);
+  console.log('  Database ready:', DB_PATH);
+} catch (e) {
+  console.error('  Database init failed:', e.message);
+}
+
+// ── Results importer ──────────────────────────────────────────────────────────
+function parseDateFromFilename(name) {
+  const m = name.match(/^(\d{4})_(\d{1,2})_(\d{1,2})/);
+  return m ? `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : '';
+}
+
+function importResultFile(filename) {
+  if (!db) return false;
+  const filepath = path.join(AC_RESULTS, filename);
+  try {
+    const raw  = fs.readFileSync(filepath, 'utf8');
+    const data = JSON.parse(raw);
+    const date = parseDateFromFilename(filename);
+    const track       = data.TrackName   || '';
+    const trackConfig = data.TrackConfig || '';
+
+    // Build player metadata from Cars array (has nation info)
+    const playerMeta = {};
+    for (const c of (data.Cars || [])) {
+      if (c.Driver?.Guid && c.Driver.Name) {
+        playerMeta[c.Driver.Guid] = {
+          name:   c.Driver.Name,
+          nation: c.Driver.Nation || '',
+          car:    c.Model || '',
+        };
+      }
+    }
+
+    const stmtLap = db.prepare(`
+      INSERT OR IGNORE INTO laps
+        (driver_name, driver_guid, car, track, track_config, ms, lap_timestamp, s1, s2, s3, cuts, valid, session_date, source_file)
+      VALUES
+        (@driver_name, @driver_guid, @car, @track, @track_config, @ms, @lap_timestamp, @s1, @s2, @s3, @cuts, @valid, @session_date, @source_file)
+    `);
+
+    const stmtPlayer = db.prepare(`
+      INSERT INTO players (guid, name, nation, first_seen, last_seen, total_laps, last_car, last_track)
+        VALUES (@guid, @name, @nation, @date, @date, @cnt, @car, @track)
+      ON CONFLICT(guid) DO UPDATE SET
+        name       = excluded.name,
+        nation     = CASE WHEN excluded.nation != '' THEN excluded.nation ELSE players.nation END,
+        last_seen  = MAX(players.last_seen, excluded.last_seen),
+        first_seen = CASE WHEN players.first_seen = '' OR excluded.first_seen < players.first_seen
+                          THEN excluded.first_seen ELSE players.first_seen END,
+        total_laps = players.total_laps + excluded.total_laps,
+        last_car   = excluded.last_car,
+        last_track = excluded.last_track
+    `);
+
+    const doImport = db.transaction(() => {
+      const lapsByPlayer = {};
+
+      for (const l of (data.Laps || [])) {
+        if (!l.DriverGuid || !l.DriverName) continue;
+        if (!l.LapTime || l.LapTime >= 999_000_000) continue;
+
+        const sectors = l.Sectors || [];
+        const s1 = (sectors[0] > 0 && sectors[0] < 2_000_000) ? sectors[0] : 0;
+        const s2 = (sectors[1] > 0 && sectors[1] < 2_000_000) ? sectors[1] : 0;
+        const s3 = (sectors[2] > 0 && sectors[2] < 2_000_000) ? sectors[2] : 0;
+
+        const r = stmtLap.run({
+          driver_name:   l.DriverName,
+          driver_guid:   l.DriverGuid,
+          car:           l.CarModel || '',
+          track,
+          track_config:  trackConfig,
+          ms:            l.LapTime,
+          lap_timestamp: l.Timestamp || 0,
+          s1, s2, s3,
+          cuts:          l.Cuts || 0,
+          valid:         (l.Cuts || 0) === 0 ? 1 : 0,
+          session_date:  date,
+          source_file:   filename,
+        });
+
+        if (r.changes > 0) {
+          if (!lapsByPlayer[l.DriverGuid]) lapsByPlayer[l.DriverGuid] = { cnt: 0, name: l.DriverName, car: l.CarModel || '' };
+          lapsByPlayer[l.DriverGuid].cnt++;
+        }
+      }
+
+      for (const [guid, info] of Object.entries(lapsByPlayer)) {
+        const meta = playerMeta[guid] || {};
+        stmtPlayer.run({
+          guid,
+          name:   meta.name   || info.name,
+          nation: meta.nation || '',
+          date:   date || '',
+          cnt:    info.cnt,
+          car:    info.car,
+          track,
+        });
+      }
+
+      // Ensure players who connected but had no valid laps still appear
+      for (const [guid, meta] of Object.entries(playerMeta)) {
+        db.prepare(`
+          INSERT OR IGNORE INTO players (guid, name, nation, first_seen, last_seen, total_laps, last_car, last_track)
+          VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+        `).run(guid, meta.name, meta.nation, date || '', date || '', meta.car, track);
+      }
+    });
+
+    doImport();
+    db.prepare(`INSERT OR REPLACE INTO processed_files (filename, processed_at) VALUES (?, datetime('now'))`).run(filename);
+    return true;
+  } catch (e) {
+    console.error(`  Import failed [${filename}]:`, e.message);
+    return false;
+  }
+}
+
+function importAllResults() {
+  if (!db) return;
+  try {
+    const files = fs.readdirSync(AC_RESULTS).filter(f => f.endsWith('.json')).sort();
+    let imported = 0;
+    for (const file of files) {
+      const already = db.prepare('SELECT 1 FROM processed_files WHERE filename = ?').get(file);
+      if (!already && importResultFile(file)) imported++;
+    }
+    if (imported > 0) console.log(`  Imported ${imported} result file(s) into database`);
+  } catch (e) {
+    console.error('  Cannot scan results dir:', e.message);
+  }
+}
+
+const _pendingImports = new Set();
+function startResultsWatcher() {
+  if (!db) return;
+  try {
+    fs.watch(AC_RESULTS, (eventType, filename) => {
+      if (!filename || !filename.endsWith('.json')) return;
+      if (_pendingImports.has(filename)) return;
+      _pendingImports.add(filename);
+      setTimeout(() => {
+        _pendingImports.delete(filename);
+        const already = db.prepare('SELECT 1 FROM processed_files WHERE filename = ?').get(filename);
+        if (!already) importResultFile(filename);
+      }, 2500);
+    });
+  } catch (e) {
+    console.error('  Cannot watch results dir:', e.message);
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getNetworkIP() {
   for (const ifaces of Object.values(os.networkInterfaces())) {
@@ -42,13 +241,23 @@ function getNetworkIP() {
   return '127.0.0.1';
 }
 
-function respond(res, status, mime, body) {
+function respond(res, status, mime, body, extraHeaders) {
   res.writeHead(status, {
     'Content-Type':                mime,
     'Cache-Control':               'no-cache, no-store, must-revalidate',
     'Access-Control-Allow-Origin': '*',
+    ...extraHeaders,
   });
   res.end(body);
+}
+
+function respondImage(res, data) {
+  res.writeHead(200, {
+    'Content-Type':                'image/png',
+    'Cache-Control':               'public, max-age=3600',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(data);
 }
 
 function json(res, status, data) {
@@ -64,7 +273,6 @@ function readBody(req) {
   });
 }
 
-// ── Name formatter ────────────────────────────────────────────────────────────
 function formatName(id) {
   return id
     .replace(/^(ks_|rfc_|av_|b16v_|rss_|css_|gr[a-z2]_|Gr[A-Z2]_|GrA_)/g, '')
@@ -76,7 +284,18 @@ function formatName(id) {
 function parseTrackLength(raw) {
   const n = parseFloat(String(raw || '0').replace(/[^0-9.]/g, ''));
   if (!n) return 0;
-  return parseFloat((n < 50 ? n : n / 1000).toFixed(3)); // normalize to km
+  return parseFloat((n < 50 ? n : n / 1000).toFixed(3));
+}
+
+function formatTotalTime(ms) {
+  if (!ms || ms <= 0) return '—';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+function isValidContentId(id) {
+  return typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id) && !id.includes('..');
 }
 
 // ── INI parser / serializer ───────────────────────────────────────────────────
@@ -168,23 +387,18 @@ function getACUptime() {
 // ── Log parser ────────────────────────────────────────────────────────────────
 function parseLine(raw, id) {
   const l = raw.toLowerCase();
-  const lvl = /\berror\b/.test(l)                                    ? 'error'
-            : /\bwarn/.test(l)                                       ? 'warn'
-            : /lap completed|validated|best lap|steam.*ok/.test(l)   ? 'ok'
+  const lvl = /\berror\b/.test(l)                                           ? 'error'
+            : /\bwarn/.test(l)                                              ? 'warn'
+            : /lap completed|validated|best lap|steam.*ok|connection.*ok/.test(l) ? 'ok'
+            : /connected|new connection|driver.*joined/.test(l)            ? 'ok'
             : 'info';
-  const tm  = raw.match(/\[([A-Z_0-9]{2,10})\]/);
-  const tag = tm   ? tm[1]
-            : raw.startsWith('PAGE')  ? 'NET'
-            : raw.startsWith('REQ')   ? 'NET'
-            : raw.startsWith('Serve') ? 'NET'
+  const tm  = raw.match(/\[([A-Z_0-9]{2,12})\]/);
+  const tag = tm                              ? tm[1]
+            : /^PAGE:|^Serve /.test(raw)      ? 'HTTP'
+            : /^REQ/.test(raw)               ? 'CFG'
+            : /^{/.test(raw.trim())          ? 'CFG'
             : 'SRV';
   return { id, lvl, tag, msg: raw };
-}
-
-// ── Results helpers ───────────────────────────────────────────────────────────
-function parseDateFromFilename(name) {
-  const m = name.match(/^(\d{4})_(\d{1,2})_(\d{1,2})/);
-  return m ? `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : '';
 }
 
 // ── API handlers ──────────────────────────────────────────────────────────────
@@ -211,26 +425,26 @@ function apiConfig(res) {
     const ini = parseINI(data);
     const s   = ini['SERVER'] || {};
     json(res, 200, {
-      name:          s['NAME']                   || '',
-      welcome:       s['WELCOME_MESSAGE']         || '',
-      password:      s['PASSWORD']               || '',
-      adminPass:     s['ADMIN_PASSWORD']          || '',
-      tcp:           parseInt(s['TCP_PORT'])      || 9600,
-      udp:           parseInt(s['UDP_PORT'])      || 9600,
-      http:          parseInt(s['HTTP_PORT'])     || 8081,
-      tickrate:      parseInt(s['CLIENT_SEND_INTERVAL_HZ']) || 18,
-      maxClients:    parseInt(s['MAX_CLIENTS'])   || 0,
-      publicLobby:   s['REGISTER_TO_LOBBY'] === '1',
-      fuelRate:      parseInt(s['FUEL_RATE'])     || 100,
-      damage:        parseInt(s['DAMAGE_MULTIPLIER']) || 100,
-      tyreWear:      parseInt(s['TYRE_WEAR_RATE'])|| 100,
-      abs:           parseInt(s['ABS_ALLOWED'])   || 0,
-      tc:            parseInt(s['TC_ALLOWED'])    || 0,
-      autoclutch:    s['AUTOCLUTCH_ALLOWED'] === '1',
-      stability:     s['STABILITY_ALLOWED']  === '1',
-      track:         s['TRACK']              || '',
-      trackConfig:   s['CONFIG_TRACK']       || '',
-      cars:          (s['CARS'] || '').split(';').filter(Boolean),
+      name:        s['NAME']                    || '',
+      welcome:     s['WELCOME_MESSAGE']          || '',
+      password:    s['PASSWORD']                || '',
+      adminPass:   s['ADMIN_PASSWORD']           || '',
+      tcp:         parseInt(s['TCP_PORT'])       || 9600,
+      udp:         parseInt(s['UDP_PORT'])       || 9600,
+      http:        parseInt(s['HTTP_PORT'])      || 8081,
+      tickrate:    parseInt(s['CLIENT_SEND_INTERVAL_HZ']) || 18,
+      maxClients:  parseInt(s['MAX_CLIENTS'])    || 0,
+      publicLobby: s['REGISTER_TO_LOBBY'] === '1',
+      fuelRate:    parseInt(s['FUEL_RATE'])      || 100,
+      damage:      parseInt(s['DAMAGE_MULTIPLIER']) || 100,
+      tyreWear:    parseInt(s['TYRE_WEAR_RATE']) || 100,
+      abs:         parseInt(s['ABS_ALLOWED'])    || 0,
+      tc:          parseInt(s['TC_ALLOWED'])     || 0,
+      autoclutch:  s['AUTOCLUTCH_ALLOWED'] === '1',
+      stability:   s['STABILITY_ALLOWED']  === '1',
+      track:       s['TRACK']              || '',
+      trackConfig: s['CONFIG_TRACK']       || '',
+      cars:        (s['CARS'] || '').split(';').filter(Boolean),
     });
   });
 }
@@ -242,16 +456,16 @@ async function apiConfigUpdate(req, res) {
     const ini  = parseINI(raw);
     const s    = ini['SERVER'] = ini['SERVER'] || {};
 
-    if (body.name        !== undefined) s['NAME']               = body.name;
-    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']    = body.welcome;
-    if (body.password    !== undefined) s['PASSWORD']           = body.password;
-    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']     = body.adminPass;
-    if (body.tcp         !== undefined) s['TCP_PORT']           = String(body.tcp);
-    if (body.udp         !== undefined) s['UDP_PORT']           = String(body.udp);
-    if (body.http        !== undefined) s['HTTP_PORT']          = String(body.http);
+    if (body.name        !== undefined) s['NAME']                    = body.name;
+    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']         = body.welcome;
+    if (body.password    !== undefined) s['PASSWORD']                = body.password;
+    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']          = body.adminPass;
+    if (body.tcp         !== undefined) s['TCP_PORT']                = String(body.tcp);
+    if (body.udp         !== undefined) s['UDP_PORT']                = String(body.udp);
+    if (body.http        !== undefined) s['HTTP_PORT']               = String(body.http);
     if (body.tickrate    !== undefined) s['CLIENT_SEND_INTERVAL_HZ'] = String(body.tickrate);
-    if (body.maxClients  !== undefined) s['MAX_CLIENTS']        = String(body.maxClients);
-    if (body.publicLobby !== undefined) s['REGISTER_TO_LOBBY'] = body.publicLobby ? '1' : '0';
+    if (body.maxClients  !== undefined) s['MAX_CLIENTS']             = String(body.maxClients);
+    if (body.publicLobby !== undefined) s['REGISTER_TO_LOBBY']      = body.publicLobby ? '1' : '0';
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, serializeINI(ini), 'utf8');
@@ -271,62 +485,89 @@ function apiPlayers(res) {
           const players = (raw.cars || [])
             .filter(c => c.Driver && c.Driver.Name)
             .map(c => ({
-              id:       c.ID,
-              name:     c.Driver.Name,
-              steam:    c.Driver.Guid   || '',
-              nation:   c.Driver.Nation || '',
-              carId:    c.CarInfo?.Model || '',
-              car:      formatName(c.CarInfo?.Model || ''),
-              bestMs:   c.BestTime  || 0,
-              lastMs:   c.Time      || 0,
-              hasTime:  c.HasSetTime || false,
+              id:     c.ID,
+              name:   c.Driver.Name,
+              steam:  c.Driver.Guid   || '',
+              nation: c.Driver.Nation || '',
+              carId:  c.CarInfo?.Model || '',
+              car:    formatName(c.CarInfo?.Model || ''),
+              bestMs: c.BestTime  || 0,
+              lastMs: c.Time      || 0,
+              laps:   c.NumLaps   || 0,
+              ping:   c.Driver?.Ping || 0,
             }));
-          json(res, 200, { running: true, players, session: raw.event || {} });
-        } catch { json(res, 200, { running: false, players: [], session: {} }); }
+          json(res, 200, players);
+        } catch { json(res, 200, []); }
       });
     }
   );
-  req.on('error', () => json(res, 200, { running: false, players: [], session: {} }));
-  req.setTimeout(2000, () => { req.destroy(); json(res, 200, { running: false, players: [], session: {} }); });
+  req.on('error', () => json(res, 200, []));
+  req.setTimeout(2000, () => { req.destroy(); json(res, 200, []); });
 }
 
-async function apiResults(res) {
+function apiResults(res) {
+  if (!db) {
+    return json(res, 200, []);
+  }
   try {
-    const files = (await fsp.readdir(AC_RESULTS))
-      .filter(f => f.endsWith('.json'))
-      .sort()
-      .reverse()
-      .slice(0, 50);
+    const rows = db.prepare(`
+      SELECT id, driver_name, driver_guid, car, track, track_config, ms, s1, s2, s3, cuts, valid, session_date
+      FROM laps
+      ORDER BY ms ASC
+      LIMIT 2000
+    `).all();
 
-    const parsed = await Promise.all(
-      files.map(f =>
-        fsp.readFile(path.join(AC_RESULTS, f), 'utf8')
-          .then(JSON.parse)
-          .then(r => ({ file: f, data: r }))
-          .catch(() => null)
-      )
-    );
-
-    let id = 1;
-    const laps = parsed.filter(Boolean).flatMap(({ file, data }) => {
-      const date = parseDateFromFilename(file);
-      return (data.Laps || []).map(l => ({
-        id:     id++,
-        player: l.DriverName  || '',
-        car:    l.CarModel    || '',
-        track:  data.TrackName || '',
-        layout: data.TrackConfig || '',
-        ms:     l.LapTime    || 0,
-        s1:     (l.Sectors && l.Sectors[0] < 2_000_000) ? l.Sectors[0] : 0,
-        s2:     (l.Sectors && l.Sectors[1] < 2_000_000) ? l.Sectors[1] : 0,
-        s3:     (l.Sectors && l.Sectors[2] < 2_000_000) ? l.Sectors[2] : 0,
-        cuts:   l.Cuts || 0,
-        valid:  (l.Cuts || 0) === 0,
-        date,
-      }));
-    });
-
+    const laps = rows.map(r => ({
+      id:     r.id,
+      player: r.driver_name,
+      car:    r.car,
+      track:  r.track,
+      layout: r.track_config,
+      ms:     r.ms,
+      s1:     r.s1,
+      s2:     r.s2,
+      s3:     r.s3,
+      cuts:   r.cuts,
+      valid:  r.valid === 1,
+      date:   r.session_date,
+    }));
     json(res, 200, laps);
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+function apiPlayersHistory(res) {
+  if (!db) return json(res, 200, []);
+  try {
+    const rows = db.prepare(`
+      SELECT
+        p.guid,
+        p.name,
+        p.nation,
+        p.first_seen,
+        p.last_seen,
+        p.last_car,
+        p.last_track,
+        COUNT(DISTINCT l.session_date) AS session_count,
+        COUNT(l.id)                    AS lap_count,
+        COALESCE(SUM(l.ms), 0)        AS total_ms
+      FROM players p
+      LEFT JOIN laps l ON p.guid = l.driver_guid
+      GROUP BY p.guid
+      ORDER BY p.last_seen DESC
+    `).all();
+
+    const players = rows.map(p => ({
+      id:        p.guid,
+      name:      p.name,
+      steam:     p.guid,
+      nation:    p.nation || '',
+      car:       formatName(p.last_car || ''),
+      sessions:  p.session_count,
+      laps:      p.lap_count,
+      totalTime: formatTotalTime(p.total_ms),
+      lastSeen:  p.last_seen || '—',
+    }));
+    json(res, 200, players);
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -337,8 +578,20 @@ async function apiCars(res) {
       dirs.map(id =>
         fsp.readFile(path.join(AC_CARS_DIR, id, 'ui', 'ui_car.json'), 'utf8')
           .then(JSON.parse)
-          .then(ui => ({ id, name: ui.name || formatName(id), brand: ui.brand || '', cls: ui.tags?.[0] || '' }))
-          .catch(() => ({ id, name: formatName(id), brand: '', cls: '' }))
+          .then(ui => ({
+            id,
+            name:  ui.name  || formatName(id),
+            brand: ui.brand || '',
+            cls:   ui.tags?.[0] || '',
+            thumb: `/api/content/cars/${encodeURIComponent(id)}/thumb`,
+          }))
+          .catch(() => ({
+            id,
+            name:  formatName(id),
+            brand: '',
+            cls:   '',
+            thumb: `/api/content/cars/${encodeURIComponent(id)}/thumb`,
+          }))
       )
     );
     json(res, 200, cars.sort((a, b) => a.name.localeCompare(b.name)));
@@ -348,23 +601,78 @@ async function apiCars(res) {
 async function apiTracks(res) {
   try {
     const dirs = await fsp.readdir(AC_TRACKS_DIR);
-    const tracks = await Promise.all(
-      dirs.map(id =>
-        fsp.readFile(path.join(AC_TRACKS_DIR, id, 'ui', 'ui_track.json'), 'utf8')
-          .then(JSON.parse)
-          .then(ui => ({
-            id,
-            name:    ui.name    || formatName(id),
-            city:    ui.city    || ui.country || '',
-            length:  parseTrackLength(ui.length),
-            pits:    parseInt(ui.pitboxes) || 0,
-            layouts: [''],
-          }))
-          .catch(() => ({ id, name: formatName(id), city: '', length: 0, pits: 0, layouts: [''] }))
-      )
-    );
+    const tracks = await Promise.all(dirs.map(async id => {
+      const uiDir = path.join(AC_TRACKS_DIR, id, 'ui');
+      let mainJson = null;
+      let layouts  = [];
+
+      // Try direct ui_track.json (single-layout tracks)
+      try {
+        mainJson = JSON.parse(await fsp.readFile(path.join(uiDir, 'ui_track.json'), 'utf8'));
+      } catch {}
+
+      // Scan for layout sub-directories
+      try {
+        const entries = await fsp.readdir(uiDir, { withFileTypes: true });
+        const layoutDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+        if (layoutDirs.length > 0) {
+          layouts = layoutDirs;
+          if (!mainJson) {
+            try {
+              mainJson = JSON.parse(
+                await fsp.readFile(path.join(uiDir, layoutDirs[0], 'ui_track.json'), 'utf8')
+              );
+            } catch {}
+          }
+        }
+      } catch {}
+
+      if (!layouts.length) layouts = [''];
+      if (!mainJson) mainJson = {};
+
+      return {
+        id,
+        name:    mainJson.name    || formatName(id),
+        city:    mainJson.city    || mainJson.country || '',
+        length:  parseTrackLength(mainJson.length),
+        pits:    parseInt(mainJson.pitboxes) || 0,
+        layouts,
+        thumb:   `/api/content/tracks/${encodeURIComponent(id)}/thumb`,
+      };
+    }));
     json(res, 200, tracks.sort((a, b) => a.name.localeCompare(b.name)));
   } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// Serve car badge image (badge.png from ui folder)
+function apiCarThumb(carId, res) {
+  if (!isValidContentId(carId)) return respond(res, 400, 'text/plain', 'Invalid ID');
+  const imgPath = path.join(AC_CARS_DIR, carId, 'ui', 'badge.png');
+  fs.readFile(imgPath, (err, data) => {
+    if (err) return respond(res, 404, 'text/plain', 'Not found');
+    respondImage(res, data);
+  });
+}
+
+// Serve track preview image (preview.png — direct or first layout sub-folder)
+function apiTrackThumb(trackId, res) {
+  if (!isValidContentId(trackId)) return respond(res, 400, 'text/plain', 'Invalid ID');
+  const uiDir = path.join(AC_TRACKS_DIR, trackId, 'ui');
+  const direct = path.join(uiDir, 'preview.png');
+
+  fs.readFile(direct, (err, data) => {
+    if (!err) return respondImage(res, data);
+
+    // Try first layout sub-folder
+    fsp.readdir(uiDir, { withFileTypes: true }).then(entries => {
+      const dir = entries.find(e => e.isDirectory());
+      if (!dir) return respond(res, 404, 'text/plain', 'Not found');
+      fs.readFile(path.join(uiDir, dir.name, 'preview.png'), (e2, d2) => {
+        if (e2) return respond(res, 404, 'text/plain', 'Not found');
+        respondImage(res, d2);
+      });
+    }).catch(() => respond(res, 404, 'text/plain', 'Not found'));
+  });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -373,17 +681,30 @@ function handler(req, res) {
 
   if (urlPath.startsWith('/api/')) {
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,PUT', 'Access-Control-Allow-Headers': 'Content-Type' });
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin':  '*',
+        'Access-Control-Allow-Methods': 'GET,PUT',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
       return res.end();
     }
-    if (urlPath === '/api/metrics'  && req.method === 'GET') return apiMetrics(res);
-    if (urlPath === '/api/logs'     && req.method === 'GET') return apiLogs(req, res);
-    if (urlPath === '/api/config'   && req.method === 'GET') return apiConfig(res);
-    if (urlPath === '/api/config'   && req.method === 'PUT') return apiConfigUpdate(req, res);
-    if (urlPath === '/api/players'  && req.method === 'GET') return apiPlayers(res);
-    if (urlPath === '/api/results'  && req.method === 'GET') return apiResults(res);
-    if (urlPath === '/api/cars'     && req.method === 'GET') return apiCars(res);
-    if (urlPath === '/api/tracks'   && req.method === 'GET') return apiTracks(res);
+
+    // Content image endpoints
+    const carThumbMatch   = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/thumb$/);
+    const trackThumbMatch = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/thumb$/);
+    if (carThumbMatch   && req.method === 'GET') return apiCarThumb(decodeURIComponent(carThumbMatch[1]), res);
+    if (trackThumbMatch && req.method === 'GET') return apiTrackThumb(decodeURIComponent(trackThumbMatch[1]), res);
+
+    // Data endpoints
+    if (urlPath === '/api/metrics'         && req.method === 'GET') return apiMetrics(res);
+    if (urlPath === '/api/logs'            && req.method === 'GET') return apiLogs(req, res);
+    if (urlPath === '/api/config'          && req.method === 'GET') return apiConfig(res);
+    if (urlPath === '/api/config'          && req.method === 'PUT') return apiConfigUpdate(req, res);
+    if (urlPath === '/api/players'         && req.method === 'GET') return apiPlayers(res);
+    if (urlPath === '/api/players/history' && req.method === 'GET') return apiPlayersHistory(res);
+    if (urlPath === '/api/results'         && req.method === 'GET') return apiResults(res);
+    if (urlPath === '/api/cars'            && req.method === 'GET') return apiCars(res);
+    if (urlPath === '/api/tracks'          && req.method === 'GET') return apiTracks(res);
     return json(res, 404, { error: 'Unknown endpoint' });
   }
 
@@ -405,6 +726,9 @@ function handler(req, res) {
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+importAllResults();
+startResultsWatcher();
+
 const server = http.createServer(handler);
 
 server.listen(PORT, HOST, () => {

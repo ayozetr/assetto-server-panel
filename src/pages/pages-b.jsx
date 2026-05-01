@@ -63,7 +63,8 @@ function PageCars({ cars, sessionCfg, setSessionCfg, mode = 'browse' }) {
             return (
               <div key={c.id} className={`car-card ${selected ? 'selected' : ''}`} onClick={() => toggle(c.id)}>
                 <div className="car-thumb">
-                  <img src={c.thumb} alt={c.name} style={{width:'100%', height:'100%', objectFit:'cover'}}/>
+                  <img src={c.thumb} alt={c.name} style={{width:'100%', height:'100%', objectFit:'cover'}}
+                    onError={e => { e.target.style.display='none'; }}/>
                 </div>
                 <div className="car-check">
                   {selected && <I3.IconCheck size={12}/>}
@@ -114,7 +115,8 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
             <div key={t.id} className={`track-card ${selected ? 'selected' : ''}`}
               onClick={() => setSessionCfg(c => ({...c, trackId: t.id, layout: t.layouts[0]}))}>
               <div className="track-thumb">
-                <img src={t.thumb} alt={t.name} style={{width:'100%', height:'100%', objectFit:'cover'}}/>
+                <img src={t.thumb} alt={t.name} style={{width:'100%', height:'100%', objectFit:'cover'}}
+                  onError={e => { e.target.style.display='none'; }}/>
               </div>
               <div className="track-meta">
                 <div className="row-between">
@@ -254,7 +256,8 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               <>
                 <div style={{padding: '0 18px 14px'}}>
                   <div style={{borderRadius: 6, overflow:'hidden', background: 'var(--bg-3)', marginTop: 14}}>
-                    <img src={track.thumb} style={{width:'100%', display:'block'}}/>
+                    <img src={track.thumb} style={{width:'100%', display:'block'}}
+                      onError={e => { e.target.style.display='none'; }}/>
                   </div>
                   <div style={{marginTop: 12}}>
                     <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>

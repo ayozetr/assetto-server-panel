@@ -51,35 +51,42 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
             <div className="card-title">Sesión actual</div>
           </div>
           <div className="card-body">
-            <div className="row" style={{gap: 14}}>
-              <div style={{width: 120, height: 68, borderRadius: 6, overflow:'hidden', background: 'var(--bg-3)'}}>
-                <img src={track.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""/>
-              </div>
-              <div style={{flex: 1}}>
-                <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>
-                <div style={{fontSize: 12, color: 'var(--text-muted)'}}>{track.loc} · {track.length} km · {sessionCfg.layout}</div>
-                <div className="row" style={{marginTop: 8, gap: 6}}>
-                  <span className="badge badge-red">{sessionCfg.mode}</span>
-                  <span className="badge">{carsCount} {carsCount === 1 ? 'coche' : 'coches'}</span>
-                  <span className="badge">{sessionCfg.laps} vueltas</span>
+            {!track ? (
+              <div className="muted" style={{fontSize: 13, padding: '4px 0 8px'}}>Cargando información de sesión…</div>
+            ) : (
+              <>
+                <div className="row" style={{gap: 14}}>
+                  <div style={{width: 120, height: 68, borderRadius: 6, overflow:'hidden', background: 'var(--bg-3)'}}>
+                    <img src={track.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""
+                      onError={e => { e.target.style.display='none'; }}/>
+                  </div>
+                  <div style={{flex: 1}}>
+                    <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>
+                    <div style={{fontSize: 12, color: 'var(--text-muted)'}}>{track.city || track.loc} · {track.length} km · {sessionCfg.layout}</div>
+                    <div className="row" style={{marginTop: 8, gap: 6}}>
+                      <span className="badge badge-red">{sessionCfg.mode}</span>
+                      <span className="badge">{carsCount} {carsCount === 1 ? 'coche' : 'coches'}</span>
+                      <span className="badge">{sessionCfg.laps} vueltas</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="divider"></div>
-            <div className="grid-3">
-              <div>
-                <div className="field-label">Hora</div>
-                <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.time}:00</div>
-              </div>
-              <div>
-                <div className="field-label">Clima</div>
-                <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.weather}</div>
-              </div>
-              <div>
-                <div className="field-label">Daños</div>
-                <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.damage}%</div>
-              </div>
-            </div>
+                <div className="divider"></div>
+                <div className="grid-3">
+                  <div>
+                    <div className="field-label">Hora</div>
+                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.time}:00</div>
+                  </div>
+                  <div>
+                    <div className="field-label">Clima</div>
+                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.weather}</div>
+                  </div>
+                  <div>
+                    <div className="field-label">Daños</div>
+                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.damage}%</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

@@ -3,26 +3,25 @@ const { useState: uS, useEffect: uE, useMemo: uM } = React;
 
 const PAGES = {
   dashboard: { title: 'Dashboard', component: 'PageDashboard' },
-  players: { title: 'Jugadores', component: 'PagePlayers' },
-  times: { title: 'Tiempos', component: 'PageTimes' },
-  logs: { title: 'Logs', component: 'PageLogs' },
-  cars: { title: 'Coches', component: 'PageCars' },
-  tracks: { title: 'Tramos', component: 'PageTracks' },
-  session: { title: 'Sesión', component: 'PageSession' },
-  config: { title: 'Configuración', component: 'PageConfig' },
-  users: { title: 'Usuarios', component: 'PageUsers' },
+  players:   { title: 'Jugadores', component: 'PagePlayers' },
+  times:     { title: 'Tiempos',   component: 'PageTimes' },
+  logs:      { title: 'Logs',      component: 'PageLogs' },
+  cars:      { title: 'Coches',    component: 'PageCars' },
+  tracks:    { title: 'Tramos',    component: 'PageTracks' },
+  session:   { title: 'Sesión',    component: 'PageSession' },
+  config:    { title: 'Configuración', component: 'PageConfig' },
+  users:     { title: 'Usuarios',  component: 'PageUsers' },
 };
 
 function App() {
   const { Sidebar, Topbar, Login, ToastProvider, useToast } = window.AppShell;
 
   const [theme, setTheme] = uS(() => localStorage.getItem('ac-theme') || 'light');
-  const [user, setUser] = uS(() => {
+  const [user,  setUser]  = uS(() => {
     try { return JSON.parse(localStorage.getItem('ac-user')); } catch { return null; }
   });
   const [page, setPage] = uS('dashboard');
 
-  // Server state — populated by /api/metrics on mount
   const [server, setServer] = uS({
     status: 'stopped',
     players: 0,
@@ -34,13 +33,14 @@ function App() {
     uptime: '—',
   });
 
-  const [players, setPlayers] = uS(window.AppData.PLAYERS_LIVE);
-  const [lapTimes, setLapTimes] = uS(window.AppData.LAP_TIMES);
-  const [users, setUsers] = uS(window.AppData.USERS_INITIAL);
+  const [players,     setPlayers]     = uS([]);
+  const [pastPlayers, setPastPlayers] = uS([]);
+  const [lapTimes,    setLapTimes]    = uS([]);
+  const [users,       setUsers]       = uS(window.AppData.USERS_INITIAL);
 
   const [sessionCfg, setSessionCfg] = uS({
-    trackId: 'ks_spa',
-    layout: 'Grand Prix',
+    trackId: '',
+    layout: '',
     mode: 'Práctica',
     laps: 12,
     slots: 24,
@@ -50,24 +50,19 @@ function App() {
     damage: 50,
     abs: true, tc: true, autoShift: false, ideal: false,
     penalties: true, tireWear: true, fuel: true,
-    carIds: ['ks_porsche_911_gt3_r_2016', 'ks_ferrari_488_gt3', 'ks_lamborghini_huracan_gt3', 'ks_audi_r8_lms_2016', 'ks_mclaren_650_gt3'],
+    carIds: [],
   });
 
   const [config, setConfig] = uS({
-    name: '',
-    description: '',
-    welcome: '',
+    name: '', description: '', welcome: '',
     tcp: 9600, udp: 9600, http: 8081, tickrate: 18,
     publicLobby: false,
-    password: '',
-    adminPass: '',
-    whitelist: false,
-    autoStart: false,
-    autoRestart: true,
+    password: '', adminPass: '',
+    whitelist: false, autoStart: false, autoRestart: true,
   });
 
-  const [cars, setCars] = uS(window.AppData.CARS);
-  const [tracks, setTracks] = uS(window.AppData.TRACKS);
+  const [cars,   setCars]   = uS([]);
+  const [tracks, setTracks] = uS([]);
 
   // Persist theme & user
   uE(() => {
@@ -79,38 +74,46 @@ function App() {
     else localStorage.removeItem('ac-user');
   }, [user]);
 
-  // Load server config, results, cars, tracks from backend on mount
+  // Load all data from backend on mount
   uE(() => {
     fetch('/api/config')
       .then(r => r.json())
-      .then(d => setConfig(c => ({ ...c, ...d })))
+      .then(d => {
+        setConfig(c => ({ ...c, ...d }));
+        // Sync current session track from server config
+        if (d.track) {
+          setSessionCfg(s => ({
+            ...s,
+            trackId: d.track,
+            layout:  d.trackConfig || '',
+            carIds:  d.cars?.length ? d.cars : s.carIds,
+          }));
+        }
+      })
       .catch(() => {});
 
     fetch('/api/results')
       .then(r => r.json())
-      .then(d => { if (d.length) setLapTimes(d); })
+      .then(d => { if (Array.isArray(d)) setLapTimes(d); })
       .catch(() => {});
 
     fetch('/api/cars')
       .then(r => r.json())
-      .then(d => {
-        if (!d.length) return;
-        const mockById = Object.fromEntries(window.AppData.CARS.map(c => [c.id, c]));
-        setCars(d.map(c => ({ ...c, thumb: mockById[c.id]?.thumb || c.thumb || '' })));
-      })
+      .then(d => { if (Array.isArray(d) && d.length) setCars(d); })
       .catch(() => {});
 
     fetch('/api/tracks')
       .then(r => r.json())
-      .then(d => {
-        if (!d.length) return;
-        const mockById = Object.fromEntries(window.AppData.TRACKS.map(t => [t.id, t]));
-        setTracks(d.map(t => ({ ...t, thumb: mockById[t.id]?.thumb || t.thumb || '' })));
-      })
+      .then(d => { if (Array.isArray(d) && d.length) setTracks(d); })
+      .catch(() => {});
+
+    fetch('/api/players/history')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setPastPlayers(d); })
       .catch(() => {});
   }, []);
 
-  // Real metrics — poll /api/metrics every 4 s
+  // Poll /api/metrics every 4s
   uE(() => {
     const poll = () => {
       fetch('/api/metrics')
@@ -133,7 +136,6 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Round CPU
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };
 
   if (!user) return <Login onLogin={setUser}/>;
@@ -146,6 +148,7 @@ function App() {
         theme={theme} setTheme={setTheme}
         server={serverDisplay} setServer={setServer}
         players={players} setPlayers={setPlayers}
+        pastPlayers={pastPlayers}
         lapTimes={lapTimes}
         users={users} setUsers={setUsers}
         cars={cars} tracks={tracks}
@@ -159,14 +162,17 @@ function App() {
 function AppInner(props) {
   const { Sidebar, Topbar, useToast } = window.AppShell;
   const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesA;
-  const { PageCars, PageTracks, PageSession } = window.AppPagesB;
-  const { PageConfig, PageUsers } = window.AppPagesC;
-  const { PageTimes } = window.AppPagesD;
+  const { PageCars, PageTracks, PageSession }    = window.AppPagesB;
+  const { PageConfig, PageUsers }                = window.AppPagesC;
+  const { PageTimes }                            = window.AppPagesD;
   const toast = useToast();
 
-  const { user, page, setPage, theme, setTheme, server, setServer, players, setPlayers,
-          lapTimes, users, setUsers, cars, tracks,
-          sessionCfg, setSessionCfg, config, setConfig, setUser } = props;
+  const {
+    user, page, setPage, theme, setTheme,
+    server, setServer, players, setPlayers, pastPlayers,
+    lapTimes, users, setUsers, cars, tracks,
+    sessionCfg, setSessionCfg, config, setConfig, setUser,
+  } = props;
 
   const isAdmin = user.role === 'admin';
 
@@ -226,15 +232,15 @@ function AppInner(props) {
   };
 
   let content = null;
-  if (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
-  else if (page === 'players') content = <PagePlayers players={players} pastPlayers={window.AppData.PLAYERS_PAST} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
-  else if (page === 'logs') content = <PageLogs server={server}/>;
-  else if (page === 'times') content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes}/>;
-  else if (page === 'cars') content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
-  else if (page === 'tracks') content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
-  else if (page === 'session') content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
-  else if (page === 'config') content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
-  else if (page === 'users') content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
+  if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
+  else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
+  else if (page === 'logs')      content = <PageLogs server={server}/>;
+  else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes}/>;
+  else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
+  else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
+  else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
+  else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
+  else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
 
   return (
     <div className="app">
@@ -286,7 +292,6 @@ function TweaksUI() {
       document.documentElement.style.fontSize = '14px';
     }
 
-    // Sidebar style: dark = always dark sidebar
     if (tw.sidebarStyle === 'dark') {
       document.documentElement.style.setProperty('--sidebar-override', 'true');
     }
@@ -305,8 +310,8 @@ function TweaksUI() {
           value={tw.density} onChange={v => setTw('density', v)}
           options={[
             { value: 'compact', label: 'Compacto' },
-            { value: 'comfy', label: 'Equilibrado' },
-            { value: 'dense', label: 'Denso' },
+            { value: 'comfy',   label: 'Equilibrado' },
+            { value: 'dense',   label: 'Denso' },
           ]}
         />
       </TweakSection>

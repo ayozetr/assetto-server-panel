@@ -403,7 +403,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
   pointer-events: none;
 }
 
-.tag-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tag {
   padding: 4px 10px;
   border-radius: 999px;

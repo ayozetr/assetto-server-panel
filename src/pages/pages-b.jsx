@@ -458,13 +458,11 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
 // ── PageCars ──────────────────────────────────────────────────────────────────
 function PageCars({ cars, sessionCfg, setSessionCfg }) {
   const [query,     setQuery]     = useStateB('');
-  const [cls,       setCls]       = useStateB('all');
   const [brand,     setBrand]     = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(false);
   const [modalCar,  setModalCar]  = useStateB(null);
 
   const kunosCount = useMemoB(() => cars.filter(c => c.id.startsWith('ks_')).length, [cars]);
-  const classes    = useMemoB(() => ['all', ...Array.from(new Set(cars.map(c => c.cls).filter(Boolean))).sort()], [cars]);
   const brands     = useMemoB(() => {
     const base = cars.filter(c => showKunos || !c.id.startsWith('ks_'));
     return ['all', ...Array.from(new Set(base.map(c => c.brand).filter(Boolean))).sort()];
@@ -472,11 +470,10 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
 
   const filtered = useMemoB(() => cars.filter(c => {
     if (!showKunos && c.id.startsWith('ks_')) return false;
-    if (cls !== 'all' && c.cls !== cls) return false;
     if (brand !== 'all' && c.brand !== brand) return false;
     if (query && !(`${c.brand} ${c.name} ${c.id}`).toLowerCase().includes(query.toLowerCase())) return false;
     return true;
-  }), [cars, cls, brand, query, showKunos]);
+  }), [cars, brand, query, showKunos]);
 
   const addCar = (id) => setSessionCfg(cfg => ({ ...cfg, carIds: [...cfg.carIds, id] }));
   const removeCar = (id) => setSessionCfg(cfg => {
@@ -505,6 +502,16 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
           <I3.IconSearch size={14} className="search-icon"/>
           <input className="input" placeholder="Buscar por marca, modelo o ID…" value={query} onChange={e => setQuery(e.target.value)}/>
         </div>
+        {kunosCount > 0 && (
+          <label className="toggle-wrap" title={`${kunosCount} coches de Kunos`}>
+            <span className="toggle-label">Coches de Kunos ({kunosCount})</span>
+            <span className="toggle">
+              <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
+              <span className="toggle-track"></span>
+              <span className="toggle-thumb"></span>
+            </span>
+          </label>
+        )}
         <div className="right row" style={{gap: 6}}>
           {selectedCount > 0 && (
             <button className="btn btn-sm" onClick={() => setSessionCfg(c => ({...c, carIds: []}))}>
@@ -515,26 +522,6 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
             Seleccionar visibles
           </button>
         </div>
-      </div>
-      <div className="toolbar" style={{paddingTop: 0, gap: 8, flexWrap:'wrap'}}>
-        <div className="tag-row">
-          <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>Categoría:</span>
-          {classes.map(c => (
-            <button key={c} className={`tag ${cls === c ? 'active' : ''}`} onClick={() => setCls(c)}>
-              {c === 'all' ? 'Todas' : c}
-            </button>
-          ))}
-        </div>
-        {kunosCount > 0 && (
-          <label className="toggle-wrap" style={{marginLeft:'auto'}} title={`${kunosCount} coches de Kunos`}>
-            <span className="toggle-label">Coches Kunos ({kunosCount})</span>
-            <span className="toggle">
-              <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
-              <span className="toggle-track"></span>
-              <span className="toggle-thumb"></span>
-            </span>
-          </label>
-        )}
       </div>
       {brands.length > 1 && (
         <div className="toolbar" style={{paddingTop: 0, gap: 8, flexWrap:'wrap'}}>
@@ -610,8 +597,8 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
           <input className="input" placeholder="Buscar circuito…" value={query} onChange={e => setQuery(e.target.value)}/>
         </div>
         {kunosCount > 0 && (
-          <label className="toggle-wrap" title={`${kunosCount} circuitos de Kunos`}>
-            <span className="toggle-label">Circuitos Kunos ({kunosCount})</span>
+          <label className="toggle-wrap" title={`${kunosCount} tramos de Kunos`}>
+            <span className="toggle-label">Tramos de Kunos ({kunosCount})</span>
             <span className="toggle">
               <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
               <span className="toggle-track"></span>

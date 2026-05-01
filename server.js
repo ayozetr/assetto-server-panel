@@ -256,9 +256,8 @@ function getNetworkIP() {
 
 function respond(res, status, mime, body, extraHeaders) {
   res.writeHead(status, {
-    'Content-Type':                mime,
-    'Cache-Control':               'no-cache, no-store, must-revalidate',
-    'Access-Control-Allow-Origin': '*',
+    'Content-Type':  mime,
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
     ...extraHeaders,
   });
   res.end(body);
@@ -266,9 +265,8 @@ function respond(res, status, mime, body, extraHeaders) {
 
 function respondImage(res, data) {
   res.writeHead(200, {
-    'Content-Type':                'image/png',
-    'Cache-Control':               'public, max-age=3600',
-    'Access-Control-Allow-Origin': '*',
+    'Content-Type':  'image/png',
+    'Cache-Control': 'public, max-age=3600',
   });
   res.end(data);
 }
@@ -703,17 +701,17 @@ function apiPlayers(res) {
   req.setTimeout(2000, () => { req.destroy(); json(res, 200, []); });
 }
 
-function apiResults(res) {
-  if (!db) {
-    return json(res, 200, []);
-  }
+function apiResults(req, res) {
+  if (!db) return json(res, 200, []);
   try {
+    const qs    = new URLSearchParams(req.url.split('?')[1] || '');
+    const limit = Math.min(Math.max(parseInt(qs.get('limit')) || 500, 1), 5000);
     const rows = db.prepare(`
       SELECT id, driver_name, driver_guid, car, track, track_config, ms, s1, s2, s3, cuts, valid, session_date
       FROM laps
       ORDER BY ms ASC
-      LIMIT 2000
-    `).all();
+      LIMIT ?
+    `).all(limit);
 
     const laps = rows.map(r => ({
       id:     r.id,
@@ -908,7 +906,7 @@ function apiCarSkinPreview(carId, skinName, res) {
     return respond(res, 403, 'text/plain', 'Forbidden');
   fs.readFile(imgPath, (err, data) => {
     if (err) return respond(res, 404, 'text/plain', 'Not found');
-    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' });
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' });
     res.end(data);
   });
 }
@@ -1051,9 +1049,7 @@ function handler(req, res) {
   if (urlPath.startsWith('/api/')) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'GET,PUT,POST',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
+        'Allow': 'GET, PUT, POST, OPTIONS',
       });
       return res.end();
     }
@@ -1088,7 +1084,7 @@ function handler(req, res) {
     if (urlPath === '/api/config'          && req.method === 'PUT') return apiConfigUpdate(req, res);
     if (urlPath === '/api/players'         && req.method === 'GET') return apiPlayers(res);
     if (urlPath === '/api/players/history' && req.method === 'GET') return apiPlayersHistory(res);
-    if (urlPath === '/api/results'         && req.method === 'GET') return apiResults(res);
+    if (urlPath === '/api/results'         && req.method === 'GET') return apiResults(req, res);
     if (urlPath === '/api/cars'            && req.method === 'GET') return apiCars(res);
     if (urlPath === '/api/tracks'          && req.method === 'GET') return apiTracks(res);
     return json(res, 404, { error: 'Unknown endpoint' });

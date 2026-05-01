@@ -98,9 +98,8 @@ function PageTimes({ cars, tracks, lapTimes }) {
               </thead>
               <tbody>
                 {records.slice(0, 50).map((r, i) => {
-                  const leader = records[0];
-                  const sameTrack = records.find(x => x.track === r.track);
-                  const delta = r.ms - sameTrack.ms;
+                  const trackBest = records.find(x => x.track === r.track);
+                  const delta = r.ms - trackBest.ms;
                   return (
                     <tr key={r.id}>
                       <td><div className={`player-pos ${i === 0 ? 'p1' : ''}`}>{i + 1}</div></td>
@@ -111,7 +110,7 @@ function PageTimes({ cars, tracks, lapTimes }) {
                       <td className="mono muted">{fmtMs(r.s1)}</td>
                       <td className="mono muted">{fmtMs(r.s2)}</td>
                       <td className="mono muted">{fmtMs(r.s3)}</td>
-                      <td className="mono" style={{color: delta === 0 ? '#16a34a' : 'var(--text-muted)'}}>
+                      <td className="mono" style={{color: delta === 0 ? '#16a34a' : 'var(--text-muted)', fontWeight: delta === 0 ? 600 : 400}}>
                         {delta === 0 ? '—' : fmtDelta(delta)}
                       </td>
                       <td className="mono muted" style={{fontSize: 12}}>{r.date}</td>

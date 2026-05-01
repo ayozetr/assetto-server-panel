@@ -178,13 +178,16 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
               <th>Último coche</th>
               <th style={{width: 80}}>Sesiones</th>
               <th style={{width: 80}}>Vueltas</th>
+              <th style={{width: 110}}>Mejor vuelta</th>
               <th style={{width: 100}}>Tiempo total</th>
               <th style={{width: 160}}>Última conexión</th>
               {isAdmin && <th style={{width: 80}}></th>}
             </tr>
           </thead>
           <tbody>
-            {pastPlayers.map(p => (
+            {pastPlayers.map(p => {
+              const flagUrl = window.AppUtils.nationFlag(p.nation);
+              return (
               <tr key={p.id}>
                 <td>
                   <div className="row" style={{gap: 10}}>
@@ -192,7 +195,10 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                       {p.name.slice(0,1).toUpperCase()}
                     </div>
                     <div>
-                      <div className="player-name">{p.name}</div>
+                      <div className="row" style={{gap: 5, alignItems:'center'}}>
+                        <span className="player-name">{p.name}</span>
+                        {flagUrl && <img src={flagUrl} alt={p.nation} title={p.nation} style={{height:9, width:'auto', borderRadius:1, opacity:0.75}} onError={e=>{e.target.style.display='none'}}/>}
+                      </div>
                       <div className="row" style={{gap:4, alignItems:'center', marginTop:2}}>
                         <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
                         {p.steam && (
@@ -209,13 +215,15 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                 <td className="muted">{p.car}</td>
                 <td>{p.sessions}</td>
                 <td>{p.laps}</td>
+                <td className="mono">{fmtMs(p.bestMs)}</td>
                 <td className="mono muted">{p.totalTime}</td>
                 <td className="mono muted" style={{fontSize: 12}}>{p.lastSeen}</td>
                 {isAdmin && (
                   <td><button className="btn btn-sm btn-danger">Ban</button></td>
                 )}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

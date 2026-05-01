@@ -13,7 +13,8 @@ function ToastProvider({ children }) {
   const push = (msg, kind = 'info') => {
     const id = Math.random().toString(36).slice(2);
     setList(l => [...l, { id, msg, kind }]);
-    setTimeout(() => setList(l => l.filter(t => t.id !== id)), 3200);
+    const ttl = kind === 'error' ? 6000 : kind === 'warn' ? 4500 : kind === 'success' ? 2500 : 3200;
+    setTimeout(() => setList(l => l.filter(t => t.id !== id)), ttl);
   };
   return (
     <ToastCtx.Provider value={{ push }}>
@@ -22,8 +23,9 @@ function ToastProvider({ children }) {
         {list.map(t => (
           <div key={t.id} className={`toast ${t.kind}`}>
             {t.kind === 'success' && <I.IconCheck size={14}/>}
-            {t.kind === 'warn' && <I.IconBell size={14}/>}
-            {t.kind === 'info' && <I.IconBell size={14}/>}
+            {t.kind === 'error'   && <I.IconX size={14}/>}
+            {t.kind === 'warn'    && <I.IconBell size={14}/>}
+            {t.kind === 'info'    && <I.IconBell size={14}/>}
             <span>{t.msg}</span>
           </div>
         ))}

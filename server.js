@@ -647,6 +647,12 @@ async function apiConfigUpdate(req, res) {
     if (body.tickrate    !== undefined) s['CLIENT_SEND_INTERVAL_HZ'] = String(body.tickrate);
     if (body.maxClients  !== undefined) s['MAX_CLIENTS']             = String(body.maxClients);
     if (body.publicLobby !== undefined) s['REGISTER_TO_LOBBY']      = body.publicLobby ? '1' : '0';
+    if (body.fuelRate    !== undefined) s['FUEL_RATE']               = String(body.fuelRate);
+    if (body.damage      !== undefined) s['DAMAGE_MULTIPLIER']       = String(body.damage);
+    if (body.tyreWear    !== undefined) s['TYRE_WEAR_RATE']          = String(body.tyreWear);
+    if (body.abs         !== undefined) s['ABS_ALLOWED']             = String(body.abs);
+    if (body.tc          !== undefined) s['TC_ALLOWED']              = String(body.tc);
+    if (body.autoclutch  !== undefined) s['AUTOCLUTCH_ALLOWED']      = body.autoclutch ? '1' : '0';
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, serializeINI(ini), 'utf8');
@@ -728,9 +734,10 @@ function apiPlayersHistory(res) {
         p.last_seen,
         p.last_car,
         p.last_track,
-        COUNT(DISTINCT l.session_date) AS session_count,
-        COUNT(l.id)                    AS lap_count,
-        COALESCE(SUM(l.ms), 0)        AS total_ms
+        COUNT(DISTINCT l.session_date)                    AS session_count,
+        COUNT(l.id)                                       AS lap_count,
+        COALESCE(SUM(l.ms), 0)                            AS total_ms,
+        MIN(CASE WHEN l.valid = 1 THEN l.ms ELSE NULL END) AS best_ms
       FROM players p
       LEFT JOIN laps l ON p.guid = l.driver_guid
       GROUP BY p.guid
@@ -746,6 +753,7 @@ function apiPlayersHistory(res) {
       sessions:  p.session_count,
       laps:      p.lap_count,
       totalTime: formatTotalTime(p.total_ms),
+      bestMs:    p.best_ms || null,
       lastSeen:  p.last_seen || '—',
     }));
     json(res, 200, players);

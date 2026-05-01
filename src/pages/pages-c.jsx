@@ -33,10 +33,6 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
               <input className="input" value={config.name} onChange={e=>set('name', e.target.value)} disabled={!isAdmin}/>
             </div>
             <div className="field">
-              <label className="field-label">Descripción</label>
-              <textarea className="textarea" rows="3" value={config.description} onChange={e=>set('description', e.target.value)} disabled={!isAdmin}/>
-            </div>
-            <div className="field">
               <label className="field-label">Mensaje de bienvenida</label>
               <input className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!isAdmin}/>
             </div>
@@ -98,6 +94,60 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <div className="muted" style={{fontSize: 11.5}}>Solo Steam IDs autorizados pueden conectar</div>
               </div>
               <div className={`switch ${config.whitelist ? 'on' : ''}`} onClick={()=>isAdmin && set('whitelist', !config.whitelist)}></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <I4.IconFlag size={14} style={{color:'var(--red)'}}/>
+            <div className="card-title">Reglas de carrera</div>
+          </div>
+          <div className="card-body col" style={{gap: 14}}>
+            <div className="grid-2">
+              <div className="field">
+                <label className="field-label">Combustible (%)</label>
+                <input className="input mono" type="number" min="0" max="200" value={config.fuelRate ?? 100} onChange={e=>set('fuelRate', Number(e.target.value))} disabled={!isAdmin}/>
+                <span className="field-hint">0 = ilimitado</span>
+              </div>
+              <div className="field">
+                <label className="field-label">Daños (%)</label>
+                <input className="input mono" type="number" min="0" max="200" value={config.damage ?? 100} onChange={e=>set('damage', Number(e.target.value))} disabled={!isAdmin}/>
+              </div>
+              <div className="field">
+                <label className="field-label">Desgaste neumáticos (%)</label>
+                <input className="input mono" type="number" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="row-between">
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 500}}>ABS permitido</div>
+                  <div className="muted" style={{fontSize: 11.5}}>0=prohibido, 1=solo fábrica, 2=libre</div>
+                </div>
+                <select className="select" style={{width: 80}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
+                  <option value={0}>No</option>
+                  <option value={1}>Fábrica</option>
+                  <option value={2}>Libre</option>
+                </select>
+              </div>
+              <div className="row-between">
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 500}}>TC permitido</div>
+                  <div className="muted" style={{fontSize: 11.5}}>Control de tracción</div>
+                </div>
+                <select className="select" style={{width: 80}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
+                  <option value={0}>No</option>
+                  <option value={1}>Fábrica</option>
+                  <option value={2}>Libre</option>
+                </select>
+              </div>
+              <div className="row-between">
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 500}}>Embrague automático</div>
+                </div>
+                <div className={`switch ${config.autoclutch ? 'on' : ''}`} onClick={()=>isAdmin && set('autoclutch', !config.autoclutch)}></div>
+              </div>
             </div>
           </div>
         </div>

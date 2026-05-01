@@ -55,11 +55,13 @@ function App() {
   });
 
   const [config, setConfig] = uS({
-    name: '', description: '', welcome: '',
+    name: '', welcome: '',
     tcp: 9600, udp: 9600, http: 8081, tickrate: 18,
-    publicLobby: false,
+    maxClients: 16, publicLobby: false,
     password: '', adminPass: '',
     whitelist: false, autoStart: false, autoRestart: true,
+    fuelRate: 100, damage: 100, tyreWear: 100,
+    abs: 0, tc: 0, autoclutch: false,
   });
 
   const [cars,   setCars]   = uS([]);

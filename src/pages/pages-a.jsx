@@ -40,7 +40,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         <div className="kpi">
           <div className="kpi-label">RAM</div>
           <div className="kpi-value">{server.ram}<span className="unit">MB</span></div>
-          <div className="kpi-meta">de 4096 MB asignados</div>
+          <div className="kpi-meta">de {server.ramTotal || '—'} MB totales</div>
         </div>
       </div>
 
@@ -270,32 +270,21 @@ function PagePlayers({ players, pastPlayers, server, isAdmin, onKick, onBan }) {
 function PageLogs({ server }) {
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState('all');
-  const [logs, setLogs] = useState(() => seedLogs());
+  const [logs, setLogs] = useState([]);
   const ref = useRef(null);
 
-  function seedLogs() {
-    const now = new Date();
-    return Array.from({length: 20}).map((_, i) => {
-      const t = window.AppData.LOG_TEMPLATES[i % window.AppData.LOG_TEMPLATES.length];
-      const time = new Date(now.getTime() - (20 - i) * 4500);
-      return { id: 'seed-' + i, time: fmt(time), ...t };
-    });
-  }
-  function fmt(d) {
-    return d.toTimeString().slice(0,8);
-  }
-
   useEffect(() => {
-    if (paused || server.status !== 'running') return;
-    const id = setInterval(() => {
-      setLogs(l => {
-        const t = window.AppData.LOG_TEMPLATES[Math.floor(Math.random() * window.AppData.LOG_TEMPLATES.length)];
-        const next = [...l, { id: Math.random().toString(36).slice(2), time: fmt(new Date()), ...t }];
-        return next.slice(-200);
-      });
-    }, 1800);
+    const load = () => {
+      fetch('/api/logs?n=150')
+        .then(r => r.json())
+        .then(d => setLogs(d.lines || []))
+        .catch(() => {});
+    };
+    load();
+    if (paused) return;
+    const id = setInterval(load, 3000);
     return () => clearInterval(id);
-  }, [paused, server.status]);
+  }, [paused]);
 
   useEffect(() => {
     if (ref.current && !paused) {

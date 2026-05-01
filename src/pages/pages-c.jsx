@@ -104,56 +104,23 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
 
         <div className="card">
           <div className="card-header">
-            <I4.IconFolder size={14} style={{color:'var(--red)'}}/>
-            <div className="card-title">Rutas del servidor (Linux)</div>
+            <I4.IconSettings size={14} style={{color:'var(--red)'}}/>
+            <div className="card-title">Comportamiento</div>
           </div>
           <div className="card-body col" style={{gap: 14}}>
-            <div className="field">
-              <label className="field-label">Raíz del servidor</label>
-              <input className="input mono" value={config.path} onChange={e=>set('path', e.target.value)} disabled={!isAdmin} placeholder="/srv/assetto"/>
-              <span className="field-hint">Carpeta padre que contiene cfg/, content/ y presets/</span>
-            </div>
-            <div className="grid-2">
-              <div className="field">
-                <label className="field-label">Binario acServer</label>
-                <input className="input mono" value={config.binPath} onChange={e=>set('binPath', e.target.value)} disabled={!isAdmin} placeholder="/srv/assetto/ac_server/acServer"/>
-              </div>
-              <div className="field">
-                <label className="field-label">Contenido (cars/tracks)</label>
-                <input className="input mono" value={config.contentPath} onChange={e=>set('contentPath', e.target.value)} disabled={!isAdmin} placeholder="/srv/assetto/content"/>
-              </div>
-            </div>
-            <div className="grid-2">
-              <div className="field">
-                <label className="field-label">Configuración (cfg)</label>
-                <input className="input mono" value={config.cfgPath} onChange={e=>set('cfgPath', e.target.value)} disabled={!isAdmin}/>
-              </div>
-              <div className="field">
-                <label className="field-label">Resultados</label>
-                <input className="input mono" value={config.resultsPath} onChange={e=>set('resultsPath', e.target.value)} disabled={!isAdmin}/>
-              </div>
-            </div>
-            <div className="grid-2">
-              <div className="field">
-                <label className="field-label">Logs</label>
-                <input className="input mono" value={config.logsPath} onChange={e=>set('logsPath', e.target.value)} disabled={!isAdmin}/>
-              </div>
-              <div className="field">
-                <label className="field-label">BBDD tiempos</label>
-                <input className="input mono" value={config.dbPath} onChange={e=>set('dbPath', e.target.value)} disabled={!isAdmin}/>
-              </div>
-            </div>
-            <div className="field">
-              <label className="field-label">Usuario systemd</label>
-              <input className="input mono" value={config.sysUser} onChange={e=>set('sysUser', e.target.value)} disabled={!isAdmin}/>
-            </div>
             <div className="grid-2">
               <div className="row-between">
-                <span style={{fontSize: 13}}>Auto-arranque</span>
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 500}}>Auto-arranque</div>
+                  <div className="muted" style={{fontSize: 11.5}}>Iniciar con el sistema</div>
+                </div>
                 <div className={`switch ${config.autoStart ? 'on' : ''}`} onClick={()=>isAdmin && set('autoStart', !config.autoStart)}></div>
               </div>
               <div className="row-between">
-                <span style={{fontSize: 13}}>Reiniciar al fallar</span>
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 500}}>Reiniciar al fallar</div>
+                  <div className="muted" style={{fontSize: 11.5}}>Recuperación automática</div>
+                </div>
                 <div className={`switch ${config.autoRestart ? 'on' : ''}`} onClick={()=>isAdmin && set('autoRestart', !config.autoRestart)}></div>
               </div>
             </div>

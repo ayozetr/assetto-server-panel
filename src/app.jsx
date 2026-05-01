@@ -22,15 +22,16 @@ function App() {
   });
   const [page, setPage] = uS('dashboard');
 
-  // Server state simulation
+  // Server state — populated by /api/metrics on mount
   const [server, setServer] = uS({
-    status: 'running', // running | starting | stopping | stopped
-    players: 6,
+    status: 'stopped',
+    players: 0,
     slots: 24,
-    cpu: 28,
-    cpuName: 'AMD Ryzen 7 5800X · 8c/16t @ 3.8GHz',
-    ram: 1284,
-    uptime: '2h 14m',
+    cpu: 0,
+    cpuName: '—',
+    ram: 0,
+    ramTotal: 0,
+    uptime: '—',
   });
 
   const [players, setPlayers] = uS(window.AppData.PLAYERS_LIVE);
@@ -52,23 +53,15 @@ function App() {
   });
 
   const [config, setConfig] = uS({
-    name: 'AC Server — Liga Iberica',
-    description: 'Servidor privado de la liga. Práctica abierta los miércoles, carrera el sábado a las 22:00 CET.',
-    welcome: '¡Bienvenido! Respeta a los demás pilotos.',
-    tcp: 9600, udp: 9600, http: 8081, tickrate: 22,
+    name: '',
+    description: '',
+    welcome: '',
+    tcp: 9600, udp: 9600, http: 8081, tickrate: 18,
     publicLobby: false,
     password: '',
-    adminPass: 'kunos1234',
+    adminPass: '',
     whitelist: false,
-    path: '/srv/assetto',
-    binPath: '/srv/assetto/ac_server/acServer',
-    contentPath: '/srv/assetto/content',
-    cfgPath: '/srv/assetto/cfg',
-    resultsPath: '/srv/assetto/ac_server/results',
-    logsPath: '/srv/assetto/ac_server/logs',
-    dbPath: '/srv/assetto/ac_server/tiempos.db',
-    sysUser: 'administrador',
-    autoStart: true,
+    autoStart: false,
     autoRestart: true,
   });
 
@@ -82,19 +75,28 @@ function App() {
     else localStorage.removeItem('ac-user');
   }, [user]);
 
-  // Live tick: update CPU/RAM/uptime/players
+  // Real metrics — poll /api/metrics every 4 s
   uE(() => {
-    if (server.status !== 'running') return;
-    const id = setInterval(() => {
-      setServer(s => ({
-        ...s,
-        cpu: Math.max(8, Math.min(85, s.cpu + (Math.random() - 0.5) * 8)),
-        ram: Math.max(900, Math.min(2400, s.ram + Math.round((Math.random() - 0.5) * 60))),
-      }));
-      setPlayers(ps => ps.map(p => ({ ...p, ping: Math.max(8, Math.min(180, p.ping + Math.round((Math.random()-0.5)*8))) })));
-    }, 1500);
+    const poll = () => {
+      fetch('/api/metrics')
+        .then(r => r.json())
+        .then(d => {
+          setServer(s => ({
+            ...s,
+            status:   d.running ? (s.status === 'starting' || s.status === 'stopping' ? s.status : 'running') : 'stopped',
+            cpu:      d.cpu,
+            cpuName:  d.cpuName || s.cpuName,
+            ram:      d.ram.used,
+            ramTotal: d.ram.total,
+            uptime:   d.uptime,
+          }));
+        })
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 4000);
     return () => clearInterval(id);
-  }, [server.status]);
+  }, []);
 
   // Round CPU
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };

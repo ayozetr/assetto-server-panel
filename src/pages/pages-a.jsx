@@ -366,7 +366,13 @@ function PageLogs({ server }) {
           <button className="btn btn-sm" onClick={() => setLogs([])}>
             <I2.IconTrash size={11}/> Limpiar
           </button>
-          <button className="btn btn-sm">
+          <button className="btn btn-sm" onClick={() => {
+            const text = filtered.map(l => `[${l.time}] [${l.lvl.toUpperCase()}] [${l.tag}] ${l.msg}`).join('\n');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+            a.download = `ac-logs-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
+            a.click();
+          }}>
             <I2.IconDownload size={11}/> Exportar
           </button>
         </div>

@@ -1,5 +1,7 @@
 // Main App: state orchestration + routing
 const { useState: uS, useEffect: uE, useMemo: uM } = React;
+const ADMIN_TOKEN = document.querySelector('meta[name="x-admin-token"]')?.content || '';
+const adminHeaders = () => ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {};
 
 const PAGES = {
   dashboard: { title: 'Dashboard', component: 'PageDashboard' },
@@ -185,34 +187,58 @@ function AppInner(props) {
     if (!isAdmin) { toast.push('No tienes permisos para esta acción', 'warn'); return; }
     if (action === 'reload') {
       toast.push('Recargando configuración…', 'info');
-      setTimeout(() => toast.push('Configuración recargada sin reinicio', 'success'), 800);
+      fetch('/api/server/reload', { method: 'POST', headers: adminHeaders() })
+        .then(r => r.json())
+        .then(d => toast.push(d.error ? `Error: ${d.error}` : 'Señal de recarga enviada', d.error ? 'error' : 'success'))
+        .catch(e => toast.push(`Error: ${e.message}`, 'error'));
       return;
     }
     const labels = { start: 'Arrancando', stop: 'Deteniendo', restart: 'Reiniciando' };
     const transitional = action === 'stop' ? 'stopping' : 'starting';
     setServer(s => ({...s, status: transitional}));
     toast.push(`${labels[action]} servidor…`, 'info');
-    fetch(`/api/server/${action}`, { method: 'POST' })
+    fetch(`/api/server/${action}`, { method: 'POST', headers: adminHeaders() })
       .then(r => r.json())
-      .then(d => {
-        if (d.error) toast.push(`Error: ${d.error}`, 'error');
-      })
+      .then(d => { if (d.error) toast.push(`Error: ${d.error}`, 'error'); })
       .catch(e => toast.push(`Error de red: ${e.message}`, 'error'));
   };
 
   const handleKick = (p) => {
+    fetch('/api/players/kick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ carId: p.id }),
+    }).catch(() => {});
     setPlayers(ps => ps.filter(x => x.id !== p.id));
     setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
     toast.push(`${p.name} expulsado del servidor`, 'success');
   };
   const handleBan = (p) => {
+    fetch('/api/players/ban', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guid: p.steam }),
+    })
+      .then(r => r.json())
+      .then(d => toast.push(d.error ? `Error al banear: ${d.error}` : `${p.name} añadido a blacklist`, d.error ? 'error' : 'success'))
+      .catch(e => toast.push(`Error: ${e.message}`, 'error'));
     setPlayers(ps => ps.filter(x => x.id !== p.id));
     setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
-    toast.push(`${p.name} baneado permanentemente`, 'success');
   };
 
   const handleApplySession = () => {
-    toast.push('Sesión aplicada — reinicio en 5s', 'success');
+    fetch('/api/session/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trackId: sessionCfg.trackId,
+        layout:  sessionCfg.layout || '',
+        cars:    sessionCfg.carIds,
+      }),
+    })
+      .then(r => r.json())
+      .then(d => toast.push(d.error ? `Error: ${d.error}` : 'Sesión escrita en server_cfg.ini — reinicia para aplicar', d.error ? 'error' : 'success'))
+      .catch(e => toast.push(`Error: ${e.message}`, 'error'));
   };
   const handleSaveConfig = () => {
     fetch('/api/config', {

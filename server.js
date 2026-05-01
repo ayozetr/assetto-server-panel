@@ -17,11 +17,19 @@ const AC_CFG_FILE  = path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'se
 const AC_CARS_DIR  = path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'cars');
 const AC_TRACKS_DIR= path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'tracks');
 const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
-const AC_BIN       = process.env.AC_SERVER_BIN || '/home/<user>/ac_server/acServer';
-const AC_BIN_DIR   = process.env.AC_SERVER_DIR || path.dirname(AC_BIN);
-const ROOT         = __dirname;
+const AC_BIN          = process.env.AC_SERVER_BIN || '/home/<user>/ac_server/acServer';
+const AC_BIN_DIR      = process.env.AC_SERVER_DIR || path.dirname(AC_BIN);
+const AC_BLACKLIST    = process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt');
+const ADMIN_TOKEN     = process.env.ADMIN_TOKEN || '';
+const ROOT            = __dirname;
 
 let acChild = null; // tracked child process for the AC server
+
+function checkAdminAuth(req) {
+  if (!ADMIN_TOKEN) return true;
+  const h = req.headers['x-admin-token'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '';
+  return h === ADMIN_TOKEN;
+}
 
 // ── MIME ──────────────────────────────────────────────────────────────────────
 const MIME = {
@@ -630,6 +638,9 @@ function apiConfig(res) {
   });
 }
 
+function validPort(v) { const n = parseInt(v); return n >= 1024 && n <= 65535 ? n : null; }
+function clampInt(v, lo, hi) { const n = parseInt(v); return isNaN(n) ? null : Math.max(lo, Math.min(hi, n)); }
+
 async function apiConfigUpdate(req, res) {
   try {
     const body = await readBody(req);
@@ -637,21 +648,21 @@ async function apiConfigUpdate(req, res) {
     const ini  = parseINI(raw);
     const s    = ini['SERVER'] = ini['SERVER'] || {};
 
-    if (body.name        !== undefined) s['NAME']                    = body.name;
-    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']         = body.welcome;
-    if (body.password    !== undefined) s['PASSWORD']                = body.password;
-    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']          = body.adminPass;
-    if (body.tcp         !== undefined) s['TCP_PORT']                = String(body.tcp);
-    if (body.udp         !== undefined) s['UDP_PORT']                = String(body.udp);
-    if (body.http        !== undefined) s['HTTP_PORT']               = String(body.http);
-    if (body.tickrate    !== undefined) s['CLIENT_SEND_INTERVAL_HZ'] = String(body.tickrate);
-    if (body.maxClients  !== undefined) s['MAX_CLIENTS']             = String(body.maxClients);
+    if (body.name        !== undefined) s['NAME']                    = String(body.name).slice(0, 255);
+    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']         = String(body.welcome).slice(0, 255);
+    if (body.password    !== undefined) s['PASSWORD']                = String(body.password).slice(0, 255);
+    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']          = String(body.adminPass).slice(0, 255);
+    if (body.tcp         !== undefined) { const p = validPort(body.tcp);         if (p) s['TCP_PORT']                = String(p); }
+    if (body.udp         !== undefined) { const p = validPort(body.udp);         if (p) s['UDP_PORT']                = String(p); }
+    if (body.http        !== undefined) { const p = validPort(body.http);        if (p) s['HTTP_PORT']               = String(p); }
+    if (body.tickrate    !== undefined) { const v = clampInt(body.tickrate,1,300); if (v) s['CLIENT_SEND_INTERVAL_HZ'] = String(v); }
+    if (body.maxClients  !== undefined) { const v = clampInt(body.maxClients,1,200); if (v) s['MAX_CLIENTS']          = String(v); }
     if (body.publicLobby !== undefined) s['REGISTER_TO_LOBBY']      = body.publicLobby ? '1' : '0';
-    if (body.fuelRate    !== undefined) s['FUEL_RATE']               = String(body.fuelRate);
-    if (body.damage      !== undefined) s['DAMAGE_MULTIPLIER']       = String(body.damage);
-    if (body.tyreWear    !== undefined) s['TYRE_WEAR_RATE']          = String(body.tyreWear);
-    if (body.abs         !== undefined) s['ABS_ALLOWED']             = String(body.abs);
-    if (body.tc          !== undefined) s['TC_ALLOWED']              = String(body.tc);
+    if (body.fuelRate    !== undefined) { const v = clampInt(body.fuelRate,0,200);  if (v !== null) s['FUEL_RATE']     = String(v); }
+    if (body.damage      !== undefined) { const v = clampInt(body.damage,0,200);    if (v !== null) s['DAMAGE_MULTIPLIER'] = String(v); }
+    if (body.tyreWear    !== undefined) { const v = clampInt(body.tyreWear,0,200);  if (v !== null) s['TYRE_WEAR_RATE'] = String(v); }
+    if (body.abs         !== undefined) { const v = clampInt(body.abs,0,2);         if (v !== null) s['ABS_ALLOWED']    = String(v); }
+    if (body.tc          !== undefined) { const v = clampInt(body.tc,0,2);          if (v !== null) s['TC_ALLOWED']     = String(v); }
     if (body.autoclutch  !== undefined) s['AUTOCLUTCH_ALLOWED']      = body.autoclutch ? '1' : '0';
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
@@ -936,6 +947,57 @@ function apiTrackLayoutThumb(trackId, layout, res) {
   });
 }
 
+// ── Player kick / ban ─────────────────────────────────────────────────────────
+async function apiPlayerKick(req, res) {
+  try {
+    const body  = await readBody(req);
+    const carId = body.carId;
+    if (carId === undefined) return json(res, 400, { error: 'carId required' });
+    await new Promise(resolve => {
+      const r = http.request(
+        { hostname: '127.0.0.1', port: AC_HTTP_PORT, path: '/api/kick', method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, timeout: 2000 },
+        resp => { resp.resume(); resolve(); }
+      );
+      r.on('error', resolve);
+      r.setTimeout(2000, () => { r.destroy(); resolve(); });
+      r.write(JSON.stringify({ car_id: carId }));
+      r.end();
+    });
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiPlayerBan(req, res) {
+  try {
+    const body = await readBody(req);
+    const guid = body.guid;
+    if (!guid) return json(res, 400, { error: 'guid required' });
+    let existing = '';
+    try { existing = fs.readFileSync(AC_BLACKLIST, 'utf8'); } catch {}
+    const guids = existing.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!guids.includes(guid)) fs.appendFileSync(AC_BLACKLIST, guid + '\n');
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// ── Session apply ─────────────────────────────────────────────────────────────
+async function apiSessionApply(req, res) {
+  try {
+    const body = await readBody(req);
+    const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
+    const ini  = parseINI(raw);
+    const s    = ini['SERVER'] = ini['SERVER'] || {};
+    if (body.trackId !== undefined) s['TRACK']        = body.trackId;
+    if (body.layout  !== undefined) s['CONFIG_TRACK'] = body.layout || '';
+    if (Array.isArray(body.cars) && body.cars.length)
+      s['CARS'] = [...new Set(body.cars)].join(';');
+    await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
+    await fsp.writeFile(AC_CFG_FILE, serializeINI(ini), 'utf8');
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // ── Server control ────────────────────────────────────────────────────────────
 function spawnAC() {
   try {
@@ -954,20 +1016,31 @@ function killAC() {
   }
 }
 
-function apiServerStart(res) {
-  if (acChild && !acChild.killed) return json(res, 409, { error: 'Ya en ejecución' });
+function apiServerStart(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (acChild && !acChild.killed) return json(res, 409, { error: 'Already running' });
   spawnAC();
   json(res, 200, { ok: true });
 }
 
-function apiServerStop(res) {
+function apiServerStop(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   killAC();
   json(res, 200, { ok: true });
 }
 
-function apiServerRestart(res) {
+function apiServerRestart(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   killAC();
   setTimeout(spawnAC, 1500);
+  json(res, 200, { ok: true });
+}
+
+function apiServerReload(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (acChild && !acChild.killed) {
+    try { acChild.kill('SIGHUP'); } catch {}
+  }
   json(res, 200, { ok: true });
 }
 
@@ -980,15 +1053,23 @@ function handler(req, res) {
       res.writeHead(204, {
         'Access-Control-Allow-Origin':  '*',
         'Access-Control-Allow-Methods': 'GET,PUT,POST',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
       });
       return res.end();
     }
 
-    // Server control
-    if (urlPath === '/api/server/start'   && req.method === 'POST') return apiServerStart(res);
-    if (urlPath === '/api/server/stop'    && req.method === 'POST') return apiServerStop(res);
-    if (urlPath === '/api/server/restart' && req.method === 'POST') return apiServerRestart(res);
+    // Server control (auth-protected)
+    if (urlPath === '/api/server/start'   && req.method === 'POST') return apiServerStart(req, res);
+    if (urlPath === '/api/server/stop'    && req.method === 'POST') return apiServerStop(req, res);
+    if (urlPath === '/api/server/restart' && req.method === 'POST') return apiServerRestart(req, res);
+    if (urlPath === '/api/server/reload'  && req.method === 'POST') return apiServerReload(req, res);
+
+    // Player control
+    if (urlPath === '/api/players/kick'   && req.method === 'POST') return apiPlayerKick(req, res);
+    if (urlPath === '/api/players/ban'    && req.method === 'POST') return apiPlayerBan(req, res);
+
+    // Session apply
+    if (urlPath === '/api/session/apply'  && req.method === 'POST') return apiSessionApply(req, res);
 
     // Content image endpoints
     const carSkinMatch         = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);
@@ -1025,6 +1106,13 @@ function handler(req, res) {
   fs.readFile(filePath, (err, data) => {
     if (err) {
       return respond(res, err.code === 'ENOENT' ? 404 : 500, 'text/plain', `${err.code} — ${urlPath}`);
+    }
+    // Inject admin token into HTML so the frontend can use it for server control
+    if (ADMIN_TOKEN && filePath.endsWith('index.html')) {
+      data = Buffer.from(data.toString().replace(
+        '</head>',
+        `<meta name="x-admin-token" content="${ADMIN_TOKEN}"></head>`
+      ));
     }
     respond(res, 200, MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream', data);
   });

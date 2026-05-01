@@ -298,6 +298,22 @@ function isValidContentId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id) && !id.includes('..');
 }
 
+function isValidSkinName(name) {
+  return typeof name === 'string' && name.length > 0 && name.length < 256 &&
+    !name.includes('..') && !name.includes('/') && !name.includes('\\') && !name.includes('\0');
+}
+
+function stripHtml(html) {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
 // ── INI parser / serializer ───────────────────────────────────────────────────
 function parseINI(text) {
   const result = {};
@@ -575,24 +591,38 @@ async function apiCars(res) {
   try {
     const dirs = await fsp.readdir(AC_CARS_DIR);
     const cars = await Promise.all(
-      dirs.map(id =>
-        fsp.readFile(path.join(AC_CARS_DIR, id, 'ui', 'ui_car.json'), 'utf8')
-          .then(JSON.parse)
-          .then(ui => ({
-            id,
-            name:  ui.name  || formatName(id),
-            brand: ui.brand || '',
-            cls:   ui.tags?.[0] || '',
-            thumb: `/api/content/cars/${encodeURIComponent(id)}/thumb`,
-          }))
-          .catch(() => ({
-            id,
-            name:  formatName(id),
-            brand: '',
-            cls:   '',
-            thumb: `/api/content/cars/${encodeURIComponent(id)}/thumb`,
-          }))
-      )
+      dirs.map(async id => {
+        let ui = {};
+        try { ui = JSON.parse(await fsp.readFile(path.join(AC_CARS_DIR, id, 'ui', 'ui_car.json'), 'utf8')); } catch {}
+
+        let skins = [];
+        try {
+          const entries = await fsp.readdir(path.join(AC_CARS_DIR, id, 'skins'), { withFileTypes: true });
+          skins = entries.filter(e => e.isDirectory()).map(e => e.name);
+        } catch {}
+
+        const cls   = ui.class || ui.tags?.[0] || '';
+        const thumb = skins.length > 0
+          ? `/api/content/cars/${encodeURIComponent(id)}/skins/${encodeURIComponent(skins[0])}/preview`
+          : `/api/content/cars/${encodeURIComponent(id)}/thumb`;
+
+        return {
+          id,
+          name:        ui.name  || formatName(id),
+          brand:       ui.brand || '',
+          cls,
+          year:        ui.year  || '',
+          description: stripHtml(ui.description || '').slice(0, 500),
+          specs: {
+            bhp:      ui.specs?.bhp      || '',
+            torque:   ui.specs?.torque   || '',
+            weight:   ui.specs?.weight   || '',
+            topspeed: ui.specs?.topspeed || '',
+          },
+          skins,
+          thumb,
+        };
+      })
     );
     json(res, 200, cars.sort((a, b) => a.name.localeCompare(b.name)));
   } catch (e) { json(res, 500, { error: e.message }); }
@@ -632,12 +662,13 @@ async function apiTracks(res) {
 
       return {
         id,
-        name:    mainJson.name    || formatName(id),
-        city:    mainJson.city    || mainJson.country || '',
-        length:  parseTrackLength(mainJson.length),
-        pits:    parseInt(mainJson.pitboxes) || 0,
+        name:        mainJson.name    || formatName(id),
+        city:        mainJson.city    || mainJson.country || '',
+        length:      parseTrackLength(mainJson.length),
+        pits:        parseInt(mainJson.pitboxes) || 0,
         layouts,
-        thumb:   `/api/content/tracks/${encodeURIComponent(id)}/thumb`,
+        description: stripHtml(mainJson.description || '').slice(0, 400),
+        thumb:       `/api/content/tracks/${encodeURIComponent(id)}/thumb`,
       };
     }));
     json(res, 200, tracks.sort((a, b) => a.name.localeCompare(b.name)));
@@ -651,6 +682,20 @@ function apiCarThumb(carId, res) {
   fs.readFile(imgPath, (err, data) => {
     if (err) return respond(res, 404, 'text/plain', 'Not found');
     respondImage(res, data);
+  });
+}
+
+// Serve a specific car skin preview (skins/{name}/preview.jpg)
+function apiCarSkinPreview(carId, skinName, res) {
+  if (!isValidContentId(carId) || !isValidSkinName(skinName))
+    return respond(res, 400, 'text/plain', 'Invalid ID');
+  const imgPath = path.join(AC_CARS_DIR, carId, 'skins', skinName, 'preview.jpg');
+  if (!imgPath.startsWith(AC_CARS_DIR + path.sep))
+    return respond(res, 403, 'text/plain', 'Forbidden');
+  fs.readFile(imgPath, (err, data) => {
+    if (err) return respond(res, 404, 'text/plain', 'Not found');
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' });
+    res.end(data);
   });
 }
 
@@ -690,8 +735,10 @@ function handler(req, res) {
     }
 
     // Content image endpoints
+    const carSkinMatch    = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);
     const carThumbMatch   = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/thumb$/);
     const trackThumbMatch = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/thumb$/);
+    if (carSkinMatch    && req.method === 'GET') return apiCarSkinPreview(decodeURIComponent(carSkinMatch[1]), decodeURIComponent(carSkinMatch[2]), res);
     if (carThumbMatch   && req.method === 'GET') return apiCarThumb(decodeURIComponent(carThumbMatch[1]), res);
     if (trackThumbMatch && req.method === 'GET') return apiTrackThumb(decodeURIComponent(trackThumbMatch[1]), res);
 

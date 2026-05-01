@@ -265,7 +265,7 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose }) {
             </div>
             <div style={{fontSize:12, color:'var(--text-muted)', marginTop:2, display:'flex', alignItems:'center', gap:5}}>
               {track.flag && <img src={track.flag} alt={track.country} style={{height:10, width:'auto', borderRadius:1, opacity:0.85}} onError={e=>{e.target.style.display='none'}}/>}
-              {[track.city, length > 0 ? `${length} km` : null, pits ? `${pits} pits` : null].filter(Boolean).join(' · ')}
+              {[track.countryEs || track.country, length > 0 ? `${length} km` : null, pits ? `${pits} pits` : null].filter(Boolean).join(' · ')}
             </div>
           </div>
           <button className="icon-btn" onClick={onClose}><I3.IconX size={14}/></button>
@@ -423,7 +423,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
                   style={{height:9, width:'auto', borderRadius:1, opacity:0.85}}
                   onError={e => { e.target.style.display='none'; }}/>
               )}
-              {track.city}
+              {track.countryEs || track.country}
             </div>
           </div>
           <div style={{display:'flex', gap:4, alignItems:'center', flexShrink:0}}>
@@ -737,7 +737,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 </div>
                 <div style={{marginTop: 12}}>
                   <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>
-                  <div className="muted" style={{fontSize: 12}}>{track.city} · {track.length} km</div>
+                  <div className="muted" style={{fontSize: 12}}>{track.countryEs || track.country} · {track.length} km</div>
                 </div>
                 <div className="field" style={{marginTop: 12}}>
                   <label className="field-label">Layout</label>

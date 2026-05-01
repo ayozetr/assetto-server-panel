@@ -304,36 +304,155 @@ function isValidSkinName(name) {
 }
 
 // ── Brand logo + country flag helpers ─────────────────────────────────────────
+// Keys are lowercase for case-insensitive lookup; values are carlogos.org slugs
 const BRAND_LOGO_MAP = {
-  'Audi': 'Audi', 'BMW': 'BMW', 'Citroen': 'Citroen', 'Fiat': 'Fiat',
-  'Ford': 'Ford', 'Lancia': 'Lancia', 'Mercedes-Benz': 'Mercedes-Benz',
-  'Mitsubishi': 'Mitsubishi', 'Opel': 'Opel', 'Peugeot': 'Peugeot',
-  'Renault': 'Renault', 'Seat': 'SEAT', 'Simca': 'Simca',
-  'Skoda': 'Skoda', 'Talbot': 'Talbot', 'Volkswagen': 'Volkswagen',
+  'abarth': 'Abarth', 'abarth500': 'Abarth',
+  'alfa romeo': 'Alfa-Romeo', 'alfa': 'Alfa-Romeo',
+  'audi': 'Audi',
+  'bmw': 'BMW',
+  'chevrolet': 'Chevrolet', 'corvette': 'Chevrolet',
+  'citroen': 'Citroen', 'citroën': 'Citroen',
+  'ferrari': 'Ferrari',
+  'fiat': 'Fiat',
+  'ford': 'Ford',
+  'lamborghini': 'Lamborghini',
+  'lancia': 'Lancia',
+  'lotus': 'Lotus',
+  'maserati': 'Maserati',
+  'mazda': 'Mazda',
+  'mclaren': 'McLaren',
+  'mercedes': 'Mercedes-Benz', 'mercedes-benz': 'Mercedes-Benz',
+  'mitsubishi': 'Mitsubishi',
+  'nissan': 'Nissan',
+  'opel': 'Opel',
+  'pagani': 'Pagani',
+  'peugeot': 'Peugeot',
+  'porsche': 'Porsche',
+  'praga': 'Praga',
+  'renault': 'Renault',
+  'seat': 'SEAT',
+  'simca': 'Simca',
+  'skoda': 'Skoda', 'škoda': 'Skoda',
+  'talbot': 'Talbot',
+  'toyota': 'Toyota',
+  'volkswagen': 'Volkswagen', 'vw': 'Volkswagen',
 };
+// Infer brand name from Kunos car ID prefix (e.g. ks_ferrari_f40 → 'Ferrari')
+const KS_ID_BRAND = {
+  'abarth': 'Abarth', 'abarth500': 'Abarth',
+  'alfa': 'Alfa Romeo',
+  'audi': 'Audi',
+  'bmw': 'BMW',
+  'corvette': 'Chevrolet',
+  'ferrari': 'Ferrari',
+  'ford': 'Ford',
+  'glickenhaus': 'Glickenhaus',
+  'lamborghini': 'Lamborghini',
+  'lotus': 'Lotus',
+  'maserati': 'Maserati',
+  'mazda': 'Mazda',
+  'mclaren': 'McLaren',
+  'mercedes': 'Mercedes-Benz',
+  'nissan': 'Nissan',
+  'pagani': 'Pagani',
+  'porsche': 'Porsche',
+  'praga': 'Praga',
+  'ruf': 'RUF',
+  'toyota': 'Toyota',
+};
+function inferBrand(carId, uiBrand) {
+  if (uiBrand) return uiBrand;
+  if (carId.startsWith('ks_')) {
+    const prefix = carId.slice(3).split('_')[0];
+    return KS_ID_BRAND[prefix] || '';
+  }
+  return '';
+}
 function brandLogoUrl(brand) {
-  const slug = BRAND_LOGO_MAP[brand];
+  if (!brand) return null;
+  const slug = BRAND_LOGO_MAP[brand.toLowerCase()];
   return slug ? `https://www.carlogos.org/logo/${slug}-logo.png` : null;
 }
 
+// Country ISO codes (used for flag URL)
 const COUNTRY_ISO2 = {
-  'Spain': 'es', 'Italy': 'it', 'Germany': 'de', 'France': 'fr',
-  'United Kingdom': 'gb', 'UK': 'gb', 'England': 'gb',
-  'Japan': 'jp', 'USA': 'us', 'United States': 'us',
-  'Austria': 'at', 'Belgium': 'be', 'Portugal': 'pt',
-  'Hungary': 'hu', 'Monaco': 'mc', 'Brazil': 'br',
-  'Australia': 'au', 'Netherlands': 'nl', 'Sweden': 'se',
-  'Switzerland': 'ch', 'Finland': 'fi', 'China': 'cn',
-  'Czech Republic': 'cz', 'Czechia': 'cz', 'Poland': 'pl',
-  'Canada': 'ca', 'Mexico': 'mx', 'Argentina': 'ar',
-  'South Africa': 'za', 'Romania': 'ro', 'Slovakia': 'sk',
-  // Regional/island values used in track data
-  'Tenerife': 'es', 'Canary Islands': 'es', 'Gran Canaria': 'es',
+  'spain': 'es', 'españa': 'es',
+  'italy': 'it', 'italia': 'it',
+  'germany': 'de', 'alemania': 'de',
+  'france': 'fr', 'francia': 'fr',
+  'united kingdom': 'gb', 'uk': 'gb', 'england': 'gb',
+  'japan': 'jp', 'japón': 'jp', 'japon': 'jp',
+  'usa': 'us', 'united states': 'us',
+  'austria': 'at',
+  'belgium': 'be', 'bélgica': 'be',
+  'portugal': 'pt',
+  'hungary': 'hu', 'hungría': 'hu',
+  'monaco': 'mc', 'mónaco': 'mc',
+  'brazil': 'br', 'brasil': 'br',
+  'australia': 'au',
+  'netherlands': 'nl', 'países bajos': 'nl',
+  'sweden': 'se', 'suecia': 'se',
+  'switzerland': 'ch', 'suiza': 'ch',
+  'finland': 'fi', 'finlandia': 'fi',
+  'china': 'cn',
+  'czech republic': 'cz', 'czechia': 'cz',
+  'poland': 'pl', 'polonia': 'pl',
+  'canada': 'ca', 'canadá': 'ca',
+  'mexico': 'mx', 'méxico': 'mx',
+  'argentina': 'ar',
+  'south africa': 'za', 'sudáfrica': 'za',
+  'romania': 'ro', 'rumanía': 'ro',
+  'slovakia': 'sk',
+  // regional
+  'tenerife': 'es', 'canary islands': 'es', 'gran canaria': 'es',
 };
+// Spanish country names for display
+const COUNTRY_ES = {
+  'spain': 'España', 'españa': 'España',
+  'italy': 'Italia', 'italia': 'Italia',
+  'germany': 'Alemania',
+  'france': 'Francia',
+  'united kingdom': 'Reino Unido', 'uk': 'Reino Unido', 'england': 'Reino Unido',
+  'japan': 'Japón',
+  'usa': 'EE. UU.', 'united states': 'EE. UU.',
+  'austria': 'Austria',
+  'belgium': 'Bélgica',
+  'portugal': 'Portugal',
+  'hungary': 'Hungría',
+  'monaco': 'Mónaco',
+  'brazil': 'Brasil',
+  'australia': 'Australia',
+  'netherlands': 'Países Bajos',
+  'sweden': 'Suecia',
+  'switzerland': 'Suiza',
+  'finland': 'Finlandia',
+  'china': 'China',
+  'czech republic': 'Rep. Checa', 'czechia': 'Rep. Checa',
+  'poland': 'Polonia',
+  'canada': 'Canadá',
+  'mexico': 'México',
+  'argentina': 'Argentina',
+  'south africa': 'Sudáfrica',
+  'romania': 'Rumanía',
+  'slovakia': 'Eslovaquia',
+  // regional → parent country
+  'tenerife': 'España', 'canary islands': 'España', 'gran canaria': 'España',
+};
+function normalizeCountry(raw) {
+  if (!raw) return '';
+  // Fix potential Latin-1 / Windows-1252 decode artifacts
+  return raw.replace(/�/g, 'ñ').trim();
+}
 function countryFlag(country) {
   if (!country) return null;
-  const iso = COUNTRY_ISO2[country] || COUNTRY_ISO2[country.trim()];
+  const key = normalizeCountry(country).toLowerCase();
+  const iso = COUNTRY_ISO2[key];
   return iso ? `https://flagcdn.com/16x12/${iso}.png` : null;
+}
+function countryEs(country) {
+  if (!country) return '';
+  const key = normalizeCountry(country).toLowerCase();
+  return COUNTRY_ES[key] || normalizeCountry(country);
 }
 
 function stripHtml(html) {
@@ -652,11 +771,12 @@ async function apiCars(res) {
           try { await fsp.access(badgePath); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; } catch {}
         }
 
+        const brand = inferBrand(id, ui.brand || '');
         return {
           id,
           name:        ui.name  || formatName(id),
-          brand:       ui.brand || '',
-          brandLogo:   brandLogoUrl(ui.brand || ''),
+          brand,
+          brandLogo:   brandLogoUrl(brand),
           cls,
           year:        ui.year  || '',
           description: stripHtml(ui.description || '').slice(0, 500),
@@ -731,6 +851,7 @@ async function apiTracks(res) {
         name:          mainJson.name    || formatName(id),
         city:          rawCity || rawCountry,
         country:       rawCountry,
+        countryEs:     countryEs(rawCountry),
         flag:          countryFlag(rawCountry),
         length:        parseTrackLength(mainJson.length),
         pits:          parseInt(mainJson.pitboxes) || 0,

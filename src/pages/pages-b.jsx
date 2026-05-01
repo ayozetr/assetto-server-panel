@@ -3,7 +3,7 @@ const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB } = React;
 const I3 = window.AppIcons;
 
 // ── Car modal ─────────────────────────────────────────────────────────────────
-function CarModal({ car, selected, onToggle, onClose }) {
+function CarModal({ car, count, onAdd, onRemove, onClose }) {
   const [skinIdx, setSkinIdx] = useStateB(0);
 
   useEffectB(() => {
@@ -132,16 +132,26 @@ function CarModal({ car, selected, onToggle, onClose }) {
         {/* Footer */}
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>Cerrar</button>
-          <button
-            className="btn btn-primary"
-            style={selected ? {background:'transparent', borderColor:'var(--red)', color:'var(--red)'} : {}}
-            onClick={onToggle}
-          >
-            {selected
-              ? <><I3.IconX size={12}/> Quitar de sesión</>
-              : <><I3.IconCheck size={12}/> Añadir a sesión</>
-            }
-          </button>
+          <div className="row" style={{gap:6, alignItems:'center'}}>
+            {count > 0 && (
+              <button className="btn btn-sm" onClick={onRemove} title="Quitar un slot">
+                <I3.IconX size={12}/> Quitar
+              </button>
+            )}
+            <div style={{
+              display:'flex', alignItems:'center', gap:8,
+              padding:'4px 10px', borderRadius:'var(--radius)',
+              background: count > 0 ? 'color-mix(in srgb, var(--red) 12%, transparent)' : 'var(--bg-3)',
+              border: `1px solid ${count > 0 ? 'var(--red)' : 'var(--border)'}`,
+              fontSize:12, fontWeight:600, color: count > 0 ? 'var(--red)' : 'var(--text-muted)',
+              minWidth: 36, justifyContent:'center',
+            }}>
+              {count}
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={onAdd} title="Añadir un slot más">
+              <I3.IconPlus size={12}/> {count === 0 ? 'Añadir a sesión' : 'Añadir slot'}
+            </button>
+          </div>
         </div>
 
       </div>
@@ -149,14 +159,14 @@ function CarModal({ car, selected, onToggle, onClose }) {
   );
 }
 
-// ── Car card (simplified — opens modal on click) ───────────────────────────────
-function CarCard({ car, selected, onOpen }) {
+// ── Car card ───────────────────────────────────────────────────────────────────
+function CarCard({ car, count, onOpen }) {
   const skinsCount = car.skins?.length || 0;
   const [imgFailed, setImgFailed] = useStateB(false);
   const initial = (car.brand || car.name || '?').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`car-card ${selected ? 'selected' : ''}`} onClick={onOpen}>
+    <div className={`car-card ${count > 0 ? 'selected' : ''}`} onClick={onOpen}>
       <div className="car-thumb" style={{position:'relative', overflow:'hidden'}}>
         {car.thumb && !imgFailed ? (
           <img
@@ -168,8 +178,7 @@ function CarCard({ car, selected, onOpen }) {
         ) : (
           <div style={{
             width:'100%', height:'100%', display:'flex', alignItems:'center',
-            justifyContent:'center', flexDirection:'column', gap: 4,
-            background:'var(--bg-3)', color:'var(--text-faint)',
+            justifyContent:'center', background:'var(--bg-3)', color:'var(--text-faint)',
           }}>
             <span style={{fontSize:22, fontWeight:700, letterSpacing:'-0.03em', opacity:0.4}}>{initial}</span>
           </div>
@@ -185,7 +194,9 @@ function CarCard({ car, selected, onOpen }) {
         )}
       </div>
 
-      <div className="car-check">{selected && <I3.IconCheck size={12}/>}</div>
+      <div className="car-check" style={count > 1 ? {background:'var(--red)', borderColor:'var(--red)', color:'white', width:22, height:22, fontSize:10, fontWeight:700} : {}}>
+        {count > 1 ? count : (count === 1 ? <I3.IconCheck size={12}/> : null)}
+      </div>
 
       <div className="car-meta">
         <div className="car-name">{car.name}</div>
@@ -416,7 +427,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
 function PageCars({ cars, sessionCfg, setSessionCfg }) {
   const [query,     setQuery]     = useStateB('');
   const [cls,       setCls]       = useStateB('all');
-  const [showKunos, setShowKunos] = useStateB(true);
+  const [showKunos, setShowKunos] = useStateB(false);
   const [modalCar,  setModalCar]  = useStateB(null);
 
   const kunosCount = useMemoB(() => cars.filter(c => c.id.startsWith('ks_')).length, [cars]);
@@ -429,12 +440,15 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
     return true;
   }), [cars, cls, query, showKunos]);
 
-  const toggle = (id) => {
-    setSessionCfg(cfg => {
-      const has = cfg.carIds.includes(id);
-      return { ...cfg, carIds: has ? cfg.carIds.filter(x => x !== id) : [...cfg.carIds, id] };
-    });
-  };
+  const addCar = (id) => setSessionCfg(cfg => ({ ...cfg, carIds: [...cfg.carIds, id] }));
+  const removeCar = (id) => setSessionCfg(cfg => {
+    const idx = cfg.carIds.lastIndexOf(id);
+    if (idx === -1) return cfg;
+    const next = [...cfg.carIds];
+    next.splice(idx, 1);
+    return { ...cfg, carIds: next };
+  });
+  const carCount = (id) => sessionCfg.carIds.filter(x => x === id).length;
 
   const selectedCount = sessionCfg.carIds.length;
 
@@ -474,15 +488,14 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
           ))}
         </div>
         {kunosCount > 0 && (
-          <div className="tag-row" style={{marginLeft: 'auto'}}>
-            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>Kunos:</span>
-            <button className={`tag ${showKunos ? 'active' : ''}`} onClick={() => setShowKunos(true)}>
-              Mostrar ({kunosCount})
-            </button>
-            <button className={`tag ${!showKunos ? 'active' : ''}`} onClick={() => setShowKunos(false)}>
-              Ocultar
-            </button>
-          </div>
+          <label className="toggle-wrap" style={{marginLeft:'auto'}} title={`${kunosCount} coches de Kunos`}>
+            <span className="toggle-label">Coches Kunos ({kunosCount})</span>
+            <span className="toggle">
+              <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
+              <span className="toggle-track"></span>
+              <span className="toggle-thumb"></span>
+            </span>
+          </label>
         )}
       </div>
 
@@ -494,7 +507,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
             <CarCard
               key={c.id}
               car={c}
-              selected={sessionCfg.carIds.includes(c.id)}
+              count={carCount(c.id)}
               onOpen={() => setModalCar(c)}
             />
           ))}
@@ -504,8 +517,9 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
       {modalCar && (
         <CarModal
           car={modalCar}
-          selected={sessionCfg.carIds.includes(modalCar.id)}
-          onToggle={() => toggle(modalCar.id)}
+          count={carCount(modalCar.id)}
+          onAdd={() => addCar(modalCar.id)}
+          onRemove={() => removeCar(modalCar.id)}
           onClose={() => setModalCar(null)}
         />
       )}
@@ -516,7 +530,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
 // ── PageTracks ────────────────────────────────────────────────────────────────
 function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
   const [query,      setQuery]      = useStateB('');
-  const [showKunos,  setShowKunos]  = useStateB(true);
+  const [showKunos,  setShowKunos]  = useStateB(false);
   const [modalTrack, setModalTrack] = useStateB(null);
 
   const kunosCount = useMemoB(() => tracks.filter(t => t.id.startsWith('ks_')).length, [tracks]);
@@ -539,20 +553,17 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
           <I3.IconSearch size={14} className="search-icon"/>
           <input className="input" placeholder="Buscar circuito…" value={query} onChange={e => setQuery(e.target.value)}/>
         </div>
+        {kunosCount > 0 && (
+          <label className="toggle-wrap" title={`${kunosCount} circuitos de Kunos`}>
+            <span className="toggle-label">Circuitos Kunos ({kunosCount})</span>
+            <span className="toggle">
+              <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
+              <span className="toggle-track"></span>
+              <span className="toggle-thumb"></span>
+            </span>
+          </label>
+        )}
       </div>
-      {kunosCount > 0 && (
-        <div className="toolbar" style={{paddingTop:0, gap:8}}>
-          <div className="tag-row">
-            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>Kunos:</span>
-            <button className={`tag ${showKunos ? 'active' : ''}`} onClick={() => setShowKunos(true)}>
-              Mostrar ({kunosCount})
-            </button>
-            <button className={`tag ${!showKunos ? 'active' : ''}`} onClick={() => setShowKunos(false)}>
-              Ocultar
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="track-grid">
         {filtered.map(t => (
@@ -575,7 +586,17 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
 // ── PageSession ───────────────────────────────────────────────────────────────
 function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply }) {
   const track        = tracks.find(t => t.id === sessionCfg.trackId);
-  const selectedCars = cars.filter(c => sessionCfg.carIds.includes(c.id));
+  // Build unique car list with counts (preserves order of first appearance)
+  const selectedCars = useMemoB(() => {
+    const seen = new Map();
+    for (const id of sessionCfg.carIds) {
+      seen.set(id, (seen.get(id) || 0) + 1);
+    }
+    return Array.from(seen.entries()).map(([id, cnt]) => ({
+      car: cars.find(c => c.id === id) || { id, name: id, brand: '', thumb: null },
+      cnt,
+    }));
+  }, [sessionCfg.carIds, cars]);
   const set = (k, v) => setSessionCfg(c => ({...c, [k]: v}));
 
   return (
@@ -702,23 +723,26 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
             <div className="card-header">
               <I3.IconCar size={14} style={{color:'var(--red)'}}/>
               <div className="card-title">Coches permitidos</div>
-              <span className="badge right">{selectedCars.length}</span>
+              <span className="badge right">{sessionCfg.carIds.length} slots</span>
             </div>
             <div style={{maxHeight: 220, overflowY: 'auto'}}>
               {selectedCars.length === 0 ? (
                 <div className="empty" style={{padding: '28px 20px'}}>
                   Sin coches seleccionados. Ve a <strong>Coches</strong> para elegirlos.
                 </div>
-              ) : selectedCars.map(c => (
+              ) : selectedCars.map(({car: c, cnt}) => (
                 <div key={c.id} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)'}}>
                   <div style={{width: 36, height: 22, borderRadius: 3, overflow:'hidden', background: 'var(--bg-3)', flexShrink: 0}}>
-                    <img src={c.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}}
-                      onError={e => { e.target.style.display='none'; }}/>
+                    {c.thumb && <img src={c.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}}
+                      onError={e => { e.target.style.display='none'; }}/>}
                   </div>
                   <div style={{flex: 1, minWidth: 0}}>
                     <div style={{fontSize: 12.5, fontWeight: 500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{c.name}</div>
                     <div className="muted" style={{fontSize: 11}}>{c.brand}</div>
                   </div>
+                  {cnt > 1 && (
+                    <span className="badge" style={{fontSize:10, fontWeight:600, background:'color-mix(in srgb, var(--red) 12%, transparent)', color:'var(--red)', border:'1px solid var(--red)'}}>×{cnt}</span>
+                  )}
                   <button className="icon-btn" style={{width: 24, height: 24}}
                     onClick={() => setSessionCfg(s => ({...s, carIds: s.carIds.filter(x => x !== c.id)}))}>
                     <I3.IconX size={12}/>

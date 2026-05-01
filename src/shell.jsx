@@ -129,15 +129,17 @@ function Topbar({ pageTitle, theme, setTheme, server, onServerAction, user }) {
 
   return (
     <div className="topbar">
-      <div className="topbar-title">{pageTitle}</div>
-      <div className="server-pill">
-        <span className={`dot ${dotClass}`}></span>
-        <span>{statusLabel}</span>
-        {server.status === 'running' && (
-          <span className="muted" style={{borderLeft: '1px solid var(--border)', paddingLeft: 8, marginLeft: 2}}>
-            {server.players}/{server.slots} · {server.uptime}
-          </span>
-        )}
+      <div style={{display:'flex', alignItems:'center', gap: 10}}>
+        <div className="topbar-title">Servidor</div>
+        <div className="server-pill">
+          <span className={`dot ${dotClass}`}></span>
+          <span>{statusLabel}</span>
+          {server.status === 'running' && (
+            <span className="muted" style={{borderLeft: '1px solid var(--border)', paddingLeft: 8, marginLeft: 2}}>
+              {server.players}/{server.slots} · {server.uptime}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="topbar-spacer"></div>

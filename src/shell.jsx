@@ -50,11 +50,13 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
 
     { id: 'config', label: 'Configuración', icon: I.IconSettings, group: 'admin', adminOnly: true },
     { id: 'users', label: 'Usuarios', icon: I.IconUsers, group: 'admin', adminOnly: true },
+    { id: 'profile', label: 'Mi cuenta', icon: I.IconKey, group: 'account' },
   ];
   const groups = {
     general: 'Operación',
     content: 'Contenido',
     admin: 'Administración',
+    account: 'Cuenta',
   };
   const grouped = Object.keys(groups).map(g => ({
     title: groups[g],

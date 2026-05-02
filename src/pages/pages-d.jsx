@@ -53,6 +53,18 @@ function PageTimes({ cars, tracks, lapTimes }) {
           <button className={view === 'records' ? 'active' : ''} onClick={()=>setView('records')}>Récords</button>
           <button className={view === 'compare' ? 'active' : ''} onClick={()=>setView('compare')}>Comparar pilotos</button>
         </div>
+        <button className="btn btn-sm right" onClick={() => {
+          const header = 'Piloto,Tramo,Coche,Tiempo,S1,S2,S3,Valida,Fecha';
+          const rows = records.map(r =>
+            [r.player, trackName(r.track), carName(r.car), fmtMs(r.ms), fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? 'Sí' : 'No', r.date].join(',')
+          );
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([[header, ...rows].join('\n')], { type: 'text/csv' }));
+          a.download = `tiempos-${new Date().toISOString().slice(0,10)}.csv`;
+          a.click();
+        }}>
+          <ITi.IconDownload size={11}/> CSV
+        </button>
         <div className="row" style={{gap: 6}}>
           <select className="select" value={trackId} onChange={e=>setTrackId(e.target.value)} style={{width: 220}}>
             <option value="all">Todos los tramos</option>
@@ -97,7 +109,7 @@ function PageTimes({ cars, tracks, lapTimes }) {
                 </tr>
               </thead>
               <tbody>
-                {records.slice(0, 50).map((r, i) => {
+                {records.slice(0, 200).map((r, i) => {
                   const trackBest = records.find(x => x.track === r.track);
                   const delta = r.ms - trackBest.ms;
                   return (

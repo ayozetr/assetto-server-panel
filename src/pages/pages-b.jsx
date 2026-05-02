@@ -640,6 +640,7 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
 
 // ── PageSession ───────────────────────────────────────────────────────────────
 function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply }) {
+  const [confirmApply, setConfirmApply] = useStateB(false);
   const track        = tracks.find(t => t.id === sessionCfg.trackId);
   // Build unique car list with counts (preserves order of first appearance)
   const selectedCars = useMemoB(() => {
@@ -808,12 +809,35 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
           </div>
 
           {isAdmin && (
-            <button className="btn btn-primary" style={{padding: '10px', justifyContent:'center'}} onClick={onApply}>
+            <button className="btn btn-primary" style={{padding: '10px', justifyContent:'center'}} onClick={()=>setConfirmApply(true)}>
               <I3.IconCheck size={14}/> Aplicar configuración y reiniciar sesión
             </button>
           )}
         </div>
       </div>
+
+      {confirmApply && (
+        <div className="modal-backdrop" onClick={()=>setConfirmApply(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <I3.IconFlag size={15} style={{color:'var(--red)'}}/>
+              <div className="modal-title">Aplicar sesión</div>
+            </div>
+            <div className="modal-body">
+              <p style={{margin:0, fontSize:13, color:'var(--text-muted)'}}>
+                Se escribirá la nueva configuración en <code>server_cfg.ini</code>.
+                Los cambios solo surten efecto después de <strong>reiniciar el servidor</strong>.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={()=>setConfirmApply(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={()=>{ onApply(); setConfirmApply(false); }}>
+                <I3.IconCheck size={13}/> Confirmar y aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

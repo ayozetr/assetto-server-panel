@@ -40,7 +40,7 @@ function App() {
   const [players,     setPlayers]     = uS([]);
   const [pastPlayers, setPastPlayers] = uS([]);
   const [lapTimes,    setLapTimes]    = uS([]);
-  const [users,       setUsers]       = uS(window.AppData.USERS_INITIAL);
+  const [users,       setUsers]       = uS([]);
 
   const [sessionCfg, setSessionCfg] = uS({
     trackId: '',
@@ -116,6 +116,11 @@ function App() {
     fetch('/api/players/history')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setPastPlayers(d); })
+      .catch(() => {});
+
+    fetch('/api/panel/users')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setUsers(d); })
       .catch(() => {});
   }, []);
 
@@ -241,7 +246,7 @@ function AppInner(props) {
       .then(d => toast.push(d.error ? `Error: ${d.error}` : 'Sesión escrita en server_cfg.ini — reinicia para aplicar', d.error ? 'error' : 'success'))
       .catch(e => toast.push(`Error: ${e.message}`, 'error'));
   };
-  const handleSaveConfig = () => {
+  const handleSaveConfig = () =>
     fetch('/api/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -249,8 +254,7 @@ function AppInner(props) {
     })
       .then(r => r.json())
       .then(() => toast.push('Configuración guardada', 'success'))
-      .catch(() => toast.push('Error al guardar configuración', 'error'));
-  };
+      .catch(() => { toast.push('Error al guardar configuración', 'error'); throw new Error('save failed'); });
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
@@ -263,6 +267,7 @@ function AppInner(props) {
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
   else if (page === 'profile')   content = <PageProfile user={user}/>;
+  else content = <div className="card" style={{margin: '32px 0'}}><div className="empty">Página no encontrada.</div></div>;
 
   return (
     <div className="app">

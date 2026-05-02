@@ -653,6 +653,7 @@ function apiConfig(res) {
       tickrate:    parseInt(s['CLIENT_SEND_INTERVAL_HZ']) || 18,
       maxClients:  parseInt(s['MAX_CLIENTS'])    || 0,
       publicLobby: s['REGISTER_TO_LOBBY'] === '1',
+      whitelist:   s['WELCOME_WHITELIST_ENABLED'] === '1',
       fuelRate:    parseInt(s['FUEL_RATE'])      || 100,
       damage:      parseInt(s['DAMAGE_MULTIPLIER']) || 100,
       tyreWear:    parseInt(s['TYRE_WEAR_RATE']) || 100,
@@ -693,6 +694,8 @@ async function apiConfigUpdate(req, res) {
     if (body.abs         !== undefined) { const v = clampInt(body.abs,0,2);         if (v !== null) s['ABS_ALLOWED']    = String(v); }
     if (body.tc          !== undefined) { const v = clampInt(body.tc,0,2);          if (v !== null) s['TC_ALLOWED']     = String(v); }
     if (body.autoclutch  !== undefined) s['AUTOCLUTCH_ALLOWED']      = body.autoclutch ? '1' : '0';
+    if (body.stability   !== undefined) s['STABILITY_ALLOWED']       = body.stability  ? '1' : '0';
+    if (body.whitelist   !== undefined) s['WELCOME_WHITELIST_ENABLED']= body.whitelist  ? '1' : '0';
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, serializeINI(ini), 'utf8');
@@ -1073,9 +1076,27 @@ function apiServerReload(req, res) {
   json(res, 200, { ok: true });
 }
 
+// ── Login rate limiting ───────────────────────────────────────────────────────
+const _loginAttempts = new Map(); // ip → { count, resetAt }
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const e   = _loginAttempts.get(ip);
+  if (e && now < e.resetAt) {
+    if (e.count >= 5) return false;
+    e.count++;
+  } else {
+    _loginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+  }
+  return true;
+}
+
 // ── Auth API ─────────────────────────────────────────────────────────────────
 async function apiAuthLogin(req, res) {
   try {
+    const ip   = req.socket?.remoteAddress || '';
+    if (!checkLoginRateLimit(ip))
+      return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos.' });
+
     const body = await readBody(req);
     const { username, password } = body;
     if (!username || !password) return json(res, 400, { error: 'Usuario y contraseña requeridos' });
@@ -1091,6 +1112,7 @@ async function apiAuthLogin(req, res) {
     const hash = hashPassword(password, user.salt);
     if (hash !== user.password_hash) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
 
+    _loginAttempts.delete(ip); // reset on success
     json(res, 200, { ok: true, user: { name: username, role: user.role } });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1119,6 +1141,57 @@ async function apiAuthChangePassword(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// ── Panel users CRUD ─────────────────────────────────────────────────────────
+function apiPanelUsers(res) {
+  if (!db) return json(res, 200, []);
+  const rows = db.prepare('SELECT username, role, created_at FROM panel_users ORDER BY created_at').all();
+  json(res, 200, rows.map(r => ({
+    id:      r.username,
+    name:    r.username,
+    role:    r.role,
+    created: (r.created_at || '').slice(0, 10),
+  })));
+}
+
+async function apiPanelUserCreate(req, res) {
+  try {
+    const body = await readBody(req);
+    const { username, password, role } = body;
+    if (!username || !password) return json(res, 400, { error: 'usuario y contraseña requeridos' });
+    if (password.length < 8) return json(res, 400, { error: 'contraseña mínimo 8 caracteres' });
+    if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+    const exists = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
+    if (exists) return json(res, 409, { error: 'El usuario ya existe' });
+    const salt = crypto.randomBytes(32).toString('hex');
+    db.prepare('INSERT INTO panel_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?)')
+      .run(username, hashPassword(password, salt), salt, role === 'admin' ? 'admin' : 'user');
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiPanelUserUpdate(req, res, username) {
+  try {
+    const body = await readBody(req);
+    if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+    const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
+    if (!user) return json(res, 404, { error: 'Usuario no encontrado' });
+    if (body.role !== undefined && (body.role === 'admin' || body.role === 'user'))
+      db.prepare('UPDATE panel_users SET role = ? WHERE username = ?').run(body.role, username);
+    if (body.password && body.password.length >= 8) {
+      const s = crypto.randomBytes(32).toString('hex');
+      db.prepare('UPDATE panel_users SET password_hash = ?, salt = ? WHERE username = ?')
+        .run(hashPassword(body.password, s), s, username);
+    }
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+function apiPanelUserDelete(res, username) {
+  if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+  db.prepare('DELETE FROM panel_users WHERE username = ?').run(username);
+  json(res, 200, { ok: true });
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
   const urlPath = req.url.split('?')[0];
@@ -1134,6 +1207,13 @@ function handler(req, res) {
     // Auth
     if (urlPath === '/api/auth/login'           && req.method === 'POST') return apiAuthLogin(req, res);
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
+
+    // Panel users CRUD
+    if (urlPath === '/api/panel/users' && req.method === 'GET')  return apiPanelUsers(res);
+    if (urlPath === '/api/panel/users' && req.method === 'POST') return apiPanelUserCreate(req, res);
+    const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
+    if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
+    if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(res, decodeURIComponent(panelUserM[1]));
 
     // Server control (auth-protected)
     if (urlPath === '/api/server/start'   && req.method === 'POST') return apiServerStart(req, res);

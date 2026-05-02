@@ -1,12 +1,19 @@
 // Pages: Config, Users, Profile
-const { useState: useStateC } = React;
+const { useState: useStateC, useEffect: useEffectC } = React;
 const I4 = window.AppIcons;
 
 function PageConfig({ config, setConfig, isAdmin, onSave }) {
-  const [dirty, setDirty] = useStateC(false);
+  const toast  = window.AppShell.useToast();
+  const [dirty,  setDirty]  = useStateC(false);
+  const [saving, setSaving] = useStateC(false);
   const set = (k, v) => { setConfig(c => ({...c, [k]: v})); setDirty(true); };
 
-  const save = () => { onSave(); setDirty(false); };
+  const save = async () => {
+    setSaving(true);
+    try { await onSave(); setDirty(false); }
+    catch { toast.push('Error al guardar', 'error'); }
+    finally { setSaving(false); }
+  };
 
   return (
     <>
@@ -62,6 +69,12 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
               <div className="field">
                 <label className="field-label">Tickrate (Hz)</label>
                 <input className="input mono" type="number" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!isAdmin}/>
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="field">
+                <label className="field-label">Máx. clientes</label>
+                <input className="input mono" type="number" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
             </div>
             <div className="row-between">
@@ -148,6 +161,13 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 </div>
                 <div className={`switch ${config.autoclutch ? 'on' : ''}`} onClick={()=>isAdmin && set('autoclutch', !config.autoclutch)}></div>
               </div>
+              <div className="row-between">
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 500}}>Control de estabilidad</div>
+                  <div className="muted" style={{fontSize: 11.5}}>Ayuda a la estabilidad del coche</div>
+                </div>
+                <div className={`switch ${config.stability ? 'on' : ''}`} onClick={()=>isAdmin && set('stability', !config.stability)}></div>
+              </div>
             </div>
           </div>
         </div>
@@ -180,10 +200,12 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
 
       {isAdmin && (
         <div className="row" style={{marginTop: 20, justifyContent: 'flex-end', gap: 8, position:'sticky', bottom: 16, background:'var(--bg-2)', padding:'10px 0'}}>
-          {dirty && <span className="badge badge-amber">Cambios sin guardar</span>}
-          <button className="btn" onClick={()=>setDirty(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save} disabled={!dirty}>
-            <I4.IconCheck size={13}/> Guardar cambios
+          {dirty && !saving && <span className="badge badge-amber">Cambios sin guardar</span>}
+          <button className="btn" onClick={()=>setDirty(false)} disabled={saving}>Cancelar</button>
+          <button className="btn btn-primary" onClick={save} disabled={!dirty || saving}>
+            {saving
+              ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> Guardando…</>
+              : <><I4.IconCheck size={13}/> Guardar cambios</>}
           </button>
         </div>
       )}
@@ -192,15 +214,23 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
 }
 
 function PageUsers({ users, setUsers, isAdmin }) {
-  const [editing, setEditing] = useStateC(null); // null | {id?, ...}
+  const toast      = window.AppShell.useToast();
+  const [editing,    setEditing]    = useStateC(null);
   const [confirmDel, setConfirmDel] = useStateC(null);
+
+  const loadUsers = () => {
+    fetch('/api/panel/users')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setUsers(d); })
+      .catch(() => {});
+  };
+
+  useEffectC(() => { loadUsers(); }, []);
 
   if (!isAdmin) {
     return (
       <>
-        <div className="page-header">
-          <h1 className="page-title">Usuarios</h1>
-        </div>
+        <div className="page-header"><h1 className="page-title">Usuarios</h1></div>
         <div className="card">
           <div className="empty">
             <I4.IconLock size={20} style={{display:'block', margin:'0 auto 10px'}}/>
@@ -211,13 +241,40 @@ function PageUsers({ users, setUsers, isAdmin }) {
     );
   }
 
-  const save = (u) => {
-    if (u.id) {
-      setUsers(us => us.map(x => x.id === u.id ? { ...x, ...u } : x));
-    } else {
-      setUsers(us => [...us, { ...u, id: Math.max(...us.map(x => x.id), 0) + 1, created: new Date().toISOString().slice(0,10), active: true }]);
-    }
-    setEditing(null);
+  const saveUser = async (form) => {
+    try {
+      let r;
+      if (form.id) {
+        r = await fetch(`/api/panel/users/${encodeURIComponent(form.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: form.role, password: form.password || undefined }),
+        });
+      } else {
+        if (!form.password || form.password.length < 8) {
+          toast.push('La contraseña debe tener al menos 8 caracteres', 'error'); return;
+        }
+        r = await fetch('/api/panel/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: form.name, password: form.password, role: form.role }),
+        });
+      }
+      const d = await r.json();
+      if (d.error) { toast.push(d.error, 'error'); return; }
+      toast.push(form.id ? 'Usuario actualizado' : 'Usuario creado', 'success');
+      setEditing(null);
+      loadUsers();
+    } catch { toast.push('Error de conexión', 'error'); }
+  };
+
+  const deleteUser = async (u) => {
+    try {
+      await fetch(`/api/panel/users/${encodeURIComponent(u.id)}`, { method: 'DELETE' });
+      toast.push(`Usuario "${u.name}" eliminado`, 'success');
+      setConfirmDel(null);
+      loadUsers();
+    } catch { toast.push('Error al eliminar', 'error'); }
   };
 
   return (
@@ -227,7 +284,7 @@ function PageUsers({ users, setUsers, isAdmin }) {
           <h1 className="page-title">Usuarios</h1>
           <p className="page-sub">{users.length} cuentas con acceso al panel.</p>
         </div>
-        <button className="btn btn-primary" onClick={()=>setEditing({ name: '', email: '', role: 'user', password: '' })}>
+        <button className="btn btn-primary" onClick={()=>setEditing({ name: '', role: 'user', password: '' })}>
           <I4.IconPlus size={13}/> Nuevo usuario
         </button>
       </div>
@@ -237,11 +294,9 @@ function PageUsers({ users, setUsers, isAdmin }) {
           <thead>
             <tr>
               <th>Usuario</th>
-              <th>Email</th>
               <th>Rol</th>
               <th>Creado</th>
-              <th>Estado</th>
-              <th style={{width: 120}}></th>
+              <th style={{width: 90}}></th>
             </tr>
           </thead>
           <tbody>
@@ -255,18 +310,12 @@ function PageUsers({ users, setUsers, isAdmin }) {
                     <div className="player-name">{u.name}</div>
                   </div>
                 </td>
-                <td className="muted">{u.email}</td>
                 <td>
                   {u.role === 'admin'
                     ? <span className="badge badge-red"><I4.IconShield size={10}/> Admin</span>
                     : <span className="badge">Usuario</span>}
                 </td>
                 <td className="muted mono" style={{fontSize: 12}}>{u.created}</td>
-                <td>
-                  {u.active
-                    ? <span className="badge badge-green">Activo</span>
-                    : <span className="badge">Inactivo</span>}
-                </td>
                 <td>
                   <div className="row" style={{gap: 4}}>
                     <button className="icon-btn" onClick={()=>setEditing(u)} title="Editar"><I4.IconEdit size={14}/></button>
@@ -279,13 +328,13 @@ function PageUsers({ users, setUsers, isAdmin }) {
         </table>
       </div>
 
-      {editing && <UserModal user={editing} onClose={()=>setEditing(null)} onSave={save}/>}
+      {editing && <UserModal user={editing} onClose={()=>setEditing(null)} onSave={saveUser}/>}
       {confirmDel && (
         <ConfirmModal
           title={`Eliminar usuario "${confirmDel.name}"`}
           message="Esta acción no se puede deshacer. El usuario perderá acceso inmediatamente."
           onCancel={()=>setConfirmDel(null)}
-          onConfirm={()=>{ setUsers(us => us.filter(x => x.id !== confirmDel.id)); setConfirmDel(null); }}
+          onConfirm={()=>deleteUser(confirmDel)}
         />
       )}
     </>
@@ -293,9 +342,17 @@ function PageUsers({ users, setUsers, isAdmin }) {
 }
 
 function UserModal({ user, onClose, onSave }) {
-  const [form, setForm] = useStateC({ ...user, password: '' });
+  const [form,    setForm]    = useStateC({ ...user, password: '' });
+  const [pwError, setPwError] = useStateC('');
   const set = (k, v) => setForm(f => ({...f, [k]: v}));
-  const valid = form.name && form.email;
+  const valid = form.name.trim().length > 0;
+  const submit = () => {
+    if (!user.id && form.password.length > 0 && form.password.length < 8) {
+      setPwError('Mínimo 8 caracteres'); return;
+    }
+    setPwError('');
+    onSave(form);
+  };
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -306,11 +363,8 @@ function UserModal({ user, onClose, onSave }) {
         <div className="modal-body">
           <div className="field">
             <label className="field-label">Nombre de usuario</label>
-            <input className="input" value={form.name} onChange={e=>set('name', e.target.value)}/>
-          </div>
-          <div className="field">
-            <label className="field-label">Email</label>
-            <input className="input" type="email" value={form.email} onChange={e=>set('email', e.target.value)}/>
+            <input className="input" value={form.name} onChange={e=>set('name', e.target.value)} disabled={!!user.id}/>
+            {user.id && <span className="field-hint">El nombre de usuario no se puede cambiar</span>}
           </div>
           <div className="field">
             <label className="field-label">Rol</label>
@@ -320,19 +374,15 @@ function UserModal({ user, onClose, onSave }) {
             </div>
           </div>
           <div className="field">
-            <label className="field-label">{user.id ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
-            <input className="input" type="password" value={form.password} onChange={e=>set('password', e.target.value)} placeholder={user.id ? 'Dejar vacío para no cambiar' : '••••••••'}/>
+            <label className="field-label">{user.id ? 'Nueva contraseña (opcional)' : 'Contraseña *'}</label>
+            <input className="input" type="password" value={form.password} onChange={e=>set('password', e.target.value)}
+              placeholder={user.id ? 'Dejar vacío para no cambiar' : '••••••••  (mín. 8 caracteres)'}/>
+            {pwError && <span className="field-hint" style={{color:'var(--red)'}}>{pwError}</span>}
           </div>
-          {user.id && (
-            <div className="row-between" style={{paddingTop: 4}}>
-              <span style={{fontSize: 13}}>Cuenta activa</span>
-              <div className={`switch ${form.active ? 'on' : ''}`} onClick={()=>set('active', !form.active)}></div>
-            </div>
-          )}
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={()=>onSave(form)}>
+          <button className="btn btn-primary" disabled={!valid} onClick={submit}>
             <I4.IconCheck size={13}/> Guardar
           </button>
         </div>
@@ -378,24 +428,28 @@ function PageProfile({ user }) {
   const [genSpecial, setGenSpecial] = useStateC(true);
   const [generated,  setGenerated]  = useStateC('');
 
-  const generatePassword = () => {
+  const buildPassword = (length, special) => {
     const lower   = 'abcdefghijklmnopqrstuvwxyz';
     const upper   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const digits  = '0123456789';
-    const special = '!@#$%^&*()_+-=[]{}|;:,.?';
-    const pool = lower + upper + digits + (genSpecial ? special : '');
+    const specials = '!@#$%^&*()_+-=[]{}|;:,.?';
+    const pool = lower + upper + digits + (special ? specials : '');
     let pwd = lower[Math.floor(Math.random() * lower.length)]
             + upper[Math.floor(Math.random() * upper.length)]
             + digits[Math.floor(Math.random() * digits.length)];
-    if (genSpecial) pwd += special[Math.floor(Math.random() * special.length)];
-    while (pwd.length < genLength) pwd += pool[Math.floor(Math.random() * pool.length)];
+    if (special) pwd += specials[Math.floor(Math.random() * specials.length)];
+    while (pwd.length < length) pwd += pool[Math.floor(Math.random() * pool.length)];
     const arr = pwd.split('');
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    setGenerated(arr.join(''));
+    return arr.join('');
   };
+
+  const generatePassword = () => setGenerated(buildPassword(genLength, genSpecial));
+
+  useEffectC(() => { setGenerated(buildPassword(genLength, genSpecial)); }, [genLength, genSpecial]);
 
   const copyPassword = () => {
     if (!generated) return;
@@ -517,26 +571,27 @@ function PageProfile({ user }) {
               <div className={`switch ${genSpecial ? 'on' : ''}`} onClick={()=>setGenSpecial(v=>!v)}></div>
             </div>
 
-            <button className="btn btn-primary" type="button" onClick={generatePassword}>
-              <I4.IconRefresh size={13}/> Generar contraseña
-            </button>
-
-            {generated && (
-              <div className="field">
-                <label className="field-label">Contraseña generada</label>
-                <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                  <div className="input mono" style={{flex:1,padding:'6px 10px',background:'var(--bg-3)',wordBreak:'break-all',fontSize:12,userSelect:'all'}}>
-                    {generated}
+            <div className="field">
+              <label className="field-label">Contraseña generada</label>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <div style={{flex:1,position:'relative'}}>
+                  <div className="input mono" style={{padding:'7px 36px 7px 10px',background:'var(--bg-3)',wordBreak:'break-all',fontSize:12,userSelect:'all',minHeight:34,display:'flex',alignItems:'center'}}>
+                    {generated || '…'}
                   </div>
-                  <button type="button" className="icon-btn" onClick={copyPassword} title="Copiar">
-                    <I4.IconCopy size={14}/>
-                  </button>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={useGeneratedPassword}>
-                    Usar
+                  <button type="button" onClick={generatePassword} title="Regenerar"
+                    style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
+                  >
+                    <I4.IconRefresh size={14}/>
                   </button>
                 </div>
+                <button type="button" className="icon-btn" onClick={copyPassword} title="Copiar al portapapeles">
+                  <I4.IconCopy size={14}/>
+                </button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={useGeneratedPassword}>
+                  Usar
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

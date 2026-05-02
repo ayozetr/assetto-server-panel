@@ -147,6 +147,7 @@ const fmtMs = window.AppUtils.fmtMs;
 // Players page
 function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, onKick, onBan }) {
   const [players, setPlayers] = useState(initialPlayers);
+  const [historySearch, setHistorySearch] = useState('');
   useEffect(() => {
     if (server.status !== 'running') return;
     const load = () => {
@@ -163,13 +164,21 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
   }, [server.status]);
 
   const I2P = window.AppIcons;
+  const filteredPast = historySearch
+    ? pastPlayers.filter(p => p.name.toLowerCase().includes(historySearch.toLowerCase()))
+    : pastPlayers;
   const renderPast = (
     <div style={{marginTop: 20}}>
       <div className="card">
         <div className="card-header">
           <I2P.IconHistory size={14} style={{color:'var(--red)'}}/>
           <div className="card-title">Jugadores anteriores</div>
-          <span className="badge right">{pastPlayers.length}</span>
+          <span className="badge right">{filteredPast.length}</span>
+          <div className="search right" style={{maxWidth:200}}>
+            <I2P.IconSearch size={12} className="search-icon"/>
+            <input className="input" placeholder="Buscar jugador…" value={historySearch}
+              onChange={e=>setHistorySearch(e.target.value)} style={{height:28,fontSize:12}}/>
+          </div>
         </div>
         <table className="table">
           <thead>
@@ -185,8 +194,8 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
             </tr>
           </thead>
           <tbody>
-            {pastPlayers.map(p => {
-              const flagUrl = window.AppUtils.nationFlag(p.nation);
+            {filteredPast.map(p => {
+              const flagUrl = (window.AppUtils || {}).nationFlag?.(p.nation);
               return (
               <tr key={p.id}>
                 <td>
@@ -274,7 +283,10 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
               <tr key={p.id}>
                 <td><div className={`player-pos ${i === 0 ? 'p1' : ''}`}>{i + 1}</div></td>
                 <td>
-                  <div className="player-name">{p.name}</div>
+                  <div className="row" style={{gap:5, alignItems:'center'}}>
+                    <span className="player-name">{p.name}</span>
+                    {p.nation && (() => { const f = (window.AppUtils || {}).nationFlag?.(p.nation); return f ? <img src={f} alt={p.nation} title={p.nation} style={{height:9,width:'auto',borderRadius:1,opacity:0.75}} onError={e=>{e.target.style.display='none'}}/> : null; })()}
+                  </div>
                   <div className="row" style={{gap: 4, alignItems:'center', marginTop:2}}>
                     <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
                     {p.steam && (

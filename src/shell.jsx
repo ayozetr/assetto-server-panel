@@ -66,7 +66,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">AC</div>
+        <img src="src/assets/icon.png" className="brand-mark" alt="logo"/>
         <div>
           <div className="brand-name">Assetto Server Panel</div>
           <div className="brand-sub" style={{display:'flex', alignItems:'center', gap: 4}}>
@@ -231,7 +231,7 @@ function Login({ onLogin }) {
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">
-          <div className="login-mark">AC</div>
+          <img src="src/assets/icon.png" className="login-mark" alt="logo"/>
           <div>
             <div className="login-title">Assetto Server Panel</div>
             <div className="login-sub">Inicia sesión para continuar</div>

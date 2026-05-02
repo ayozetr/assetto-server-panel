@@ -2,6 +2,81 @@
 const { useState: useStateC, useEffect: useEffectC } = React;
 const I4 = window.AppIcons;
 
+function WhitelistEditor({ isAdmin }) {
+  const toast = window.AppShell.useToast();
+  const [ids,     setIds]     = useStateC([]);
+  const [newId,   setNewId]   = useStateC('');
+  const [saving,  setSaving]  = useStateC(false);
+  const [loaded,  setLoaded]  = useStateC(false);
+
+  useEffectC(() => {
+    fetch('/api/whitelist').then(r => r.json())
+      .then(d => { setIds(d.ids || []); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const addId = () => {
+    const v = newId.trim();
+    if (!/^\d{17}$/.test(v)) { toast.push('Steam ID inválido (debe ser 17 dígitos)', 'warn'); return; }
+    if (ids.includes(v)) { toast.push('Steam ID ya en la lista', 'info'); return; }
+    setIds(prev => [...prev, v]);
+    setNewId('');
+  };
+
+  const saveList = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch('/api/whitelist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const d = await r.json();
+      if (d.ok) toast.push(`Whitelist guardada (${d.saved} IDs)`, 'success');
+      else toast.push(d.error || 'Error al guardar', 'error');
+    } catch { toast.push('Error de red', 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{marginTop: 14}}>
+      <div style={{fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 8}}>
+        Steam IDs permitidos ({ids.length})
+      </div>
+      {!loaded ? (
+        <div style={{fontSize: 12, color: 'var(--text-faint)'}}>Cargando…</div>
+      ) : ids.length === 0 ? (
+        <div style={{fontSize: 12, color: 'var(--text-faint)', marginBottom: 8}}>Lista vacía — todos rechazados si whitelist activa.</div>
+      ) : (
+        <div style={{maxHeight: 140, overflowY: 'auto', marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 4}}>
+          {ids.map((id, i) => (
+            <div key={id} style={{display:'flex', alignItems:'center', gap: 8, fontSize: 12}}>
+              <span className="mono" style={{flex:1, color:'var(--text-muted)'}}>{id}</span>
+              {isAdmin && (
+                <button className="icon-btn" style={{width:20,height:20}} onClick={() => setIds(prev => prev.filter((_, j) => j !== i))}>
+                  <I4.IconX size={11}/>
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {isAdmin && (
+        <div className="row" style={{gap: 6}}>
+          <input className="input mono" placeholder="76561198000000000" value={newId}
+            onChange={e=>setNewId(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&addId()}
+            style={{flex:1, fontSize:12}}/>
+          <button className="btn btn-sm" onClick={addId}><I4.IconPlus size={12}/> Añadir</button>
+          <button className="btn btn-sm btn-primary" onClick={saveList} disabled={saving}>
+            {saving ? 'Guardando…' : <><I4.IconCheck size={12}/> Guardar lista</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PageConfig({ config, setConfig, isAdmin, onSave }) {
   const toast  = window.AppShell.useToast();
   const [dirty,  setDirty]  = useStateC(false);
@@ -108,6 +183,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
               </div>
               <div className={`switch ${config.whitelist ? 'on' : ''}`} onClick={()=>isAdmin && set('whitelist', !config.whitelist)}></div>
             </div>
+            {config.whitelist && <WhitelistEditor isAdmin={isAdmin}/>}
           </div>
         </div>
 
@@ -347,9 +423,8 @@ function UserModal({ user, onClose, onSave }) {
   const set = (k, v) => setForm(f => ({...f, [k]: v}));
   const valid = form.name.trim().length > 0;
   const submit = () => {
-    if (!user.id && form.password.length > 0 && form.password.length < 8) {
-      setPwError('Mínimo 8 caracteres'); return;
-    }
+    if (!user.id && !form.password) { setPwError('La contraseña es obligatoria'); return; }
+    if (form.password && form.password.length < 8) { setPwError('Mínimo 8 caracteres'); return; }
     setPwError('');
     onSave(form);
   };

@@ -7,6 +7,17 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const track = tracks.find(t => t.id === sessionCfg.trackId) || tracks[0];
   const carsCount = sessionCfg.carIds.length;
 
+  const [activity, setActivity] = useState([]);
+  useEffect(() => {
+    fetch('/api/logs?n=80')
+      .then(r => r.json())
+      .then(d => {
+        const notable = (d.lines || []).filter(l => l.lvl !== 'info' || /connected|joined|lap|session|server/i.test(l.msg));
+        setActivity(notable.slice(-8).reverse().slice(0, 5));
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       <div className="page-header">
@@ -121,21 +132,22 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
             <I2.IconClock size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">Actividad reciente</div>
           </div>
-          <div style={{padding: '4px 0'}}>
-            {[
-              { t: 'hace 2m', txt: 'Mattia.B marcó vuelta rápida — 1:55.342', kind: 'ok' },
-              { t: 'hace 5m', txt: 'Sesión Practice iniciada en Spa-Francorchamps', kind: 'info' },
-              { t: 'hace 12m', txt: 'Hiro_88 entró al servidor', kind: 'info' },
-              { t: 'hace 18m', txt: 'Configuración recargada por admin', kind: 'info' },
-              { t: 'hace 24m', txt: 'Servidor arrancado correctamente', kind: 'ok' },
-            ].map((it, i) => (
-              <div key={i} style={{display:'flex', gap: 12, padding: '9px 18px', borderBottom: i < 4 ? '1px solid var(--border)' : 'none', alignItems:'center'}}>
-                <span style={{width: 6, height: 6, borderRadius: 50, background: it.kind === 'ok' ? '#16a34a' : 'var(--text-faint)'}}></span>
-                <span style={{fontSize: 13}}>{it.txt}</span>
-                <span className="right muted" style={{fontSize: 11.5}}>{it.t}</span>
-              </div>
-            ))}
-          </div>
+          {activity.length === 0 ? (
+            <div className="empty" style={{padding: '28px 20px'}}>Sin actividad registrada.</div>
+          ) : (
+            <div style={{padding: '4px 0'}}>
+              {activity.map((it, i) => {
+                const dotColor = it.lvl === 'ok' ? '#16a34a' : it.lvl === 'error' ? 'var(--red)' : it.lvl === 'warn' ? '#f59e0b' : 'var(--text-faint)';
+                return (
+                  <div key={it.id} style={{display:'flex', gap: 12, padding: '9px 18px', borderBottom: i < activity.length - 1 ? '1px solid var(--border)' : 'none', alignItems:'center', overflow:'hidden'}}>
+                    <span style={{width: 6, height: 6, borderRadius: 50, background: dotColor, flexShrink: 0}}></span>
+                    <span style={{fontSize: 13, flex: 1, minWidth: 0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={it.msg}>{it.msg}</span>
+                    {it.time && <span className="muted" style={{fontSize: 11.5, flexShrink: 0}}>{it.time}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </>

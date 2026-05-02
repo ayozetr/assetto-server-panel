@@ -199,12 +199,14 @@ function Login({ onLogin }) {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const userRef = useRef(null);
+  const passRef = useRef(null);
 
   const submit = async (e) => {
     e?.preventDefault();
     setError('');
-    if (!user) { setError('Introduce un usuario'); return; }
-    if (!pass) { setError('Introduce una contraseña'); return; }
+    if (!user) { setError('Introduce un usuario'); setTimeout(() => userRef.current?.focus(), 0); return; }
+    if (!pass) { setError('Introduce una contraseña'); setTimeout(() => passRef.current?.focus(), 0); return; }
     setLoading(true);
     try {
       const r = await fetch('/api/auth/login', {
@@ -240,6 +242,7 @@ function Login({ onLogin }) {
           <div className="field">
             <label className="field-label">Usuario</label>
             <input
+              ref={userRef}
               className="input"
               value={user}
               onChange={(e)=>setUser(e.target.value)}
@@ -250,6 +253,7 @@ function Login({ onLogin }) {
             <label className="field-label">Contraseña</label>
             <div style={{position:'relative'}}>
               <input
+                ref={passRef}
                 className="input"
                 type={showPass ? 'text' : 'password'}
                 value={pass}

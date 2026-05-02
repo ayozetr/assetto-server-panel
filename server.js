@@ -336,6 +336,8 @@ function json(res, status, data) {
 }
 
 function readBody(req) {
+  const ct = req.headers['content-type'] || '';
+  if (!ct.includes('application/json')) return Promise.reject(new Error('Content-Type must be application/json'));
   return new Promise((resolve, reject) => {
     let raw = '';
     req.on('data', chunk => { raw += chunk; if (raw.length > 512_000) reject(new Error('Body too large')); });
@@ -645,7 +647,9 @@ function parseLine(raw, id) {
             : /^REQ/.test(raw)               ? 'CFG'
             : /^{/.test(raw.trim())          ? 'CFG'
             : 'SRV';
-  return { id, lvl, tag, msg: raw };
+  const timeMatch = raw.match(/(\d{2}:\d{2}:\d{2})/);
+  const time = timeMatch ? timeMatch[1] : '';
+  return { id, time, lvl, tag, msg: raw };
 }
 
 // ── API handlers ──────────────────────────────────────────────────────────────
@@ -1042,6 +1046,27 @@ async function apiPlayerBan(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// ── Whitelist ─────────────────────────────────────────────────────────────────
+const AC_WHITELIST = process.env.AC_WHITELIST_FILE
+  || path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'whitelist.txt');
+
+function apiWhitelistGet(res) {
+  let raw = '';
+  try { raw = fs.readFileSync(AC_WHITELIST, 'utf8'); } catch {}
+  const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
+  json(res, 200, { ids });
+}
+
+async function apiWhitelistPut(req, res) {
+  try {
+    const body = await readBody(req);
+    if (!Array.isArray(body.ids)) return json(res, 400, { error: 'ids array required' });
+    const clean = body.ids.map(s => String(s).trim()).filter(s => /^\d{17}$/.test(s));
+    await fsp.writeFile(AC_WHITELIST, clean.join('\n') + (clean.length ? '\n' : ''), 'utf8');
+    json(res, 200, { ok: true, saved: clean.length });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // ── Session apply ─────────────────────────────────────────────────────────────
 async function apiSessionApply(req, res) {
   try {
@@ -1263,6 +1288,10 @@ function handler(req, res) {
     // Player control
     if (urlPath === '/api/players/kick'   && req.method === 'POST') return apiPlayerKick(req, res);
     if (urlPath === '/api/players/ban'    && req.method === 'POST') return apiPlayerBan(req, res);
+
+    // Whitelist
+    if (urlPath === '/api/whitelist' && req.method === 'GET')  return apiWhitelistGet(res);
+    if (urlPath === '/api/whitelist' && req.method === 'PUT')  return apiWhitelistPut(req, res);
 
     // Session apply
     if (urlPath === '/api/session/apply'  && req.method === 'POST') return apiSessionApply(req, res);

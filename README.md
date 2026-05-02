@@ -258,17 +258,18 @@ assetto-dashboard/
 
 ---
 
-## Demo Credentials
+## Default Credentials
 
-> Any password is accepted in demo mode.
+Passwords are validated against a SQLite database seeded on first run. All accounts share the same default password; change it from **My account** (key icon in the sidebar footer).
 
-| Username  | Role          |
-|-----------|---------------|
-| `admin`   | Administrator |
-| `mattia`  | Administrator |
-| `jorge_p` | User          |
+| Username  | Default password | Role          |
+|-----------|-----------------|---------------|
+| `admin`   | `Admin1234!`    | Administrator |
+| `mattia`  | `Admin1234!`    | Administrator |
 
 Administrator accounts have access to server control actions (start/stop/restart) and the Configuration and Users pages.
+
+> **Security note**: Change the default password immediately after first login.
 
 ---
 

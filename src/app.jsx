@@ -13,6 +13,7 @@ const PAGES = {
   session:   { title: 'Sesión',    component: 'PageSession' },
   config:    { title: 'Configuración', component: 'PageConfig' },
   users:     { title: 'Usuarios',  component: 'PageUsers' },
+  profile:   { title: 'Mi cuenta', component: 'PageProfile' },
 };
 
 function App() {
@@ -170,7 +171,7 @@ function AppInner(props) {
   const { Sidebar, Topbar, useToast } = window.AppShell;
   const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesA;
   const { PageCars, PageTracks, PageSession }    = window.AppPagesB;
-  const { PageConfig, PageUsers }                = window.AppPagesC;
+  const { PageConfig, PageUsers, PageProfile }   = window.AppPagesC;
   const { PageTimes }                            = window.AppPagesD;
   const toast = useToast();
 
@@ -261,6 +262,7 @@ function AppInner(props) {
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
+  else if (page === 'profile')   content = <PageProfile user={user}/>;
 
   return (
     <div className="app">

@@ -107,6 +107,9 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
           <div className="user-name">{user.name}</div>
           <div className="user-role">{user.role === 'admin' ? 'Administrador' : 'Usuario'}</div>
         </div>
+        <button className="icon-btn" onClick={() => setPage('profile')} title="Mi cuenta">
+          <I.IconKey size={15}/>
+        </button>
         <button className="icon-btn" onClick={onLogout} title="Cerrar sesión">
           <I.IconLogout size={15}/>
         </button>
@@ -191,20 +194,33 @@ function Topbar({ theme, setTheme, server, onServerAction, user }) {
 function Login({ onLogin }) {
   const [user, setUser] = useState('admin');
   const [pass, setPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e?.preventDefault();
     setError('');
     if (!user) { setError('Introduce un usuario'); return; }
     if (!pass) { setError('Introduce una contraseña'); return; }
     setLoading(true);
-    setTimeout(() => {
-      const role = (user === 'admin' || user === 'mattia') ? 'admin' : 'user';
-      onLogin({ name: user, role });
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pass }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        onLogin(d.user);
+      } else {
+        setError(d.error || 'Credenciales incorrectas');
+      }
+    } catch {
+      setError('Error de conexión con el servidor');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -230,13 +246,23 @@ function Login({ onLogin }) {
           </div>
           <div className="field">
             <label className="field-label">Contraseña</label>
-            <input
-              className="input"
-              type="password"
-              value={pass}
-              onChange={(e)=>setPass(e.target.value)}
-              placeholder="••••••••"
-            />
+            <div style={{position:'relative'}}>
+              <input
+                className="input"
+                type={showPass ? 'text' : 'password'}
+                value={pass}
+                onChange={(e)=>setPass(e.target.value)}
+                placeholder="••••••••"
+                style={{paddingRight: 36}}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(v => !v)}
+                style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
+              >
+                {showPass ? <I.IconEyeOff size={15}/> : <I.IconEye size={15}/>}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -247,7 +273,7 @@ function Login({ onLogin }) {
         </button>
 
         <div className="login-hint">
-          Demo · entra con <code>admin</code> (admin) o <code>mattia</code> (admin) · cualquier contraseña
+          Usuarios: <code>admin</code> · <code>mattia</code> · contraseña: <code>Admin1234!</code>
         </div>
       </form>
     </div>

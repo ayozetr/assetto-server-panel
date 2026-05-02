@@ -1,4 +1,4 @@
-// Pages: Config, Users
+// Pages: Config, Users, Profile
 const { useState: useStateC } = React;
 const I4 = window.AppIcons;
 
@@ -362,4 +362,186 @@ function ConfirmModal({ title, message, onCancel, onConfirm }) {
   );
 }
 
-window.AppPagesC = { PageConfig, PageUsers, ConfirmModal };
+// ── Profile / Change password ─────────────────────────────────────────────────
+function PageProfile({ user }) {
+  const toast = window.AppShell.useToast();
+
+  const [currentPw,  setCurrentPw]  = useStateC('');
+  const [newPw,      setNewPw]      = useStateC('');
+  const [confirmPw,  setConfirmPw]  = useStateC('');
+  const [showCurrent,setShowCurrent]= useStateC(false);
+  const [showNew,    setShowNew]    = useStateC(false);
+  const [saving,     setSaving]     = useStateC(false);
+  const [formError,  setFormError]  = useStateC('');
+
+  const [genLength,  setGenLength]  = useStateC(16);
+  const [genSpecial, setGenSpecial] = useStateC(true);
+  const [generated,  setGenerated]  = useStateC('');
+
+  const generatePassword = () => {
+    const lower   = 'abcdefghijklmnopqrstuvwxyz';
+    const upper   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits  = '0123456789';
+    const special = '!@#$%^&*()_+-=[]{}|;:,.?';
+    const pool = lower + upper + digits + (genSpecial ? special : '');
+    let pwd = lower[Math.floor(Math.random() * lower.length)]
+            + upper[Math.floor(Math.random() * upper.length)]
+            + digits[Math.floor(Math.random() * digits.length)];
+    if (genSpecial) pwd += special[Math.floor(Math.random() * special.length)];
+    while (pwd.length < genLength) pwd += pool[Math.floor(Math.random() * pool.length)];
+    const arr = pwd.split('');
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    setGenerated(arr.join(''));
+  };
+
+  const copyPassword = () => {
+    if (!generated) return;
+    navigator.clipboard.writeText(generated).then(
+      () => toast.push('Contraseña copiada', 'success'),
+      () => toast.push('No se pudo copiar', 'warn')
+    );
+  };
+
+  const useGeneratedPassword = () => {
+    if (!generated) return;
+    setNewPw(generated);
+    setConfirmPw(generated);
+    toast.push('Contraseña insertada en los campos', 'info');
+  };
+
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    setFormError('');
+    if (!currentPw || !newPw || !confirmPw) { setFormError('Todos los campos son obligatorios'); return; }
+    if (newPw !== confirmPw) { setFormError('Las contraseñas nuevas no coinciden'); return; }
+    if (newPw.length < 8) { setFormError('La contraseña debe tener al menos 8 caracteres'); return; }
+    if (newPw === currentPw) { setFormError('La nueva contraseña debe ser diferente a la actual'); return; }
+    setSaving(true);
+    try {
+      const r = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user.name, currentPassword: currentPw, newPassword: newPw }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.push('Contraseña actualizada correctamente', 'success');
+        setCurrentPw(''); setNewPw(''); setConfirmPw('');
+      } else {
+        setFormError(d.error || 'Error al cambiar la contraseña');
+      }
+    } catch {
+      setFormError('Error de conexión');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const eyeBtn = (show, toggle) => (
+    <button type="button" onClick={toggle}
+      style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
+    >
+      {show ? <I4.IconEyeOff size={14}/> : <I4.IconEye size={14}/>}
+    </button>
+  );
+
+  return (
+    <>
+      <div className="page-header">
+        <h1 className="page-title">Mi cuenta</h1>
+        <p className="page-sub">Gestiona tu contraseña de acceso al panel.</p>
+      </div>
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-header">
+            <I4.IconKey size={14} style={{color:'var(--red)'}}/>
+            <div className="card-title">Cambiar contraseña</div>
+          </div>
+          <form className="card-body col" style={{gap:14}} onSubmit={handleSubmit}>
+            <div className="field">
+              <label className="field-label">Contraseña actual</label>
+              <div style={{position:'relative'}}>
+                <input className="input" type={showCurrent ? 'text' : 'password'}
+                  value={currentPw} onChange={e=>setCurrentPw(e.target.value)}
+                  placeholder="••••••••" style={{paddingRight:36}}/>
+                {eyeBtn(showCurrent, () => setShowCurrent(v=>!v))}
+              </div>
+            </div>
+            <div className="field">
+              <label className="field-label">Contraseña nueva</label>
+              <div style={{position:'relative'}}>
+                <input className="input" type={showNew ? 'text' : 'password'}
+                  value={newPw} onChange={e=>setNewPw(e.target.value)}
+                  placeholder="••••••••" style={{paddingRight:36}}/>
+                {eyeBtn(showNew, () => setShowNew(v=>!v))}
+              </div>
+            </div>
+            <div className="field">
+              <label className="field-label">Confirmar contraseña nueva</label>
+              <input className="input" type="password"
+                value={confirmPw} onChange={e=>setConfirmPw(e.target.value)}
+                placeholder="••••••••"/>
+            </div>
+            {formError && <div style={{fontSize:12,color:'var(--red)'}}>{formError}</div>}
+            <button type="submit" className="btn btn-primary" disabled={saving} style={{alignSelf:'flex-start'}}>
+              <I4.IconCheck size={13}/> {saving ? 'Guardando…' : 'Cambiar contraseña'}
+            </button>
+          </form>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <I4.IconRefresh size={14} style={{color:'var(--red)'}}/>
+            <div className="card-title">Generador de contraseña segura</div>
+          </div>
+          <div className="card-body col" style={{gap:14}}>
+            <div className="field">
+              <label className="field-label">Longitud: <strong>{genLength}</strong> caracteres</label>
+              <input type="range" min="8" max="24" value={genLength}
+                onChange={e=>setGenLength(Number(e.target.value))}
+                style={{width:'100%',accentColor:'var(--red)',cursor:'pointer'}}/>
+              <div className="row-between" style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                <span>8</span><span>16</span><span>24</span>
+              </div>
+            </div>
+
+            <div className="row-between">
+              <div>
+                <div style={{fontSize:13,fontWeight:500}}>Caracteres especiales</div>
+                <div className="muted" style={{fontSize:11.5}}>!@#$%^&amp;*()_+-=[]{}|</div>
+              </div>
+              <div className={`switch ${genSpecial ? 'on' : ''}`} onClick={()=>setGenSpecial(v=>!v)}></div>
+            </div>
+
+            <button className="btn btn-primary" type="button" onClick={generatePassword}>
+              <I4.IconRefresh size={13}/> Generar contraseña
+            </button>
+
+            {generated && (
+              <div className="field">
+                <label className="field-label">Contraseña generada</label>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <div className="input mono" style={{flex:1,padding:'6px 10px',background:'var(--bg-3)',wordBreak:'break-all',fontSize:12,userSelect:'all'}}>
+                    {generated}
+                  </div>
+                  <button type="button" className="icon-btn" onClick={copyPassword} title="Copiar">
+                    <I4.IconCopy size={14}/>
+                  </button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={useGeneratedPassword}>
+                    Usar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+window.AppPagesC = { PageConfig, PageUsers, PageProfile, ConfirmModal };

@@ -5,6 +5,7 @@ const fs            = require('fs');
 const fsp           = fs.promises;
 const path          = require('path');
 const os            = require('os');
+const crypto        = require('crypto');
 const { spawn }     = require('child_process');
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -91,10 +92,40 @@ try {
     CREATE INDEX IF NOT EXISTS idx_laps_track  ON laps(track);
     CREATE INDEX IF NOT EXISTS idx_laps_driver ON laps(driver_guid);
     CREATE INDEX IF NOT EXISTS idx_laps_valid  ON laps(valid);
+
+    CREATE TABLE IF NOT EXISTS panel_users (
+      username      TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      salt          TEXT NOT NULL,
+      role          TEXT DEFAULT 'user',
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
   `);
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
+}
+
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+
+function seedDefaultUsers() {
+  if (!db) return;
+  try {
+    const DEFAULT_PASS = 'Admin1234!';
+    for (const [username, role] of [['admin', 'admin'], ['mattia', 'admin']]) {
+      const existing = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
+      if (!existing) {
+        const salt = crypto.randomBytes(32).toString('hex');
+        db.prepare('INSERT INTO panel_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?)')
+          .run(username, hashPassword(DEFAULT_PASS, salt), salt, role);
+      }
+    }
+  } catch (e) {
+    console.error('  User seed failed:', e.message);
+  }
 }
 
 // ── Results importer ──────────────────────────────────────────────────────────
@@ -1042,6 +1073,52 @@ function apiServerReload(req, res) {
   json(res, 200, { ok: true });
 }
 
+// ── Auth API ─────────────────────────────────────────────────────────────────
+async function apiAuthLogin(req, res) {
+  try {
+    const body = await readBody(req);
+    const { username, password } = body;
+    if (!username || !password) return json(res, 400, { error: 'Usuario y contraseña requeridos' });
+
+    if (!db) {
+      const role = (username === 'admin' || username === 'mattia') ? 'admin' : 'user';
+      return json(res, 200, { ok: true, user: { name: username, role } });
+    }
+
+    const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
+    if (!user) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
+
+    const hash = hashPassword(password, user.salt);
+    if (hash !== user.password_hash) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
+
+    json(res, 200, { ok: true, user: { name: username, role: user.role } });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiAuthChangePassword(req, res) {
+  try {
+    const body = await readBody(req);
+    const { username, currentPassword, newPassword } = body;
+    if (!username || !currentPassword || !newPassword)
+      return json(res, 400, { error: 'Todos los campos son obligatorios' });
+    if (newPassword.length < 8)
+      return json(res, 400, { error: 'La contraseña debe tener al menos 8 caracteres' });
+    if (!db) return json(res, 500, { error: 'Base de datos no disponible' });
+
+    const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
+    if (!user) return json(res, 404, { error: 'Usuario no encontrado' });
+
+    if (hashPassword(currentPassword, user.salt) !== user.password_hash)
+      return json(res, 401, { error: 'Contraseña actual incorrecta' });
+
+    const newSalt = crypto.randomBytes(32).toString('hex');
+    db.prepare('UPDATE panel_users SET password_hash = ?, salt = ? WHERE username = ?')
+      .run(hashPassword(newPassword, newSalt), newSalt, username);
+
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
   const urlPath = req.url.split('?')[0];
@@ -1053,6 +1130,10 @@ function handler(req, res) {
       });
       return res.end();
     }
+
+    // Auth
+    if (urlPath === '/api/auth/login'           && req.method === 'POST') return apiAuthLogin(req, res);
+    if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
 
     // Server control (auth-protected)
     if (urlPath === '/api/server/start'   && req.method === 'POST') return apiServerStart(req, res);
@@ -1115,6 +1196,7 @@ function handler(req, res) {
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+seedDefaultUsers();
 importAllResults();
 startResultsWatcher();
 

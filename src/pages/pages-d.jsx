@@ -1,5 +1,5 @@
 // Page: Tiempos (lap-time database with filters & comparisons)
-const { useState: uSt, useMemo: uMt } = React;
+const { useState: uSt, useMemo: uMt, useEffect: uEt } = React;
 const ITi = window.AppIcons;
 
 const fmtMs = window.AppUtils.fmtMs;
@@ -9,21 +9,31 @@ const fmtDelta = (ms) => {
   return sign + fmtMs(Math.abs(ms)).replace(/^0:/, '');
 };
 
+const PAGE_SIZE = 50;
+
 function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
-  const [trackId, setTrackId] = uSt('all');
-  const [carId, setCarId] = uSt('all');
+  const [trackId,  setTrackId]  = uSt('all');
+  const [carId,    setCarId]    = uSt('all');
   const [validOnly, setValidOnly] = uSt(true);
-  const [view, setView] = uSt('records'); // records | compare
+  const [dateFrom, setDateFrom] = uSt('');
+  const [dateTo,   setDateTo]   = uSt('');
+  const [view,     setView]     = uSt('records'); // records | compare
+  const [page,     setPage]     = uSt(1);
   const [selectedPlayers, setSelectedPlayers] = uSt([]);
+
+  // Reset to page 1 whenever filters change
+  uEt(() => { setPage(1); }, [trackId, carId, validOnly, dateFrom, dateTo]);
 
   const allPlayers = uMt(() => Array.from(new Set(lapTimes.map(l => l.player))).sort(), [lapTimes]);
 
   const filtered = uMt(() => lapTimes.filter(l => {
     if (trackId !== 'all' && l.track !== trackId) return false;
-    if (carId !== 'all' && l.car !== carId) return false;
-    if (validOnly && !l.valid) return false;
+    if (carId   !== 'all' && l.car   !== carId)   return false;
+    if (validOnly && !l.valid)                     return false;
+    if (dateFrom && l.date < dateFrom)             return false;
+    if (dateTo   && l.date > dateTo)               return false;
     return true;
-  }), [lapTimes, trackId, carId, validOnly]);
+  }), [lapTimes, trackId, carId, validOnly, dateFrom, dateTo]);
 
   // Best lap per (player, track) for the records view
   const records = uMt(() => {
@@ -36,10 +46,27 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
     return Array.from(map.values()).sort((a,b) => a.ms - b.ms);
   }, [filtered]);
 
-  const trackName = (id) => tracks.find(t => t.id === id)?.name || id;
-  const carName = (id) => cars.find(c => c.id === id)?.name || id;
+  const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const paginated  = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const togglePlayer = (p) => setSelectedPlayers(s => s.includes(p) ? s.filter(x => x !== p) : (s.length >= 4 ? s : [...s, p]));
+  const trackName = (id) => tracks.find(t => t.id === id)?.name || id;
+  const carName   = (id) => cars.find(c => c.id === id)?.name   || id;
+
+  const togglePlayer = (p) => setSelectedPlayers(s =>
+    s.includes(p) ? s.filter(x => x !== p) : (s.length >= 4 ? s : [...s, p])
+  );
+
+  const exportCSV = () => {
+    const header = 'Piloto,Tramo,Coche,Tiempo,S1,S2,S3,Valida,Fecha';
+    const rows = records.map(r =>
+      [r.player, trackName(r.track), carName(r.car), fmtMs(r.ms),
+       fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? 'Sí' : 'No', r.date].join(',')
+    );
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([[header, ...rows].join('\n')], { type: 'text/csv' }));
+    a.download = `tiempos-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  };
 
   return (
     <>
@@ -53,19 +80,12 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
           <button className={view === 'records' ? 'active' : ''} onClick={()=>setView('records')}>Récords</button>
           <button className={view === 'compare' ? 'active' : ''} onClick={()=>setView('compare')}>Comparar pilotos</button>
         </div>
-        <button className="btn btn-sm right" onClick={() => {
-          const header = 'Piloto,Tramo,Coche,Tiempo,S1,S2,S3,Valida,Fecha';
-          const rows = records.map(r =>
-            [r.player, trackName(r.track), carName(r.car), fmtMs(r.ms), fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? 'Sí' : 'No', r.date].join(',')
-          );
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(new Blob([[header, ...rows].join('\n')], { type: 'text/csv' }));
-          a.download = `tiempos-${new Date().toISOString().slice(0,10)}.csv`;
-          a.click();
-        }}>
+        <button className="btn btn-sm right" onClick={exportCSV}>
           <ITi.IconDownload size={11}/> CSV
         </button>
-        <div className="row" style={{gap: 6}}>
+
+        {/* Track / car / validity filters */}
+        <div className="row" style={{gap: 6, flexWrap:'wrap'}}>
           <select className="select" value={trackId} onChange={e=>setTrackId(e.target.value)} style={{width: 220}}>
             <option value="all">Todos los tramos</option>
             {tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -79,6 +99,32 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
             Solo válidas
           </label>
         </div>
+
+        {/* Date range filter */}
+        <div className="row" style={{gap: 6, flexWrap:'wrap', alignItems:'center'}}>
+          <span style={{fontSize: 12, color: 'var(--text-muted)'}}>Desde</span>
+          <input
+            type="date"
+            className="input"
+            style={{width: 150, fontSize: 12, padding: '4px 8px'}}
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+          />
+          <span style={{fontSize: 12, color: 'var(--text-muted)'}}>Hasta</span>
+          <input
+            type="date"
+            className="input"
+            style={{width: 150, fontSize: 12, padding: '4px 8px'}}
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+          />
+          {(dateFrom || dateTo) && (
+            <button className="btn btn-sm" onClick={()=>{ setDateFrom(''); setDateTo(''); }} title="Limpiar fechas">
+              <ITi.IconX size={11}/>
+            </button>
+          )}
+        </div>
+
         <div className="right muted" style={{fontSize: 11.5}}>
           <span className="mono">{filtered.length}</span> vueltas · <span className="mono">{records.length}</span> récords
         </div>
@@ -89,6 +135,11 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
           <div className="card-header">
             <ITi.IconTimer size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">Mejor vuelta por piloto</div>
+            {totalPages > 1 && (
+              <span className="right muted" style={{fontSize: 11.5}}>
+                Pág. {page}/{totalPages}
+              </span>
+            )}
           </div>
           {!lapTimesLoaded && lapTimes.length === 0 ? (
             <div className="loading-row">
@@ -98,44 +149,56 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
           ) : records.length === 0 ? (
             <div className="empty">No hay tiempos con esos filtros.</div>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{width: 50}}>#</th>
-                  <th>Piloto</th>
-                  <th>Tramo</th>
-                  <th>Coche</th>
-                  <th style={{width: 110}}>Mejor</th>
-                  <th style={{width: 90}}>S1</th>
-                  <th style={{width: 90}}>S2</th>
-                  <th style={{width: 90}}>S3</th>
-                  <th style={{width: 110}}>Δ líder</th>
-                  <th style={{width: 110}}>Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.slice(0, 200).map((r, i) => {
-                  const trackBest = records.find(x => x.track === r.track);
-                  const delta = r.ms - trackBest.ms;
-                  return (
-                    <tr key={r.id}>
-                      <td><div className={`player-pos ${i === 0 ? 'p1' : ''}`}>{i + 1}</div></td>
-                      <td className="player-name">{r.player}</td>
-                      <td className="muted">{trackName(r.track)}</td>
-                      <td className="muted" style={{fontSize: 12}}>{carName(r.car)}</td>
-                      <td className="mono" style={{fontWeight: 600}}>{fmtMs(r.ms)}</td>
-                      <td className="mono muted">{fmtMs(r.s1)}</td>
-                      <td className="mono muted">{fmtMs(r.s2)}</td>
-                      <td className="mono muted">{fmtMs(r.s3)}</td>
-                      <td className="mono" style={{color: delta === 0 ? '#16a34a' : 'var(--text-muted)', fontWeight: delta === 0 ? 600 : 400}}>
-                        {delta === 0 ? '—' : fmtDelta(delta)}
-                      </td>
-                      <td className="mono muted" style={{fontSize: 12}}>{r.date}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{width: 50}}>#</th>
+                    <th>Piloto</th>
+                    <th>Tramo</th>
+                    <th>Coche</th>
+                    <th style={{width: 110}}>Mejor</th>
+                    <th style={{width: 90}}>S1</th>
+                    <th style={{width: 90}}>S2</th>
+                    <th style={{width: 90}}>S3</th>
+                    <th style={{width: 110}}>Δ líder</th>
+                    <th style={{width: 110}}>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((r, i) => {
+                    const globalIndex = (page - 1) * PAGE_SIZE + i;
+                    const trackBest = records.find(x => x.track === r.track);
+                    const delta = r.ms - trackBest.ms;
+                    return (
+                      <tr key={r.id}>
+                        <td><div className={`player-pos ${globalIndex === 0 ? 'p1' : ''}`}>{globalIndex + 1}</div></td>
+                        <td className="player-name">{r.player}</td>
+                        <td className="muted">{trackName(r.track)}</td>
+                        <td className="muted" style={{fontSize: 12}}>{carName(r.car)}</td>
+                        <td className="mono" style={{fontWeight: 600}}>{fmtMs(r.ms)}</td>
+                        <td className="mono muted">{fmtMs(r.s1)}</td>
+                        <td className="mono muted">{fmtMs(r.s2)}</td>
+                        <td className="mono muted">{fmtMs(r.s3)}</td>
+                        <td className="mono" style={{color: delta === 0 ? '#16a34a' : 'var(--text-muted)', fontWeight: delta === 0 ? 600 : 400}}>
+                          {delta === 0 ? '—' : fmtDelta(delta)}
+                        </td>
+                        <td className="mono muted" style={{fontSize: 12}}>{r.date}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {totalPages > 1 && (
+                <div className="pagination">
+                  <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
+                  <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(p=>p-1)}>‹</button>
+                  <span className="pagination-info">Página {page} de {totalPages}</span>
+                  <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(p=>p+1)}>›</button>
+                  <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(totalPages)}>»</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -180,7 +243,6 @@ function ComparisonTable({ players, tracks, laps, trackId }) {
   }
   const visibleTracks = trackId === 'all' ? tracks : tracks.filter(t => t.id === trackId);
 
-  // Build best per (track, player)
   const bestMap = uMt(() => {
     const m = new Map();
     for (const l of laps) {
@@ -191,13 +253,12 @@ function ComparisonTable({ players, tracks, laps, trackId }) {
     return m;
   }, [laps]);
 
-  // For each track, compute the leader among selected players and per-player gap
   const rows = visibleTracks.map(t => {
     const cells = players.map(p => bestMap.get(`${t.id}|${p}`));
     const validMs = cells.filter(c => c).map(c => c.ms);
     const best = validMs.length ? Math.min(...validMs) : null;
     return { track: t, cells, best };
-  }).filter(r => r.cells.some(c => c)); // hide tracks where nobody has a lap
+  }).filter(r => r.cells.some(c => c));
 
   if (rows.length === 0) return (
     <div className="card"><div className="empty">Estos pilotos no tienen tiempos en común con los filtros actuales.</div></div>
@@ -222,7 +283,8 @@ function ComparisonTable({ players, tracks, laps, trackId }) {
               <td>
                 <div className="row" style={{gap: 10}}>
                   <div style={{width: 40, height: 24, borderRadius: 3, overflow:'hidden', background:'var(--bg-3)', flexShrink: 0}}>
-                    <img src={r.track.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}}/>
+                    <img src={r.track.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}}
+                      onError={e => { e.target.style.display='none'; }}/>
                   </div>
                   <div>
                     <div style={{fontSize: 13, fontWeight: 500}}>{r.track.name}</div>
@@ -233,7 +295,7 @@ function ComparisonTable({ players, tracks, laps, trackId }) {
               {r.cells.map((c, i) => {
                 if (!c) return <td key={i} className="muted">—</td>;
                 const isBest = c.ms === r.best;
-                const delta = c.ms - r.best;
+                const delta  = c.ms - r.best;
                 return (
                   <td key={i}>
                     <div className="mono" style={{fontWeight: isBest ? 600 : 500, color: isBest ? 'var(--red)' : 'var(--text)'}}>

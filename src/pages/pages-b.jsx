@@ -197,6 +197,13 @@ function CarCard({ car, count, onOpen }) {
             {skinsCount} skins
           </span>
         )}
+        {count > 0 && (
+          <div style={{
+            position:'absolute', inset:0,
+            background:'color-mix(in srgb, var(--red) 18%, transparent)',
+            pointerEvents:'none',
+          }}/>
+        )}
       </div>
 
       <div className="car-check" style={count > 1 ? {background:'var(--red)', borderColor:'var(--red)', color:'white', width:22, height:22, fontSize:10, fontWeight:700} : {}}>

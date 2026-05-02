@@ -559,12 +559,45 @@ function parseINI(text) {
   return result;
 }
 
-function serializeINI(obj) {
-  return Object.entries(obj)
-    .filter(([s]) => s !== '__default__')
-    .map(([section, keys]) =>
-      `[${section}]\n` + Object.entries(keys).map(([k, v]) => `${k}=${v}`).join('\n')
-    ).join('\n\n') + '\n';
+// Patch an INI file in-place: replaces changed values but keeps all comment and
+// blank lines exactly as they were. New keys (not in the original) are inserted
+// immediately after their section header.
+function patchINI(raw, obj) {
+  const lines = raw.split('\n');
+  let section = '__default__';
+  const updated = new Set();
+
+  const patched = lines.map(rawLine => {
+    const line = rawLine.trim();
+    const secM = line.match(/^\[(.+)\]$/);
+    if (secM) { section = secM[1]; return rawLine; }
+    if (!line || line.startsWith(';') || line.startsWith('#')) return rawLine;
+    const eq = line.indexOf('=');
+    if (eq > 0) {
+      const k = line.slice(0, eq).trim();
+      if (obj[section] && k in obj[section]) {
+        updated.add(`${section}|${k}`);
+        return `${k}=${obj[section][k]}`;
+      }
+    }
+    return rawLine;
+  });
+
+  // Append any keys that did not exist in the original file
+  for (const [sec, keys] of Object.entries(obj)) {
+    if (sec === '__default__') continue;
+    for (const [k, v] of Object.entries(keys)) {
+      if (updated.has(`${sec}|${k}`)) continue;
+      const secIdx = patched.findIndex(l => l.trim() === `[${sec}]`);
+      if (secIdx >= 0) {
+        patched.splice(secIdx + 1, 0, `${k}=${v}`);
+      } else {
+        patched.push('', `[${sec}]`, `${k}=${v}`);
+      }
+    }
+  }
+
+  return patched.join('\n');
 }
 
 // ── System metrics ────────────────────────────────────────────────────────────
@@ -731,7 +764,7 @@ async function apiConfigUpdate(req, res) {
     if (body.whitelist   !== undefined) s['WELCOME_WHITELIST_ENABLED']= body.whitelist  ? '1' : '0';
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
-    await fsp.writeFile(AC_CFG_FILE, serializeINI(ini), 'utf8');
+    await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1079,7 +1112,7 @@ async function apiSessionApply(req, res) {
     if (Array.isArray(body.cars) && body.cars.length)
       s['CARS'] = [...new Set(body.cars)].join(';');
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
-    await fsp.writeFile(AC_CFG_FILE, serializeINI(ini), 'utf8');
+    await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }

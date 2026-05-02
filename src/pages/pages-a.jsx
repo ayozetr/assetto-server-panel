@@ -4,7 +4,11 @@ const I2 = window.AppIcons;
 
 // Dashboard
 function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
-  const track = tracks.find(t => t.id === sessionCfg.trackId) || tracks[0];
+  // Prefer the live track reported by the running server; fall back to configured
+  const liveTrackId    = server.status === 'running' && server.liveTrack ? server.liveTrack : sessionCfg.trackId;
+  const track          = tracks.find(t => t.id === liveTrackId) || tracks.find(t => t.id === sessionCfg.trackId) || tracks[0];
+  const configDiffers  = server.status === 'running' && server.liveTrack && server.liveTrack !== sessionCfg.trackId;
+  const configuredTrack = configDiffers ? (tracks.find(t => t.id === sessionCfg.trackId)?.name || sessionCfg.trackId) : null;
   const carsCount = sessionCfg.carIds.length;
 
   const [activity, setActivity] = useState([]);
@@ -60,6 +64,9 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           <div className="card-header">
             <I2.IconFlag size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">Sesión actual</div>
+            {server.status === 'running' && server.liveTrack && (
+              <span className="badge badge-green right">EN VIVO</span>
+            )}
           </div>
           <div className="card-body">
             {!track ? (
@@ -81,6 +88,17 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     </div>
                   </div>
                 </div>
+                {configDiffers && (
+                  <div style={{
+                    marginTop: 8, padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+                    background: 'color-mix(in srgb, #f59e0b 10%, var(--bg-2))',
+                    border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)',
+                    fontSize: 11.5, color: 'var(--text-muted)',
+                  }}>
+                    <I2.IconSettings size={10} style={{verticalAlign:'-1px', marginRight: 4}}/>
+                    Configurado: <strong style={{color:'var(--text)'}}>{configuredTrack}</strong> · Pendiente de reinicio
+                  </div>
+                )}
                 <div className="divider"></div>
                 <div className="grid-3">
                   <div>

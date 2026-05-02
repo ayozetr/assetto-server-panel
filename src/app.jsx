@@ -32,6 +32,7 @@ function App() {
     ram: 0,
     ramTotal: 0,
     uptime: '—',
+    liveTrack: null,
   });
   const [osInfo, setOsInfo] = uS(null);
 
@@ -139,12 +140,13 @@ function App() {
           setBackendDown(false);
           setServer(s => ({
             ...s,
-            status:   d.running ? (s.status === 'starting' || s.status === 'stopping' ? s.status : 'running') : 'stopped',
-            cpu:      d.cpu,
-            cpuName:  d.cpuName || s.cpuName,
-            ram:      d.ram.used,
-            ramTotal: d.ram.total,
-            uptime:   d.uptime,
+            status:    d.running ? (s.status === 'starting' || s.status === 'stopping' ? s.status : 'running') : 'stopped',
+            cpu:       d.cpu,
+            cpuName:   d.cpuName || s.cpuName,
+            ram:       d.ram.used,
+            ramTotal:  d.ram.total,
+            uptime:    d.uptime,
+            liveTrack: d.liveTrack || null,
           }));
           if (d.osInfo) setOsInfo(d.osInfo);
         })

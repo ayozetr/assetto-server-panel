@@ -641,22 +641,37 @@ function getRAM() {
 // ── AC Server detection ───────────────────────────────────────────────────────
 let _acRunSince = null;
 
-function checkACRunning() {
+// Fetches /INFO from the AC HTTP API and returns { running, liveTrack }.
+// Also maintains _acRunSince for uptime tracking.
+function getACInfo() {
   return new Promise(resolve => {
+    let body = '';
     const req = http.get(
       { hostname: '127.0.0.1', port: AC_HTTP_PORT, path: '/INFO', timeout: 1500 },
       res => {
-        const ok = res.statusCode === 200;
-        res.destroy();
-        if (ok && !_acRunSince) _acRunSince = Date.now();
-        if (!ok) _acRunSince = null;
-        resolve(ok);
+        if (res.statusCode !== 200) {
+          res.destroy();
+          _acRunSince = null;
+          return resolve({ running: false, liveTrack: null });
+        }
+        res.on('data', d => { body += d; });
+        res.on('end', () => {
+          if (!_acRunSince) _acRunSince = Date.now();
+          try {
+            const info = JSON.parse(body);
+            resolve({ running: true, liveTrack: info.track || null });
+          } catch {
+            resolve({ running: true, liveTrack: null });
+          }
+        });
       }
     );
-    req.on('error', () => { _acRunSince = null; resolve(false); });
-    req.setTimeout(1500, () => { req.destroy(); _acRunSince = null; resolve(false); });
+    req.on('error', () => { _acRunSince = null; resolve({ running: false, liveTrack: null }); });
+    req.setTimeout(1500, () => { req.destroy(); _acRunSince = null; resolve({ running: false, liveTrack: null }); });
   });
 }
+
+function checkACRunning() { return getACInfo().then(i => i.running); }
 
 function getACUptime() {
   if (!_acRunSince) return '—';
@@ -689,8 +704,15 @@ function parseLine(raw, id) {
 
 async function apiMetrics(res) {
   try {
-    const [cpu, ram, running] = await Promise.all([getCPU(), Promise.resolve(getRAM()), checkACRunning()]);
-    json(res, 200, { cpu, ram, running, uptime: getACUptime(), cpuName: getCPUName(), osInfo: getOSInfo() });
+    const [cpu, ram, acInfo] = await Promise.all([getCPU(), Promise.resolve(getRAM()), getACInfo()]);
+    json(res, 200, {
+      cpu, ram,
+      running:   acInfo.running,
+      liveTrack: acInfo.liveTrack,
+      uptime:    getACUptime(),
+      cpuName:   getCPUName(),
+      osInfo:    getOSInfo(),
+    });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -1132,12 +1154,18 @@ function killAC() {
   if (acChild && !acChild.killed) {
     try { acChild.kill('SIGTERM'); } catch {}
     acChild = null;
+  } else {
+    // Dashboard restarted while AC was running — no child handle; kill by name
+    try { spawn('pkill', ['-x', 'acServer'], { stdio: 'ignore' }); } catch {}
   }
 }
 
-function apiServerStart(req, res) {
+async function apiServerStart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (acChild && !acChild.killed) return json(res, 409, { error: 'Already running' });
+  // Guard against double-spawn if dashboard restarted while AC was already running
+  const { running } = await getACInfo();
+  if (running) return json(res, 409, { error: 'Already running' });
   spawnAC();
   json(res, 200, { ok: true });
 }
@@ -1159,6 +1187,9 @@ function apiServerReload(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (acChild && !acChild.killed) {
     try { acChild.kill('SIGHUP'); } catch {}
+  } else {
+    // Dashboard restarted — send SIGHUP by process name
+    try { spawn('pkill', ['-HUP', '-x', 'acServer'], { stdio: 'ignore' }); } catch {}
   }
   json(res, 200, { ok: true });
 }

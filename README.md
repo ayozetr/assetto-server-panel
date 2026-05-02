@@ -1,12 +1,11 @@
 # Assetto Server Panel
 
-A professional web-based administration panel for **Assetto Corsa** dedicated servers running on Linux. Monitor server health, manage players, review lap times, configure sessions, and control the server process — all from a clean, responsive interface accessible from any device on your network.
+A web-based administration panel for **Assetto Corsa** dedicated servers running on Linux. Monitor server health, manage players, review lap times, configure sessions, and control the server process — all from a clean, responsive interface accessible from any device on your network.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Requirements](#requirements)
@@ -15,36 +14,57 @@ A professional web-based administration panel for **Assetto Corsa** dedicated se
 - [Deployment](#deployment)
 - [Project Structure](#project-structure)
 - [Pages Reference](#pages-reference)
-- [Demo Credentials](#demo-credentials)
+- [API Reference](#api-reference)
+- [Default Credentials](#default-credentials)
 - [Troubleshooting](#troubleshooting)
-
----
-
-## Overview
-
-Assetto Server Panel is a single-page application (SPA) built with **React 18** and served by a lightweight **Node.js** static file server. There is no build step, no bundler, and no transpilation pipeline on the server — JSX files are transpiled directly in the browser via **Babel Standalone**. This makes the project trivial to deploy: install one dependency (`dotenv`), run `npm start`, and the panel is live.
-
-The panel operates entirely in **demo/simulation mode** out of the box — all server state, player data, lap times, and logs are mocked in memory. Real backend integration (AC server API, database reads) is a planned extension.
 
 ---
 
 ## Features
 
-| Category | Capability |
-|----------|-----------|
-| **Server control** | Start · Stop · Restart · Reload config (admin only) |
-| **Live monitoring** | CPU usage · RAM consumption · uptime · player count (updates every 1.5 s) |
-| **Player management** | Live player list with lap count, best time, last time, ping · Kick · Ban · Session history |
-| **Lap times** | Full records table filterable by track, car, and driver · sector splits · validity flag |
-| **Live logs** | Streaming server log output with level badges (INFO · OK · WARN) |
-| **Cars** | Visual catalogue with silhouette thumbnails, class, power, and weight |
-| **Tracks** | Circuit catalogue with SVG layout previews, length, pit count, and layouts |
-| **Session config** | Track · layout · mode · laps · time of day · weather · damage · assists |
-| **Server config** | Network ports · paths · passwords · autostart / autorestart |
-| **User management** | Panel user list with role assignment (admin / user) |
-| **Themes** | Light and dark mode — persisted in `localStorage` |
-| **Tweaks panel** | Live accent colour · border radius · density controls |
-| **Auth** | Login screen with role-based access control (admin vs. user) |
+### Monitoring
+- **Live server metrics** — CPU usage, RAM consumption, uptime, player count; polls every 4 s
+- **Live log stream** — tails the AC server log file with level badges (INFO · OK · WARN · ERROR), pause/resume, and export to `.txt`
+- **Dashboard activity feed** — last 5 notable log events (connections, laps, errors) loaded on page open
+- **Backend-down banner** — shown automatically after 3 consecutive failed metric polls
+
+### Player management
+- **Live player table** — name, car, lap count, best/last time, ping, country flag
+- **Kick & Ban** — kick via AC HTTP API; ban writes the Steam GUID to `blacklist.txt`
+- **Player history** — all past players from the SQLite DB, with session count, total laps, best lap time, and last seen; searchable by name
+
+### Lap times
+- **Full records database** — all laps from AC result JSON files, stored in SQLite and deduplicated
+- **Filters** — by track, car, validity; shows best lap per (player, track) in the records view
+- **Sector splits** — S1, S2, S3 displayed with delta to track leader
+- **Player comparison** — select up to 4 drivers for a side-by-side comparison across tracks
+- **CSV export** — download the current filtered view as a `.csv` file
+
+### Car & track catalogue
+- **Car browser** — full grid from `/content/cars/`, with skin thumbnails, specs (BHP, torque, weight, top speed), brand logos, and Kunos toggle
+- **Car detail modal** — skin carousel with full-size preview per skin, specs panel, description
+- **Track browser** — grid from `/content/tracks/` with country flag, circuit length, pit count
+- **Track detail modal** — per-layout thumbnails, length, description, layout selector
+- **Session integration** — click any car or track to add it to the next session directly
+
+### Session & server configuration
+- **Session configurator** — track, layout, mode (Practice / Quali / Race), laps/duration, time of day, weather, temperature, damage, driving aids; writes to `server_cfg.ini` with confirmation modal
+- **Server config page** — server name, network ports, max clients, passwords, whitelist toggle, fuel/damage/tyre wear rates, ABS/TC/autoclutch/stability, autostart/autorestart; saving indicator while request is in flight
+- **Whitelist editor** — inline Steam ID list (17-digit validation) with add/remove and save, shown when whitelist is enabled
+- **Server control** — Start · Stop · Restart · Reload config (SIGHUP) from the top bar; admin-only
+
+### Authentication & user management
+- **Real login** — PBKDF2-SHA-512 (100 000 iterations) against a `panel_users` SQLite table
+- **httpOnly session cookies** — 24 h TTL, invalidated on logout; token never exposed to JavaScript
+- **Rate limiting** — 5 failed attempts per IP locks the login endpoint for 15 minutes
+- **Panel user CRUD** — create, edit role, change another user's password, delete; admin-only; persisted in SQLite
+- **My account page** — change own password (current + new + confirm) with show/hide toggles; secure password generator (length slider 8–24, special characters toggle, live preview field, copy and use buttons)
+
+### UI/UX
+- **Light / dark theme** — persisted in `localStorage`
+- **Loading spinners** — shown in Cars, Tracks, and Lap Times while the initial fetch is in flight
+- **Page not found fallback** — graceful message for unknown routes
+- **Live tweaks panel** — floating panel for accent colour, border radius, and density; changes apply instantly
 
 ---
 
@@ -53,42 +73,47 @@ The panel operates entirely in **demo/simulation mode** out of the box — all s
 ```
 Browser
   │
-  │  HTTP GET /
+  │  HTTP (same-origin only)
   ▼
-server.js  (Node.js · http module · reads .env)
+server.js  ─── Node.js http module, no framework
   │
-  │  serves static files from project root
-  ▼
-index.html
-  ├── CDN: React 18 · ReactDOM · Babel Standalone  (SRI-pinned)
-  └── src/
-      ├── tweaks-panel.jsx   → window globals: useTweaks, TweaksPanel, TweakSection …
-      ├── icons.jsx          → window.AppIcons
-      ├── data.jsx           → window.AppData  (mock cars, tracks, players, lap times)
-      ├── shell.jsx          → window.AppShell (Sidebar, Topbar, Login, ToastProvider)
-      ├── pages/
-      │   ├── pages-a.jsx    → window.AppPagesA (Dashboard, Players, Logs)
-      │   ├── pages-b.jsx    → window.AppPagesB (Cars, Tracks, Session)
-      │   ├── pages-c.jsx    → window.AppPagesC (Config, Users)
-      │   └── pages-d.jsx    → window.AppPagesD (Times)
-      ├── styles.css         → CSS custom properties · light/dark themes
-      └── app.jsx            → App root — global state, routing, ReactDOM.createRoot
+  ├── Serves static files from project root
+  ├── All /api/* routes handled inline
+  ├── SQLite (better-sqlite3): laps, players, processed_files, panel_users
+  └── Sessions: in-memory Map, token → { role, expiresAt }
 ```
 
-**Load order matters.** Babel Standalone fetches and transpiles each `<script type="text/babel">` sequentially. Each file attaches its exports to `window.*` so subsequent files can reference them without a module system.
+```
+src/
+  tweaks-panel.jsx  →  window globals: useTweaks, TweaksPanel …
+  icons.jsx         →  window.AppIcons
+  data.jsx          →  window.AppData  (fallback mock data)
+  shell.jsx         →  window.AppShell (Sidebar, Topbar, Login, ToastProvider, useToast)
+  pages/
+    pages-a.jsx     →  window.AppPagesA  (Dashboard, Players, Logs)
+    pages-b.jsx     →  window.AppPagesB  (Cars, Tracks, Session)
+    pages-c.jsx     →  window.AppPagesC  (Config, Users, Profile)
+    pages-d.jsx     →  window.AppPagesD  (Times)
+  styles.css        →  CSS custom properties · light/dark themes
+  app.jsx           →  App root — global state, routing, ReactDOM.createRoot
+```
 
-**State management** is handled with plain React `useState` and `useEffect` hooks at the `App` level, passed down as props. There is no external state library.
+**No build step.** JSX is transpiled in the browser by Babel Standalone. Each file attaches its exports to `window.*` for use by subsequent scripts. Load order is defined in `index.html`.
+
+**State** lives in the `App` component and is passed down as props. No external state library.
+
+**AC server detection** uses an HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO` rather than `pgrep`, which avoids false positives from the dashboard's own shell environment.
 
 ---
 
 ## Requirements
 
-| Tool    | Required version |
-|---------|-----------------|
-| Node.js | **20.20.2**      |
-| npm     | **11.13.0**      |
+| Tool    | Version    |
+|---------|-----------|
+| Node.js | **20.20.2** |
+| npm     | **11.13.0** |
 
-> Both versions are managed with [nvm](https://github.com/nvm-sh/nvm). If nvm is not installed on your system, see [Installing nvm](#installing-nvm) below.
+> Managed with [nvm](https://github.com/nvm-sh/nvm). See [Installing nvm](#installing-nvm) if needed.
 
 ---
 
@@ -105,7 +130,7 @@ cd assetto-dashboard
 
 ```bash
 nvm use 20.20.2
-# or, if not installed yet:
+# If not installed yet:
 nvm install 20.20.2 && nvm use 20.20.2
 npm install -g npm@11.13.0
 ```
@@ -120,7 +145,7 @@ npm install
 
 ```bash
 cp .env.example .env
-# Edit .env if you need a different port
+# Edit .env with your server paths
 ```
 
 ### 5 · Start the server
@@ -140,7 +165,7 @@ Expected output:
   ────────────────────────────────────────────
 ```
 
-Open the **Network** URL from any machine on the same network.
+Open the **Network** URL from any machine on the same network. On first start, two default users are seeded into the database (see [Default Credentials](#default-credentials)).
 
 ---
 
@@ -148,16 +173,27 @@ Open the **Network** URL from any machine on the same network.
 
 All configuration lives in `.env` (never committed to git).
 
-| Variable | Default   | Description |
-|----------|-----------|-------------|
-| `HOST`   | `0.0.0.0` | Bind address. Use `127.0.0.1` to restrict to localhost. |
-| `PORT`   | `3000`    | TCP port the web server listens on. |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `0.0.0.0` | Bind address. Use `127.0.0.1` to restrict to localhost. |
+| `PORT` | `3000` | TCP port the web server listens on. |
+| `AC_SERVER_LOG` | `/home/.../server_output.log` | Path to the AC server log file. |
+| `AC_SERVER_RESULTS` | `/home/.../results` | Directory containing AC result JSON files. |
+| `AC_CFG_DIR` | `/srv/assetto/cfg` | Directory containing `server_cfg.ini` (and `whitelist.txt`). |
+| `AC_CONTENT_DIR` | `/srv/assetto/content` | Root content directory (must contain `cars/` and `tracks/`). |
+| `AC_SERVER_BIN` | `/home/.../acServer` | Path to the `acServer` binary (used for Start). |
+| `AC_SERVER_DIR` | `dirname(AC_SERVER_BIN)` | Working directory when spawning the AC process. |
+| `AC_HTTP_PORT` | `8081` | AC HTTP API port (used for server detection and player data). |
+| `AC_BLACKLIST_FILE` | `<AC_SERVER_DIR>/blacklist.txt` | Path to the ban list file. |
+| `AC_WHITELIST_FILE` | `<AC_CFG_DIR>/whitelist.txt` | Path to the whitelist file. |
+| `DB_PATH` | `<project>/assetto.db` | SQLite database path. |
+| `ADMIN_TOKEN` | _(empty)_ | Optional static token for headless/script access to server control endpoints. Session cookies are the preferred mechanism for browser access. |
 
 ---
 
 ## Deployment
 
-### Running in the background with `pm2`
+### Running in the background with pm2
 
 ```bash
 npm install -g pm2
@@ -166,16 +202,14 @@ pm2 save
 pm2 startup   # follow the printed command to enable autostart on boot
 ```
 
-Useful pm2 commands:
-
 ```bash
-pm2 status              # check running processes
-pm2 logs assetto-panel  # tail logs
+pm2 status
+pm2 logs assetto-panel
 pm2 restart assetto-panel
 pm2 stop assetto-panel
 ```
 
-### Systemd service (alternative to pm2)
+### Systemd service (alternative)
 
 Create `/etc/systemd/system/assetto-panel.service`:
 
@@ -223,19 +257,19 @@ assetto-dashboard/
 │   ├── pages/
 │   │   ├── pages-a.jsx        # Dashboard · Players · Logs
 │   │   ├── pages-b.jsx        # Cars · Tracks · Session
-│   │   ├── pages-c.jsx        # Configuration · Users
+│   │   ├── pages-c.jsx        # Configuration · Users · My account
 │   │   └── pages-d.jsx        # Lap Times
 │   ├── app.jsx                # Root component — routing, global state
-│   ├── data.jsx               # Mock data (cars, tracks, players, lap records)
-│   ├── icons.jsx              # SVG icon library (AppIcons)
+│   ├── data.jsx               # Fallback mock data (used when backend is unavailable)
+│   ├── icons.jsx              # SVG icon library (window.AppIcons)
 │   ├── shell.jsx              # Sidebar · Topbar · Login · Toast system
-│   ├── styles.css             # CSS custom properties · light / dark themes
-│   └── tweaks-panel.jsx       # Floating customisation panel + controls
+│   ├── styles.css             # CSS custom properties · light/dark themes
+│   └── tweaks-panel.jsx       # Floating customisation panel
 ├── index.html                 # SPA entry point
-├── server.js                  # Static file server (Node.js http module)
+├── server.js                  # Node.js HTTP server + all API endpoints
+├── assetto.db                 # SQLite database (created on first run, gitignored)
 ├── .env                       # Local environment variables — not in git
 ├── .env.example               # Environment variable template
-├── .gitignore
 ├── package.json
 └── README.md
 ```
@@ -244,32 +278,70 @@ assetto-dashboard/
 
 ## Pages Reference
 
-| Page          | Sidebar label   | Role required | Description |
-|---------------|-----------------|---------------|-------------|
-| Dashboard     | Dashboard       | All           | Live server metrics: status pill, CPU/RAM gauges, uptime, active players, current session summary |
-| Players       | Jugadores       | All           | Live player table (laps, best/last time, ping) with kick/ban actions; session history tab |
-| Lap Times     | Tiempos         | All           | Full lap record database with filters by track, car, and driver; sector splits and validity |
-| Logs          | Logs            | All           | Live server log stream with level indicators (INFO, OK, WARN) |
-| Cars          | Coches          | All           | Vehicle catalogue with class, power output, weight, and SVG silhouette |
-| Tracks        | Tramos          | All           | Circuit catalogue with SVG layout previews, length, pit capacity, and available layouts |
-| Session       | Sesión          | All           | Current session setup: track, layout, mode, laps, time of day, weather, damage, driving aids |
-| Configuration | Configuración   | **Admin**     | Server name, network ports, file paths, passwords, autostart options |
-| Users         | Usuarios        | **Admin**     | Panel user management: roles, status, creation date |
+| Page | Sidebar label | Role | Description |
+|------|--------------|------|-------------|
+| Dashboard | Dashboard | All | Live CPU/RAM gauges, server status pill, uptime, connected players, current session summary, recent activity feed from server log |
+| Players | Jugadores | All | Live player table with flag, car, laps, best/last time, ping; kick and ban actions; history tab with search |
+| Lap Times | Tiempos | All | Records table filtered by track, car, validity; sector splits; delta to leader; player comparison view; CSV export |
+| Logs | Logs | All | Live log tail (polls every 3 s) with level filters, pause/resume, clear, and export to `.txt` |
+| Cars | Coches | All | Full car catalogue with skin thumbnails, specs, brand logos; add/remove to session; Kunos toggle |
+| Tracks | Tramos | All | Circuit catalogue with country flag, length, pit count; multi-layout modal with per-layout thumbnails |
+| Session | Sesión | All | Session parameters (track, layout, mode, conditions, aids); writes `server_cfg.ini` after confirmation |
+| Configuration | Configuración | **Admin** | Network ports, max clients, passwords, whitelist toggle + Steam ID editor, race rules, assists |
+| Users | Usuarios | **Admin** | Panel user CRUD: create, edit role, change password, delete; persisted in SQLite |
+| My account | Mi cuenta | All | Change own password; secure password generator with length slider, special characters toggle, live preview, copy and use |
+
+---
+
+## API Reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/auth/login` | Authenticate; sets `sid` httpOnly cookie (24 h TTL). Rate-limited: 5 attempts/15 min per IP. |
+| `POST` | `/api/auth/logout` | Invalidate session and clear cookie. |
+| `POST` | `/api/auth/change-password` | Change own password (requires current password). |
+| `GET` | `/api/metrics` | CPU %, RAM MB, AC running status, uptime, CPU model, OS info. |
+| `GET` | `/api/logs?n=150` | Last N parsed log lines `{ id, time, lvl, tag, msg }`. Max 500. |
+| `GET` | `/api/config` | Parsed `server_cfg.ini` as JSON. |
+| `PUT` | `/api/config` | Write JSON back to `server_cfg.ini` (backs up to `.bak`). |
+| `GET` | `/api/players` | Live player list proxied from AC HTTP API `/api/details`. |
+| `GET` | `/api/players/history` | Past players from SQLite with session count, laps, best lap. |
+| `POST` | `/api/players/kick` | Kick player via AC HTTP API. |
+| `POST` | `/api/players/ban` | Add Steam GUID to `blacklist.txt`. |
+| `GET` | `/api/results?limit=500` | All result files parsed to lap-time format. Max 5000. |
+| `GET` | `/api/cars` | All `ui_car.json` files normalised (name, brand, specs, skins). |
+| `GET` | `/api/tracks` | All `ui_track.json` files normalised (name, country, length, layouts). |
+| `POST` | `/api/session/apply` | Write track/cars to `server_cfg.ini`. |
+| `GET` | `/api/whitelist` | Read `whitelist.txt` as `{ ids: string[] }`. |
+| `PUT` | `/api/whitelist` | Write Steam ID array to `whitelist.txt` (validates 17-digit format). |
+| `GET` | `/api/panel/users` | List panel users (admin only). |
+| `POST` | `/api/panel/users` | Create panel user. |
+| `PUT` | `/api/panel/users/:username` | Update role or password. |
+| `DELETE` | `/api/panel/users/:username` | Delete panel user. |
+| `POST` | `/api/server/start` | Spawn `acServer` process. |
+| `POST` | `/api/server/stop` | Kill `acServer` process. |
+| `POST` | `/api/server/restart` | Stop then start. |
+| `POST` | `/api/server/reload` | Send SIGHUP to `acServer` (reload without restart). |
+| `GET` | `/api/content/cars/:id/thumb` | Serve car preview image. |
+| `GET` | `/api/content/cars/:id/skins/:skin/preview` | Serve skin preview image. |
+| `GET` | `/api/content/tracks/:id/thumb` | Serve track preview image. |
+
+All `POST`/`PUT` endpoints require `Content-Type: application/json`. Server control endpoints require an admin session cookie or a valid `ADMIN_TOKEN` header.
 
 ---
 
 ## Default Credentials
 
-Passwords are validated against a SQLite database seeded on first run. All accounts share the same default password; change it from **My account** (key icon in the sidebar footer).
+Passwords are hashed with PBKDF2-SHA-512 (100 000 iterations) and stored in SQLite. Both accounts are seeded on first run with the same default password.
 
-| Username  | Default password | Role          |
-|-----------|-----------------|---------------|
-| `admin`   | `Admin1234!`    | Administrator |
-| `mattia`  | `Admin1234!`    | Administrator |
+| Username | Default password | Role |
+|----------|-----------------|------|
+| `admin` | `Admin1234!` | Administrator |
+| `mattia` | `Admin1234!` | Administrator |
 
-Administrator accounts have access to server control actions (start/stop/restart) and the Configuration and Users pages.
+Administrators have access to server control, the Configuration page, and the Users page.
 
-> **Security note**: Change the default password immediately after first login.
+> **Change the default password immediately after first login** — use the key icon in the sidebar footer or navigate to **My account**.
 
 ---
 
@@ -277,33 +349,40 @@ Administrator accounts have access to server control actions (start/stop/restart
 
 ### `ERR_CONNECTION_REFUSED`
 
-Nothing is listening on the port. Verify the server is running:
+Nothing is listening on port 3000. Check the server is running:
 
 ```bash
 ss -tlnp | grep 3000
-```
-
-If the port is not listed, start the server:
-
-```bash
 npm start
 ```
 
-### Page loads but JSX files return 404
+### Page loads but shows no cars or tracks
 
-The file paths in `index.html` must match the actual directory structure. All source files live under `src/` — the HTML references them as `src/app.jsx`, `src/pages/pages-a.jsx`, etc.
+The paths in `.env` point to the wrong directories. Verify that `AC_CONTENT_DIR/cars` and `AC_CONTENT_DIR/tracks` exist and contain `ui_car.json` / `ui_track.json` files.
 
-### Fonts or CDN scripts fail to load
+### Lap times table is empty
 
-The panel loads React, ReactDOM, and Babel from `unpkg.com`, and fonts from `fonts.googleapis.com`. The server must have outbound internet access on port 443.
+AC result files must be JSON files matching the format `{ TrackName, Laps: [{ LapTime, Sectors, Cuts, DriverName, CarModel }] }` in the directory set by `AC_SERVER_RESULTS`. Check that path and file permissions.
+
+### Server always shows "Stopped"
+
+The panel detects the AC server via an HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO`. Verify `AC_HTTP_PORT` matches the `HTTP_PORT` value in your `server_cfg.ini`.
+
+### JSX files return 404
+
+All source files live under `src/`. Check that the directory structure matches the paths referenced in `index.html`.
 
 ### Port already in use
 
 ```
-✖  Port 3000 is already in use. Change PORT in .env
+✖  Port 3000 already in use — change PORT in .env
 ```
 
-Either stop the conflicting process (`sudo lsof -i :3000`) or change `PORT` in `.env`.
+```bash
+sudo lsof -i :3000   # find the conflicting process
+```
+
+Or change `PORT` in `.env`.
 
 ---
 

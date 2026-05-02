@@ -26,8 +26,37 @@ const ROOT            = __dirname;
 
 let acChild = null; // tracked child process for the AC server
 
+// ── Session store ─────────────────────────────────────────────────────────────
+const sessions = new Map(); // token → { username, role, expiresAt }
+const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function createSession(username, role) {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, { username, role, expiresAt: Date.now() + SESSION_TTL });
+  return token;
+}
+
+function getSession(req) {
+  const raw = req.headers.cookie || '';
+  const match = raw.split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
+  if (!match) return null;
+  const token = match.slice(4);
+  const s = sessions.get(token);
+  if (!s) return null;
+  if (Date.now() > s.expiresAt) { sessions.delete(token); return null; }
+  return s;
+}
+
+function sessionCookieHeader(token) {
+  return `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL / 1000}`;
+}
+
 function checkAdminAuth(req) {
-  if (!ADMIN_TOKEN) return true;
+  // Valid admin session cookie takes priority
+  const sess = getSession(req);
+  if (sess?.role === 'admin') return true;
+  // ADMIN_TOKEN header fallback (for headless/script access)
+  if (!ADMIN_TOKEN) return true; // no token configured → open (original behaviour)
   const h = req.headers['x-admin-token'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '';
   return h === ADMIN_TOKEN;
 }
@@ -1113,8 +1142,17 @@ async function apiAuthLogin(req, res) {
     if (hash !== user.password_hash) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
 
     _loginAttempts.delete(ip); // reset on success
+    const token = createSession(username, user.role);
+    res.setHeader('Set-Cookie', sessionCookieHeader(token));
     json(res, 200, { ok: true, user: { name: username, role: user.role } });
   } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+function apiAuthLogout(req, res) {
+  const raw = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
+  if (raw) sessions.delete(raw.slice(4));
+  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  json(res, 200, { ok: true });
 }
 
 async function apiAuthChangePassword(req, res) {
@@ -1206,6 +1244,7 @@ function handler(req, res) {
 
     // Auth
     if (urlPath === '/api/auth/login'           && req.method === 'POST') return apiAuthLogin(req, res);
+    if (urlPath === '/api/auth/logout'          && req.method === 'POST') return apiAuthLogout(req, res);
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
 
     // Panel users CRUD
@@ -1263,13 +1302,6 @@ function handler(req, res) {
   fs.readFile(filePath, (err, data) => {
     if (err) {
       return respond(res, err.code === 'ENOENT' ? 404 : 500, 'text/plain', `${err.code} — ${urlPath}`);
-    }
-    // Inject admin token into HTML so the frontend can use it for server control
-    if (ADMIN_TOKEN && filePath.endsWith('index.html')) {
-      data = Buffer.from(data.toString().replace(
-        '</head>',
-        `<meta name="x-admin-token" content="${ADMIN_TOKEN}"></head>`
-      ));
     }
     respond(res, 200, MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream', data);
   });

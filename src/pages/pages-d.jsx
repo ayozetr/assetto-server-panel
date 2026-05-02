@@ -9,7 +9,7 @@ const fmtDelta = (ms) => {
   return sign + fmtMs(Math.abs(ms)).replace(/^0:/, '');
 };
 
-function PageTimes({ cars, tracks, lapTimes }) {
+function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   const [trackId, setTrackId] = uSt('all');
   const [carId, setCarId] = uSt('all');
   const [validOnly, setValidOnly] = uSt(true);
@@ -90,7 +90,12 @@ function PageTimes({ cars, tracks, lapTimes }) {
             <ITi.IconTimer size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">Mejor vuelta por piloto</div>
           </div>
-          {records.length === 0 ? (
+          {!lapTimesLoaded && lapTimes.length === 0 ? (
+            <div className="loading-row">
+              <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
+              Cargando tiempos…
+            </div>
+          ) : records.length === 0 ? (
             <div className="empty">No hay tiempos con esos filtros.</div>
           ) : (
             <table className="table">

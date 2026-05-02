@@ -456,7 +456,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
 }
 
 // ── PageCars ──────────────────────────────────────────────────────────────────
-function PageCars({ cars, sessionCfg, setSessionCfg }) {
+function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   const [query,     setQuery]     = useStateB('');
   const [brand,     setBrand]     = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(false);
@@ -536,7 +536,14 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {!carsLoaded && cars.length === 0 ? (
+        <div className="card">
+          <div className="loading-row">
+            <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
+            Cargando coches…
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="card"><div className="empty">No se encontraron coches con esos filtros.</div></div>
       ) : (
         <div className="car-grid">
@@ -565,7 +572,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg }) {
 }
 
 // ── PageTracks ────────────────────────────────────────────────────────────────
-function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
+function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   const [query,      setQuery]      = useStateB('');
   const [country,    setCountry]    = useStateB('all');
   const [showKunos,  setShowKunos]  = useStateB(false);
@@ -620,11 +627,20 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg }) {
         </div>
       )}
 
-      <div className="track-grid">
-        {filtered.map(t => (
-          <TrackCard key={t.id} track={t} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack}/>
-        ))}
-      </div>
+      {!tracksLoaded && tracks.length === 0 ? (
+        <div className="card">
+          <div className="loading-row">
+            <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
+            Cargando circuitos…
+          </div>
+        </div>
+      ) : (
+        <div className="track-grid">
+          {filtered.map(t => (
+            <TrackCard key={t.id} track={t} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack}/>
+          ))}
+        </div>
+      )}
 
       {modalTrack && (
         <TrackModal

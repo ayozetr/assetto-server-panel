@@ -1,7 +1,5 @@
 // Main App: state orchestration + routing
-const { useState: uS, useEffect: uE, useMemo: uM } = React;
-const ADMIN_TOKEN = document.querySelector('meta[name="x-admin-token"]')?.content || '';
-const adminHeaders = () => ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {};
+const { useState: uS, useEffect: uE, useMemo: uM, useRef: uR } = React;
 
 const PAGES = {
   dashboard: { title: 'Dashboard', component: 'PageDashboard' },
@@ -70,6 +68,10 @@ function App() {
   const [cars,   setCars]   = uS([]);
   const [tracks, setTracks] = uS([]);
 
+  const [dataLoaded, setDataLoaded] = uS({ cars: false, tracks: false, lapTimes: false });
+  const [backendDown, setBackendDown] = uS(false);
+  const failCount = uR(0);
+
   // Persist theme & user
   uE(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -101,17 +103,20 @@ function App() {
     fetch('/api/results')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setLapTimes(d); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setDataLoaded(d => ({...d, lapTimes: true})));
 
     fetch('/api/cars')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d) && d.length) setCars(d); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setDataLoaded(d => ({...d, cars: true})));
 
     fetch('/api/tracks')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d) && d.length) setTracks(d); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setDataLoaded(d => ({...d, tracks: true})));
 
     fetch('/api/players/history')
       .then(r => r.json())
@@ -130,6 +135,8 @@ function App() {
       fetch('/api/metrics')
         .then(r => r.json())
         .then(d => {
+          failCount.current = 0;
+          setBackendDown(false);
           setServer(s => ({
             ...s,
             status:   d.running ? (s.status === 'starting' || s.status === 'stopping' ? s.status : 'running') : 'stopped',
@@ -141,7 +148,10 @@ function App() {
           }));
           if (d.osInfo) setOsInfo(d.osInfo);
         })
-        .catch(() => {});
+        .catch(() => {
+          failCount.current += 1;
+          if (failCount.current >= 3) setBackendDown(true);
+        });
     };
     poll();
     const id = setInterval(poll, 4000);
@@ -167,6 +177,8 @@ function App() {
         sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}
         config={config} setConfig={setConfig}
         osInfo={osInfo}
+        dataLoaded={dataLoaded}
+        backendDown={backendDown}
       />
     </ToastProvider>
   );
@@ -174,6 +186,7 @@ function App() {
 
 function AppInner(props) {
   const { Sidebar, Topbar, useToast } = window.AppShell;
+  const I = window.AppIcons;
   const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesA;
   const { PageCars, PageTracks, PageSession }    = window.AppPagesB;
   const { PageConfig, PageUsers, PageProfile }   = window.AppPagesC;
@@ -185,6 +198,7 @@ function AppInner(props) {
     server, setServer, players, setPlayers, pastPlayers,
     lapTimes, users, setUsers, cars, tracks,
     sessionCfg, setSessionCfg, config, setConfig, setUser, osInfo,
+    dataLoaded, backendDown,
   } = props;
 
   const isAdmin = user.role === 'admin';
@@ -193,7 +207,7 @@ function AppInner(props) {
     if (!isAdmin) { toast.push('No tienes permisos para esta acción', 'warn'); return; }
     if (action === 'reload') {
       toast.push('Recargando configuración…', 'info');
-      fetch('/api/server/reload', { method: 'POST', headers: adminHeaders() })
+      fetch('/api/server/reload', { method: 'POST' })
         .then(r => r.json())
         .then(d => toast.push(d.error ? `Error: ${d.error}` : 'Señal de recarga enviada', d.error ? 'error' : 'success'))
         .catch(e => toast.push(`Error: ${e.message}`, 'error'));
@@ -203,7 +217,7 @@ function AppInner(props) {
     const transitional = action === 'stop' ? 'stopping' : 'starting';
     setServer(s => ({...s, status: transitional}));
     toast.push(`${labels[action]} servidor…`, 'info');
-    fetch(`/api/server/${action}`, { method: 'POST', headers: adminHeaders() })
+    fetch(`/api/server/${action}`, { method: 'POST' })
       .then(r => r.json())
       .then(d => { if (d.error) toast.push(`Error: ${d.error}`, 'error'); })
       .catch(e => toast.push(`Error de red: ${e.message}`, 'error'));
@@ -260,9 +274,9 @@ function AppInner(props) {
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
   else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
   else if (page === 'logs')      content = <PageLogs server={server}/>;
-  else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes}/>;
-  else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
-  else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}/>;
+  else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes}/>;
+  else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
+  else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
@@ -274,7 +288,7 @@ function AppInner(props) {
       <Sidebar
         page={page} setPage={setPage}
         user={user}
-        onLogout={() => setUser(null)}
+        onLogout={() => { fetch('/api/auth/logout', { method: 'POST' }).catch(()=>{}); setUser(null); }}
         playersCount={server.status === 'running' ? players.length : 0}
         osInfo={osInfo}
       />
@@ -285,7 +299,15 @@ function AppInner(props) {
           onServerAction={handleServerAction}
           user={user}
         />
-        <div className="content">{content}</div>
+        <div className="content">
+          {backendDown && (
+            <div className="alert-banner error">
+              <I.IconX size={14}/>
+              Backend no disponible — comprueba que el servidor sigue en ejecución. Los datos mostrados pueden estar desactualizados.
+            </div>
+          )}
+          {content}
+        </div>
       </div>
       <TweaksUI/>
     </div>

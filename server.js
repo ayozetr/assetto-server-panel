@@ -76,6 +76,7 @@ const MIME = {
   '.jsx':  'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg':  'image/svg+xml',
+  '.webp': 'image/webp',
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
   '.ico':  'image/x-icon',
@@ -330,12 +331,24 @@ function respond(res, status, mime, body, extraHeaders) {
   res.end(body);
 }
 
-function respondImage(res, data) {
+function respondImage(res, data, mime = 'image/png') {
   res.writeHead(200, {
-    'Content-Type':  'image/png',
+    'Content-Type':  mime,
     'Cache-Control': 'public, max-age=3600',
   });
   res.end(data);
+}
+
+function serveAssetFallback(res, candidates) {
+  const tryNext = (index) => {
+    if (index >= candidates.length) return json(res, 404, { error: 'Asset not found' });
+    const { path: p, mime } = candidates[index];
+    fs.readFile(p, (err, data) => {
+      if (err) tryNext(index + 1);
+      else respondImage(res, data, mime);
+    });
+  };
+  tryNext(0);
 }
 
 function json(res, status, data) {
@@ -942,8 +955,10 @@ async function apiCars(res) {
         if (skins.length > 0) {
           thumb = `/api/content/cars/${encodeURIComponent(id)}/skins/${encodeURIComponent(skins[0])}/preview`;
         } else {
-          const badgePath = path.join(AC_CARS_DIR, id, 'ui', 'badge.png');
-          try { await fsp.access(badgePath); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; } catch {}
+          try { await fsp.access(path.join(AC_CARS_DIR, id, 'ui', 'badge.webp')); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; }
+          catch {
+            try { await fsp.access(path.join(AC_CARS_DIR, id, 'ui', 'badge.png')); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; } catch {}
+          }
         }
 
         const brand = inferBrand(id, ui.brand || '');
@@ -1040,62 +1055,73 @@ async function apiTracks(res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
-// Serve car badge image (badge.png from ui folder)
+// Serve car badge image (badge.png/webp from ui folder)
 function apiCarThumb(carId, res) {
   if (!isValidContentId(carId)) return respond(res, 400, 'text/plain', 'Invalid ID');
-  const imgPath = path.join(AC_CARS_DIR, carId, 'ui', 'badge.png');
-  fs.readFile(imgPath, (err, data) => {
-    if (err) return respond(res, 404, 'text/plain', 'Not found');
-    respondImage(res, data);
-  });
+  const dir = path.join(AC_CARS_DIR, carId, 'ui');
+  serveAssetFallback(res, [
+    { path: path.join(dir, 'badge.webp'), mime: 'image/webp' },
+    { path: path.join(dir, 'badge.png'), mime: 'image/png' },
+  ]);
 }
 
-// Serve a specific car skin preview (skins/{name}/preview.jpg)
+// Serve a specific car skin preview (skins/{name}/preview.webp/jpg/png)
 function apiCarSkinPreview(carId, skinName, res) {
   if (!isValidContentId(carId) || !isValidSkinName(skinName))
     return respond(res, 400, 'text/plain', 'Invalid ID');
-  const imgPath = path.join(AC_CARS_DIR, carId, 'skins', skinName, 'preview.jpg');
-  if (!imgPath.startsWith(AC_CARS_DIR + path.sep))
+  const dir = path.join(AC_CARS_DIR, carId, 'skins', skinName);
+  if (!dir.startsWith(AC_CARS_DIR + path.sep))
     return respond(res, 403, 'text/plain', 'Forbidden');
-  fs.readFile(imgPath, (err, data) => {
-    if (err) return respond(res, 404, 'text/plain', 'Not found');
-    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' });
-    res.end(data);
-  });
+  serveAssetFallback(res, [
+    { path: path.join(dir, 'preview.webp'), mime: 'image/webp' },
+    { path: path.join(dir, 'preview.jpg'), mime: 'image/jpeg' },
+    { path: path.join(dir, 'preview.png'), mime: 'image/png' },
+  ]);
 }
 
-// Serve track preview image (preview.png — direct or first layout sub-folder)
+// Serve track preview image
 function apiTrackThumb(trackId, res) {
   if (!isValidContentId(trackId)) return respond(res, 400, 'text/plain', 'Invalid ID');
   const uiDir = path.join(AC_TRACKS_DIR, trackId, 'ui');
-  const direct = path.join(uiDir, 'preview.png');
 
-  fs.readFile(direct, (err, data) => {
-    if (!err) return respondImage(res, data);
+  const candidates = [
+    { path: path.join(uiDir, 'preview.webp'), mime: 'image/webp' },
+    { path: path.join(uiDir, 'preview.png'), mime: 'image/png' }
+  ];
 
-    // Try first layout sub-folder
-    fsp.readdir(uiDir, { withFileTypes: true }).then(entries => {
-      const dir = entries.find(e => e.isDirectory());
-      if (!dir) return respond(res, 404, 'text/plain', 'Not found');
-      fs.readFile(path.join(uiDir, dir.name, 'preview.png'), (e2, d2) => {
-        if (e2) return respond(res, 404, 'text/plain', 'Not found');
-        respondImage(res, d2);
-      });
-    }).catch(() => respond(res, 404, 'text/plain', 'Not found'));
-  });
+  const tryNext = (index) => {
+    if (index >= candidates.length) {
+      // Try first layout sub-folder
+      fsp.readdir(uiDir, { withFileTypes: true }).then(entries => {
+        const dir = entries.find(e => e.isDirectory());
+        if (!dir) return respond(res, 404, 'text/plain', 'Not found');
+        serveAssetFallback(res, [
+          { path: path.join(uiDir, dir.name, 'preview.webp'), mime: 'image/webp' },
+          { path: path.join(uiDir, dir.name, 'preview.png'), mime: 'image/png' }
+        ]);
+      }).catch(() => respond(res, 404, 'text/plain', 'Not found'));
+      return;
+    }
+    const { path: p, mime } = candidates[index];
+    fs.readFile(p, (err, data) => {
+      if (err) tryNext(index + 1);
+      else respondImage(res, data, mime);
+    });
+  };
+  tryNext(0);
 }
 
-// Serve a specific layout's preview.png
+// Serve a specific layout's preview.png/webp
 function apiTrackLayoutThumb(trackId, layout, res) {
   if (!isValidContentId(trackId) || !isValidContentId(layout))
     return respond(res, 400, 'text/plain', 'Invalid ID');
-  const imgPath = path.join(AC_TRACKS_DIR, trackId, 'ui', layout, 'preview.png');
-  if (!imgPath.startsWith(AC_TRACKS_DIR + path.sep))
+  const dir = path.join(AC_TRACKS_DIR, trackId, 'ui', layout);
+  if (!dir.startsWith(AC_TRACKS_DIR + path.sep))
     return respond(res, 403, 'text/plain', 'Forbidden');
-  fs.readFile(imgPath, (err, data) => {
-    if (err) return respond(res, 404, 'text/plain', 'Not found');
-    respondImage(res, data);
-  });
+  serveAssetFallback(res, [
+    { path: path.join(dir, 'preview.webp'), mime: 'image/webp' },
+    { path: path.join(dir, 'preview.png'), mime: 'image/png' }
+  ]);
 }
 
 // ── Player kick / ban ─────────────────────────────────────────────────────────

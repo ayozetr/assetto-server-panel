@@ -34,3 +34,5 @@ Thumbs.db
 # AI context — local only
 CLAUDE.md
 TASKS.md
+*.db-shm
+*.db-wal

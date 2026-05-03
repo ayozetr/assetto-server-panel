@@ -61,7 +61,7 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
             {/* Skin indicator */}
             {hasSkins && (
               <div style={{fontSize: 11, color:'var(--text-muted)'}}>
-                Diseño: <strong style={{color:'var(--text)', fontWeight:500}}>{car.skins[skinIdx]}</strong>
+                {t('cars.modal.skin')}: <strong style={{color:'var(--text)', fontWeight:500}}>{car.skins[skinIdx]}</strong>
                 {hasMultiple && <span style={{color:'var(--text-faint)', marginLeft: 6}}>{skinIdx + 1} / {car.skins.length}</span>}
               </div>
             )}
@@ -100,13 +100,13 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
             {hasSpecs && (
               <div style={{marginBottom: 16}}>
                 <div style={{fontSize:10.5, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10}}>
-                  Especificaciones
+                  {t('cars.modal.specs')}
                 </div>
                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 14px'}}>
-                  {car.specs.bhp      && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Potencia</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.bhp}</div></div>}
-                  {car.specs.torque   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Par motor</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.torque}</div></div>}
-                  {car.specs.weight   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Peso</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.weight}</div></div>}
-                  {car.specs.topspeed && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Vel. máx.</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.topspeed}</div></div>}
+                  {car.specs.bhp      && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>{t('cars.modal.bhp')}</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.bhp}</div></div>}
+                  {car.specs.torque   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>{t('cars.modal.torque')}</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.torque}</div></div>}
+                  {car.specs.weight   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>{t('cars.modal.weight')}</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.weight}</div></div>}
+                  {car.specs.topspeed && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>{t('cars.modal.topspeed')}</div><div style={{fontSize:13, fontWeight:500}}>{car.specs.topspeed}</div></div>}
                 </div>
               </div>
             )}
@@ -114,7 +114,7 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
             {car.description && (
               <div>
                 <div style={{fontSize:10.5, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8}}>
-                  Descripción
+                  {t('cars.modal.desc')}
                 </div>
                 <div style={{fontSize:11.5, color:'var(--text-muted)', lineHeight:1.65}}>
                   {car.description}
@@ -124,7 +124,7 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
 
             {!hasSpecs && !car.description && (
               <div style={{fontSize:12.5, color:'var(--text-faint)', lineHeight:1.6}}>
-                Sin información adicional disponible para este coche.
+                {t('cars.modal.empty')}
               </div>
             )}
 
@@ -136,11 +136,11 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
 
         {/* Footer */}
         <div className="modal-footer">
-          <button className="btn" onClick={onClose}>Cerrar</button>
+          <button className="btn" onClick={onClose}>{t('common.close')}</button>
           <div className="row" style={{gap:6, alignItems:'center'}}>
             {count > 0 && (
-              <button className="btn btn-sm" onClick={onRemove} title="Quitar un slot">
-                <I3.IconX size={12}/> Quitar
+              <button className="btn btn-sm" onClick={onRemove} title={t('cars.modal.btn_remove')}>
+                <I3.IconX size={12}/> {t('common.remove')}
               </button>
             )}
             <div style={{
@@ -153,8 +153,8 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
             }}>
               {count}
             </div>
-            <button className="btn btn-primary btn-sm" onClick={onAdd} title="Añadir un slot más">
-              <I3.IconPlus size={12}/> {count === 0 ? 'Añadir a sesión' : 'Añadir slot'}
+            <button className="btn btn-primary btn-sm" onClick={onAdd} title={t('cars.modal.btn_add_slot')}>
+              <I3.IconPlus size={12}/> {count === 0 ? t('cars.modal.btn_add') : t('cars.modal.btn_add_more')}
             </button>
           </div>
         </div>
@@ -336,25 +336,25 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose }) {
             {(length > 0 || pits > 0) && (
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:10.5, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10}}>
-                  Datos del circuito
+                  {t('tracks.modal.data')}
                 </div>
                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 14px'}}>
-                  {length > 0 && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Longitud</div><div style={{fontSize:13, fontWeight:500}}>{length} km</div></div>}
-                  {pits > 0   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>Pit boxes</div><div style={{fontSize:13, fontWeight:500}}>{pits}</div></div>}
+                  {length > 0 && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>{t('tracks.modal.length')}</div><div style={{fontSize:13, fontWeight:500}}>{length} km</div></div>}
+                  {pits > 0   && <div><div style={{fontSize:10, color:'var(--text-faint)'}}>{t('tracks.modal.pits')}</div><div style={{fontSize:13, fontWeight:500}}>{pits}</div></div>}
                 </div>
               </div>
             )}
             {desc && (
               <div>
                 <div style={{fontSize:10.5, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8}}>
-                  Descripción
+                  {t('cars.modal.desc')}
                 </div>
                 <div style={{fontSize:11.5, color:'var(--text-muted)', lineHeight:1.65}}>{desc}</div>
               </div>
             )}
             {!desc && length === 0 && (
               <div style={{fontSize:12.5, color:'var(--text-faint)', lineHeight:1.6}}>
-                Sin información adicional disponible para este circuito.
+                {t('tracks.modal.empty')}
               </div>
             )}
             <div className="mono" style={{fontSize:10, color:'var(--text-faint)', marginTop:14, wordBreak:'break-all'}}>
@@ -364,15 +364,15 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose }) {
         </div>
 
         <div className="modal-footer">
-          <button className="btn" onClick={onClose}>Cerrar</button>
+          <button className="btn" onClick={onClose}>{t('common.close')}</button>
           <button
             className="btn btn-primary"
             style={isActiveSelected ? {background:'transparent', borderColor:'var(--red)', color:'var(--red)'} : {}}
             onClick={selectAndClose}
           >
             {isActiveSelected
-              ? <><I3.IconCheck size={12}/> Seleccionado</>
-              : <><I3.IconCheck size={12}/> Seleccionar layout</>
+              ? <><I3.IconCheck size={12}/> {t('tracks.modal.btn_selected')}</>
+              : <><I3.IconCheck size={12}/> {t('tracks.modal.btn_select')}</>
             }
           </button>
         </div>
@@ -435,7 +435,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
           </div>
           <div style={{display:'flex', gap:4, alignItems:'center', flexShrink:0}}>
             {hasLayouts && <span className="badge" style={{fontSize:10}}>{track.layouts.length} layouts</span>}
-            {selected && <span className="badge badge-red"><I3.IconCheck size={10}/> Sel.</span>}
+            {selected && <span className="badge badge-red"><I3.IconCheck size={10}/> {t('tracks.card.sel')}</span>}
           </div>
         </div>
 
@@ -452,7 +452,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
         )}
         {hasLayouts && (
           <div style={{marginTop:6, fontSize:10.5, color:'var(--text-faint)'}}>
-            Clic para ver los {track.layouts.length} layouts
+            {t('tracks.card.click', { count: track.layouts.length })}
           </div>
         )}
 
@@ -464,6 +464,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
 
 // ── PageCars ──────────────────────────────────────────────────────────────────
 function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [query,     setQuery]     = useStateB('');
   const [brand,     setBrand]     = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(false);
@@ -497,21 +498,21 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Coches</h1>
+        <h1 className="page-title">{t('cars.title')}</h1>
         <p className="page-sub">
-          {cars.length} coches en <span className="mono">/content/cars</span>.
-          {selectedCount > 0 && <> · <strong style={{color:'var(--red)'}}>{selectedCount} seleccionado{selectedCount === 1 ? '' : 's'}</strong> para la próxima sesión.</>}
+          {cars.length} {t('cars.sub_count')} <span className="mono">/content/cars</span>.
+          {selectedCount > 0 && <> · <strong style={{color:'var(--red)'}}>{selectedCount} {t('cars.sub_sel')}</strong></>}
         </p>
       </div>
 
       <div className="toolbar">
         <div className="search">
           <I3.IconSearch size={14} className="search-icon"/>
-          <input className="input" placeholder="Buscar por marca, modelo o ID…" value={query} onChange={e => setQuery(e.target.value)}/>
+          <input className="input" placeholder={t('cars.search')} value={query} onChange={e => setQuery(e.target.value)}/>
         </div>
         {kunosCount > 0 && (
-          <label className="toggle-wrap" title={`${kunosCount} coches de Kunos`}>
-            <span className="toggle-label">Coches de Kunos ({kunosCount})</span>
+          <label className="toggle-wrap" title={t('cars.kunos_hint', { count: kunosCount })}>
+            <span className="toggle-label">{t('cars.kunos')} ({kunosCount})</span>
             <span className="toggle">
               <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
               <span className="toggle-track"></span>
@@ -522,21 +523,21 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
         <div className="right row" style={{gap: 6}}>
           {selectedCount > 0 && (
             <button className="btn btn-sm" onClick={() => setSessionCfg(c => ({...c, carIds: []}))}>
-              <I3.IconX size={11}/> Limpiar selección
+              <I3.IconX size={11}/> {t('cars.btn_clear')}
             </button>
           )}
           <button className="btn btn-sm" onClick={() => setSessionCfg(c => ({...c, carIds: filtered.map(x => x.id)}))}>
-            Seleccionar visibles
+            {t('cars.btn_select_all')}
           </button>
         </div>
       </div>
       {brands.length > 1 && (
         <div className="toolbar" style={{paddingTop: 0, gap: 8, flexWrap:'wrap'}}>
           <div className="tag-row" style={{flexWrap:'wrap'}}>
-            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>Marca:</span>
+            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>{t('cars.brand')}:</span>
             {brands.map(b => (
               <button key={b} className={`tag ${brand === b ? 'active' : ''}`} onClick={() => setBrand(b)}>
-                {b === 'all' ? 'Todas' : b}
+                {b === 'all' ? t('cars.brand_all') : b}
               </button>
             ))}
           </div>
@@ -547,11 +548,11 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
         <div className="card">
           <div className="loading-row">
             <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
-            Cargando coches…
+            {t('common.loading')}
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card"><div className="empty">No se encontraron coches con esos filtros.</div></div>
+        <div className="card"><div className="empty">{t('common.not_found')}</div></div>
       ) : (
         <div className="car-grid">
           {filtered.map(c => (
@@ -572,6 +573,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
           onAdd={() => addCar(modalCar.id)}
           onRemove={() => removeCar(modalCar.id)}
           onClose={() => setModalCar(null)}
+          t={t}
         />
       )}
     </>
@@ -580,6 +582,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
 
 // ── PageTracks ────────────────────────────────────────────────────────────────
 function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [query,      setQuery]      = useStateB('');
   const [country,    setCountry]    = useStateB('all');
   const [showKunos,  setShowKunos]  = useStateB(false);
@@ -601,18 +604,18 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Tramos</h1>
-        <p className="page-sub">{tracks.length} circuitos en <span className="mono">/content/tracks</span>. Selecciona uno para la próxima sesión.</p>
+        <h1 className="page-title">{t('tracks.title')}</h1>
+        <p className="page-sub">{tracks.length} {t('tracks.sub')} <span className="mono">/content/tracks</span>. {t('tracks.sub_select')}</p>
       </div>
 
       <div className="toolbar">
         <div className="search">
           <I3.IconSearch size={14} className="search-icon"/>
-          <input className="input" placeholder="Buscar circuito…" value={query} onChange={e => setQuery(e.target.value)}/>
+          <input className="input" placeholder={t('tracks.search')} value={query} onChange={e => setQuery(e.target.value)}/>
         </div>
         {kunosCount > 0 && (
-          <label className="toggle-wrap" title={`${kunosCount} tramos de Kunos`}>
-            <span className="toggle-label">Tramos de Kunos ({kunosCount})</span>
+          <label className="toggle-wrap" title={t('tracks.kunos_hint', { count: kunosCount })}>
+            <span className="toggle-label">{t('tracks.kunos')} ({kunosCount})</span>
             <span className="toggle">
               <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
               <span className="toggle-track"></span>
@@ -624,10 +627,10 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
       {countries.length > 1 && (
         <div className="toolbar" style={{paddingTop: 0, gap: 8, flexWrap:'wrap'}}>
           <div className="tag-row" style={{flexWrap:'wrap'}}>
-            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>País:</span>
+            <span style={{fontSize:11, color:'var(--text-faint)', marginRight:2}}>{t('tracks.country')}:</span>
             {countries.map(c => (
               <button key={c} className={`tag ${country === c ? 'active' : ''}`} onClick={() => setCountry(c)}>
-                {c === 'all' ? 'Todos' : c}
+                {c === 'all' ? t('tracks.country_all') : c}
               </button>
             ))}
           </div>
@@ -638,13 +641,15 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
         <div className="card">
           <div className="loading-row">
             <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
-            Cargando circuitos…
+            {t('common.loading')}
           </div>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="card"><div className="empty">{t('common.not_found')}</div></div>
       ) : (
         <div className="track-grid">
           {filtered.map(t => (
-            <TrackCard key={t.id} track={t} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack}/>
+            <TrackCard key={t.id} track={t} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack} t={t}/>
           ))}
         </div>
       )}
@@ -655,6 +660,7 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
           sessionCfg={sessionCfg}
           setSessionCfg={setSessionCfg}
           onClose={() => setModalTrack(null)}
+          t={t}
         />
       )}
     </>
@@ -663,6 +669,7 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
 
 // ── PageSession ───────────────────────────────────────────────────────────────
 function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [confirmApply, setConfirmApply] = useStateB(false);
   const track        = tracks.find(t => t.id === sessionCfg.trackId);
   // Build unique car list with counts (preserves order of first appearance)
@@ -681,8 +688,8 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Configurador de sesión</h1>
-        <p className="page-sub">Define los parámetros para la próxima sesión multijugador.</p>
+        <h1 className="page-title">{t('sess.title')}</h1>
+        <p className="page-sub">{t('sess.sub')}</p>
       </div>
 
       <div className="grid-2" style={{gridTemplateColumns: '1.4fr 1fr', alignItems: 'start'}}>
@@ -690,24 +697,24 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
           <div className="card">
             <div className="card-header">
               <I3.IconFlag size={14} style={{color:'var(--red)'}}/>
-              <div className="card-title">Modo y duración</div>
+              <div className="card-title">{t('sess.mode_title')}</div>
             </div>
             <div className="card-body col" style={{gap: 16}}>
               <div className="field">
-                <label className="field-label">Modo de sesión</label>
+                <label className="field-label">{t('sess.mode')}</label>
                 <div className="segmented" style={{alignSelf: 'flex-start'}}>
-                  {['Práctica', 'Quali', 'Carrera'].map(m => (
+                  {['Practice', 'Qualify', 'Race'].map(m => (
                     <button key={m} className={sessionCfg.mode === m ? 'active' : ''} onClick={() => set('mode', m)}>{m}</button>
                   ))}
                 </div>
               </div>
               <div className="grid-2">
                 <div className="field">
-                  <label className="field-label">{sessionCfg.mode === 'Carrera' ? 'Vueltas' : 'Duración (min)'}</label>
+                  <label className="field-label">{sessionCfg.mode === 'Race' ? t('sess.laps') : t('sess.duration')}</label>
                   <input className="input" type="number" min="1" value={sessionCfg.laps} onChange={e => set('laps', Number(e.target.value))} disabled={!isAdmin}/>
                 </div>
                 <div className="field">
-                  <label className="field-label">Slots máximos</label>
+                  <label className="field-label">{t('sess.slots')}</label>
                   <input className="input" type="number" min="2" max="64" value={sessionCfg.slots} onChange={e => set('slots', Number(e.target.value))} disabled={!isAdmin}/>
                 </div>
               </div>
@@ -717,33 +724,33 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
           <div className="card">
             <div className="card-header">
               <I3.IconCloud size={14} style={{color:'var(--red)'}}/>
-              <div className="card-title">Condiciones</div>
+              <div className="card-title">{t('sess.cond_title')}</div>
             </div>
             <div className="card-body col" style={{gap: 16}}>
               <div className="grid-2">
                 <div className="field">
-                  <label className="field-label">Hora del día</label>
+                  <label className="field-label">{t('sess.time')}</label>
                   <div className="row" style={{gap: 10}}>
                     <input type="range" min="0" max="23" value={sessionCfg.time} onChange={e => set('time', Number(e.target.value))} style={{flex: 1, accentColor: 'var(--red)'}} disabled={!isAdmin}/>
                     <div className="mono" style={{minWidth: 44, textAlign:'right'}}>{String(sessionCfg.time).padStart(2,'0')}:00</div>
                   </div>
                 </div>
                 <div className="field">
-                  <label className="field-label">Clima</label>
+                  <label className="field-label">{t('sess.weather')}</label>
                   <select className="select" value={sessionCfg.weather} onChange={e => set('weather', e.target.value)} disabled={!isAdmin}>
-                    <option>Soleado</option><option>Nublado</option>
-                    <option>Niebla ligera</option><option>Lluvia ligera</option>
-                    <option>Tormenta</option>
+                    <option>Clear</option><option>Cloudy</option>
+                    <option>Fog</option><option>Light Rain</option>
+                    <option>Thunderstorm</option>
                   </select>
                 </div>
               </div>
               <div className="grid-2">
                 <div className="field">
-                  <label className="field-label">Temp. ambiente: {sessionCfg.airTemp}°C</label>
+                  <label className="field-label">{t('sess.temp')}: {sessionCfg.airTemp}°C</label>
                   <input type="range" min="5" max="40" value={sessionCfg.airTemp} onChange={e => set('airTemp', Number(e.target.value))} style={{accentColor: 'var(--red)'}} disabled={!isAdmin}/>
                 </div>
                 <div className="field">
-                  <label className="field-label">Daños: {sessionCfg.damage}%</label>
+                  <label className="field-label">{t('sess.damage')}: {sessionCfg.damage}%</label>
                   <input type="range" min="0" max="100" step="10" value={sessionCfg.damage} onChange={e => set('damage', Number(e.target.value))} style={{accentColor: 'var(--red)'}} disabled={!isAdmin}/>
                 </div>
               </div>
@@ -753,13 +760,13 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
           <div className="card">
             <div className="card-header">
               <I3.IconShield size={14} style={{color:'var(--red)'}}/>
-              <div className="card-title">Asistencias y penalizaciones</div>
+              <div className="card-title">{t('sess.assist_title')}</div>
             </div>
             <div className="card-body col" style={{gap: 12}}>
               {[
-                ['ABS', 'abs'], ['Control de tracción', 'tc'], ['Cambio automático', 'autoShift'],
-                ['Línea ideal', 'ideal'], ['Penalizaciones activas', 'penalties'],
-                ['Desgaste de neumáticos', 'tireWear'], ['Consumo de combustible', 'fuel'],
+                ['ABS', 'abs'], [t('sess.tc'), 'tc'], [t('sess.auto_shift'), 'autoShift'],
+                [t('sess.ideal_line'), 'ideal'], [t('sess.penalties'), 'penalties'],
+                [t('sess.tire_wear'), 'tireWear'], [t('sess.fuel'), 'fuel'],
               ].map(([label, key]) => (
                 <div className="row-between" key={key}>
                   <span style={{fontSize: 13}}>{label}</span>
@@ -774,7 +781,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
           <div className="card">
             <div className="card-header">
               <I3.IconTrack size={14} style={{color:'var(--red)'}}/>
-              <div className="card-title">Tramo seleccionado</div>
+              <div className="card-title">{t('sess.track_title')}</div>
             </div>
             {track ? (
               <div style={{padding: '0 18px 14px'}}>
@@ -794,20 +801,20 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 </div>
               </div>
             ) : (
-              <div className="empty">Ningún tramo seleccionado.</div>
+              <div className="empty">{t('sess.no_track')}</div>
             )}
           </div>
 
           <div className="card">
             <div className="card-header">
               <I3.IconCar size={14} style={{color:'var(--red)'}}/>
-              <div className="card-title">Coches permitidos</div>
+              <div className="card-title">{t('sess.cars_title')}</div>
               <span className="badge right">{sessionCfg.carIds.length} slots</span>
             </div>
             <div style={{maxHeight: 220, overflowY: 'auto'}}>
               {selectedCars.length === 0 ? (
                 <div className="empty" style={{padding: '28px 20px'}}>
-                  Sin coches seleccionados. Ve a <strong>Coches</strong> para elegirlos.
+                  {t('sess.no_cars')}
                 </div>
               ) : selectedCars.map(({car: c, cnt}) => (
                 <div key={c.id} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)'}}>
@@ -833,7 +840,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
 
           {isAdmin && (
             <button className="btn btn-primary" style={{padding: '10px', justifyContent:'center'}} onClick={()=>setConfirmApply(true)}>
-              <I3.IconCheck size={14}/> Aplicar configuración y reiniciar sesión
+              <I3.IconCheck size={14}/> {t('sess.btn_apply')}
             </button>
           )}
         </div>
@@ -844,18 +851,15 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-header">
               <I3.IconFlag size={15} style={{color:'var(--red)'}}/>
-              <div className="modal-title">Aplicar sesión</div>
+              <div className="modal-title">{t('sess.modal.title')}</div>
             </div>
             <div className="modal-body">
-              <p style={{margin:0, fontSize:13, color:'var(--text-muted)'}}>
-                Se escribirá la nueva configuración en <code>server_cfg.ini</code>.
-                Los cambios solo surten efecto después de <strong>reiniciar el servidor</strong>.
-              </p>
+              <p style={{margin:0, fontSize:13, color:'var(--text-muted)'}} dangerouslySetInnerHTML={{__html: t('sess.modal.msg')}}></p>
             </div>
             <div className="modal-footer">
-              <button className="btn" onClick={()=>setConfirmApply(false)}>Cancelar</button>
+              <button className="btn" onClick={()=>setConfirmApply(false)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={()=>{ onApply(); setConfirmApply(false); }}>
-                <I3.IconCheck size={13}/> Confirmar y aplicar
+                <I3.IconCheck size={13}/> {t('sess.modal.confirm')}
               </button>
             </div>
           </div>

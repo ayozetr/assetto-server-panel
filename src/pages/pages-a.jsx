@@ -4,6 +4,7 @@ const I2 = window.AppIcons;
 
 // Dashboard
 function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   // Prefer the live track reported by the running server; fall back to configured
   const liveTrackId    = server.status === 'running' && server.liveTrack ? server.liveTrack : sessionCfg.trackId;
   const track          = tracks.find(t => t.id === liveTrackId) || tracks.find(t => t.id === sessionCfg.trackId) || tracks[0];
@@ -25,27 +26,27 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Dashboard</h1>
-        <p className="page-sub">Resumen del servidor en tiempo real.</p>
+        <h1 className="page-title">{t('dash.title')}</h1>
+        <p className="page-sub">{t('dash.metrics')}</p>
       </div>
 
       <div className="kpi-grid">
         <div className="kpi">
-          <div className="kpi-label">Estado</div>
+          <div className="kpi-label">{t('dash.metrics')}</div>
           <div className="kpi-value" style={{fontSize: 20, paddingTop: 4}}>
-            {server.status === 'running' && <span style={{color: '#16a34a'}}>● En ejecución</span>}
-            {server.status === 'stopped' && <span style={{color: 'var(--text-muted)'}}>● Detenido</span>}
-            {(server.status === 'starting' || server.status === 'stopping') && <span style={{color: '#f59e0b'}}>● {server.status === 'starting' ? 'Arrancando' : 'Deteniendo'}</span>}
+            {server.status === 'running' && <span style={{color: '#16a34a'}}>● {t('topbar.running')}</span>}
+            {server.status === 'stopped' && <span style={{color: 'var(--text-muted)'}}>● {t('topbar.stopped')}</span>}
+            {(server.status === 'starting' || server.status === 'stopping') && <span style={{color: '#f59e0b'}}>● {server.status === 'starting' ? t('topbar.starting') : t('topbar.stopping')}</span>}
           </div>
-          <div className="kpi-meta">Uptime: {server.uptime}</div>
+          <div className="kpi-meta">{t('dash.uptime')}: {server.uptime}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Jugadores</div>
+          <div className="kpi-label">{t('dash.players')}</div>
           <div className="kpi-value">{server.players}<span className="unit">/ {server.slots}</span></div>
           <div className="bar"><div className="bar-fill" style={{width: `${(server.players/server.slots)*100}%`}}></div></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">CPU</div>
+          <div className="kpi-label">{t('dash.cpu')}</div>
           <div className="kpi-value">{server.cpu}<span className="unit">%</span></div>
           <div className="kpi-meta" title={server.cpuName} style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
             <I2.IconChip size={10} style={{verticalAlign:'-1px', marginRight: 4}}/>{server.cpuName}
@@ -53,9 +54,9 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           <div className="bar" style={{marginTop: 6}}><div className="bar-fill" style={{width: `${server.cpu}%`}}></div></div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">RAM</div>
+          <div className="kpi-label">{t('dash.ram')}</div>
           <div className="kpi-value">{server.ram}<span className="unit">MB</span></div>
-          <div className="kpi-meta">de {server.ramTotal || '—'} MB totales</div>
+          <div className="kpi-meta">{server.ramTotal || '—'} MB</div>
         </div>
       </div>
 
@@ -63,14 +64,14 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         <div className="card">
           <div className="card-header">
             <I2.IconFlag size={14} style={{color:'var(--red)'}}/>
-            <div className="card-title">Sesión actual</div>
+            <div className="card-title">{t('dash.session')}</div>
             {server.status === 'running' && server.liveTrack && (
-              <span className="badge badge-green right">EN VIVO</span>
+              <span className="badge badge-green right">LIVE</span>
             )}
           </div>
           <div className="card-body">
             {!track ? (
-              <div className="muted" style={{fontSize: 13, padding: '4px 0 8px'}}>Cargando información de sesión…</div>
+              <div className="muted" style={{fontSize: 13, padding: '4px 0 8px'}}>{t('common.loading')}</div>
             ) : (
               <>
                 <div className="row" style={{gap: 14}}>
@@ -83,8 +84,8 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     <div style={{fontSize: 12, color: 'var(--text-muted)'}}>{track.city || track.loc} · {track.length} km · {sessionCfg.layout}</div>
                     <div className="row" style={{marginTop: 8, gap: 6}}>
                       <span className="badge badge-red">{sessionCfg.mode}</span>
-                      <span className="badge">{carsCount} {carsCount === 1 ? 'coche' : 'coches'}</span>
-                      <span className="badge">{sessionCfg.laps} vueltas</span>
+                      <span className="badge">{carsCount}</span>
+                      <span className="badge">{sessionCfg.laps} {t('dash.laps')}</span>
                     </div>
                   </div>
                 </div>
@@ -96,21 +97,21 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     fontSize: 11.5, color: 'var(--text-muted)',
                   }}>
                     <I2.IconSettings size={10} style={{verticalAlign:'-1px', marginRight: 4}}/>
-                    Configurado: <strong style={{color:'var(--text)'}}>{configuredTrack}</strong> · Pendiente de reinicio
+                    <strong style={{color:'var(--text)'}}>{configuredTrack}</strong>
                   </div>
                 )}
                 <div className="divider"></div>
                 <div className="grid-3">
                   <div>
-                    <div className="field-label">Hora</div>
+                    <div className="field-label">{t('dash.time')}</div>
                     <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.time}:00</div>
                   </div>
                   <div>
-                    <div className="field-label">Clima</div>
+                    <div className="field-label">Weather</div>
                     <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.weather}</div>
                   </div>
                   <div>
-                    <div className="field-label">Daños</div>
+                    <div className="field-label">Damage</div>
                     <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.damage}%</div>
                   </div>
                 </div>
@@ -122,11 +123,11 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         <div className="card">
           <div className="card-header">
             <I2.IconPlayers size={14} style={{color:'var(--red)'}}/>
-            <div className="card-title">Jugadores conectados</div>
+            <div className="card-title">{t('dash.players')}</div>
             <span className="badge right">{players.length}</span>
           </div>
           {players.length === 0 ? (
-            <div className="empty">Nadie está jugando ahora mismo.</div>
+            <div className="empty">{t('dash.no_players')}</div>
           ) : (
             <div>
               {players.slice(0, 5).map((p, i) => (
@@ -148,10 +149,10 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         <div className="card">
           <div className="card-header">
             <I2.IconClock size={14} style={{color:'var(--red)'}}/>
-            <div className="card-title">Actividad reciente</div>
+            <div className="card-title">Activity</div>
           </div>
           {activity.length === 0 ? (
-            <div className="empty" style={{padding: '28px 20px'}}>Sin actividad registrada.</div>
+            <div className="empty" style={{padding: '28px 20px'}}>{t('common.not_found')}</div>
           ) : (
             <div style={{padding: '4px 0'}}>
               {activity.map((it, i) => {
@@ -176,6 +177,7 @@ const fmtMs = window.AppUtils.fmtMs;
 
 // Players page
 function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, onKick, onBan }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [players, setPlayers] = useState(initialPlayers);
   const [historySearch, setHistorySearch] = useState('');
   useEffect(() => {
@@ -202,24 +204,24 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
       <div className="card">
         <div className="card-header">
           <I2P.IconHistory size={14} style={{color:'var(--red)'}}/>
-          <div className="card-title">Jugadores anteriores</div>
+          <div className="card-title">{t('pl.history')}</div>
           <span className="badge right">{filteredPast.length}</span>
           <div className="search right" style={{maxWidth:200}}>
             <I2P.IconSearch size={12} className="search-icon"/>
-            <input className="input" placeholder="Buscar jugador…" value={historySearch}
+            <input className="input" placeholder="..." value={historySearch}
               onChange={e=>setHistorySearch(e.target.value)} style={{height:28,fontSize:12}}/>
           </div>
         </div>
         <table className="table">
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Último coche</th>
-              <th style={{width: 80}}>Sesiones</th>
-              <th style={{width: 80}}>Vueltas</th>
-              <th style={{width: 110}}>Mejor vuelta</th>
-              <th style={{width: 100}}>Tiempo total</th>
-              <th style={{width: 160}}>Última conexión</th>
+              <th>{t('pl.col.driver')}</th>
+              <th>{t('pl.col.car')}</th>
+              <th style={{width: 80}}>Sessions</th>
+              <th style={{width: 80}}>Laps</th>
+              <th style={{width: 110}}>Best Lap</th>
+              <th style={{width: 100}}>Time</th>
+              <th style={{width: 160}}>{t('pl.hist_col.date')}</th>
               {isAdmin && <th style={{width: 80}}></th>}
             </tr>
           </thead>
@@ -243,7 +245,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                         {p.steam && (
                           <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
                             style={{display:'flex', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
-                            title="Ver perfil de Steam">
+                            title="Steam">
                             <I2P.IconSteam size={11}/>
                           </a>
                         )}
@@ -273,11 +275,11 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
     return (
       <>
         <div className="page-header">
-          <h1 className="page-title">Jugadores</h1>
-          <p className="page-sub">Conectados al servidor en este momento.</p>
+          <h1 className="page-title">{t('pl.title')}</h1>
+          <p className="page-sub">{t('pl.sub')}</p>
         </div>
         <div className="card">
-          <div className="empty">El servidor no está en ejecución.</div>
+          <div className="empty">{t('topbar.stopped')}</div>
         </div>
         {renderPast}
       </>
@@ -286,25 +288,25 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Jugadores</h1>
-        <p className="page-sub">{players.length} de {server.slots} slots ocupados.</p>
+        <h1 className="page-title">{t('pl.title')}</h1>
+        <p className="page-sub">{players.length} / {server.slots}</p>
       </div>
       <div className="card">
         <div className="card-header">
           <I2P.IconPlayers size={14} style={{color:'var(--red)'}}/>
-          <div className="card-title">Conectados ahora</div>
-          <span className="badge badge-green right">{players.length} en línea</span>
+          <div className="card-title">{t('pl.online', {count: players.length})}</div>
+          <span className="badge badge-green right">{players.length}</span>
         </div>
         <table className="table">
           <thead>
             <tr>
               <th style={{width: 40}}>#</th>
-              <th>Nombre</th>
-              <th>Coche</th>
-              <th style={{width: 80}}>Vueltas</th>
-              <th style={{width: 110}}>Mejor</th>
-              <th style={{width: 110}}>Última</th>
-              <th style={{width: 70}}>Ping</th>
+              <th>{t('pl.col.driver')}</th>
+              <th>{t('pl.col.car')}</th>
+              <th style={{width: 80}}>Laps</th>
+              <th style={{width: 110}}>Best</th>
+              <th style={{width: 110}}>Last</th>
+              <th style={{width: 70}}>{t('pl.col.ping')}</th>
               {isAdmin && <th style={{width: 140}}></th>}
             </tr>
           </thead>
@@ -322,7 +324,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                     {p.steam && (
                       <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
                         style={{display:'flex', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
-                        title="Ver perfil de Steam">
+                        title="Steam">
                         <I2P.IconSteam size={11}/>
                       </a>
                     )}
@@ -341,10 +343,10 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                   <td>
                     <div className="row" style={{gap: 4}}>
                       <button className="btn btn-sm" onClick={() => onKick(p)}>
-                        <I2P.IconKick size={12}/> Kick
+                        <I2P.IconKick size={12}/> {t('pl.kick')}
                       </button>
                       <button className="btn btn-sm btn-danger" onClick={() => onBan(p)}>
-                        Ban
+                        {t('pl.ban')}
                       </button>
                     </div>
                   </td>
@@ -361,6 +363,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
 
 // Logs page
 function PageLogs({ server }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState('all');
   const [logs, setLogs] = useState([]);
@@ -390,23 +393,23 @@ function PageLogs({ server }) {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Logs en vivo</h1>
-        <p className="page-sub">Salida de la consola del servidor con filtrado por nivel.</p>
+        <h1 className="page-title">{t('log.title')}</h1>
+        <p className="page-sub">{t('log.sub')}</p>
       </div>
       <div className="toolbar">
         <div className="segmented">
           {['all', 'info', 'ok', 'warn', 'error'].map(f => (
             <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'Todo' : f.toUpperCase()}
+              {f === 'all' ? 'All' : f.toUpperCase()}
             </button>
           ))}
         </div>
         <div className="right row" style={{gap: 6}}>
           <button className="btn btn-sm" onClick={() => setPaused(p => !p)}>
-            {paused ? <><I2.IconPlay size={11}/> Reanudar</> : <><I2.IconStop size={11}/> Pausar</>}
+            {paused ? <><I2.IconPlay size={11}/> Play</> : <><I2.IconStop size={11}/> Pause</>}
           </button>
           <button className="btn btn-sm" onClick={() => setLogs([])}>
-            <I2.IconTrash size={11}/> Limpiar
+            <I2.IconTrash size={11}/> {t('log.clear')}
           </button>
           <button className="btn btn-sm" onClick={() => {
             const text = filtered.map(l => `[${l.time}] [${l.lvl.toUpperCase()}] [${l.tag}] ${l.msg}`).join('\n');
@@ -415,13 +418,13 @@ function PageLogs({ server }) {
             a.download = `ac-logs-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
             a.click();
           }}>
-            <I2.IconDownload size={11}/> Exportar
+            <I2.IconDownload size={11}/> Export
           </button>
         </div>
       </div>
 
       <div className="logs" ref={ref}>
-        {filtered.length === 0 && <div style={{color:'#71717a'}}>Sin entradas.</div>}
+        {filtered.length === 0 && <div style={{color:'#71717a'}}>{t('log.empty')}</div>}
         {filtered.map(l => (
           <div className="logs-line" key={l.id}>
             <span className="logs-time">{l.time}</span>

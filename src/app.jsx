@@ -22,6 +22,14 @@ function App() {
     try { return JSON.parse(localStorage.getItem('ac-user')); } catch { return null; }
   });
   const [page, setPage] = uS('dashboard');
+  const [langNonce, setLangNonce] = uS(0);
+
+  // Force re-render on lang change
+  uE(() => {
+    const handler = () => setLangNonce(n => n + 1);
+    window.addEventListener('ac-lang-change', handler);
+    return () => window.removeEventListener('ac-lang-change', handler);
+  }, []);
 
   const [server, setServer] = uS({
     status: 'stopped',
@@ -162,11 +170,14 @@ function App() {
 
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };
 
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+
   if (!user) return <Login onLogin={setUser}/>;
 
   return (
     <ToastProvider>
       <AppInner
+        key={`appinner-${langNonce}`}
         user={user} setUser={setUser}
         page={page} setPage={setPage}
         theme={theme} setTheme={setTheme}
@@ -203,26 +214,27 @@ function AppInner(props) {
     dataLoaded, backendDown,
   } = props;
 
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const isAdmin = user.role === 'admin';
 
   const handleServerAction = (action) => {
-    if (!isAdmin) { toast.push('No tienes permisos para esta acción', 'warn'); return; }
+    if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
     if (action === 'reload') {
-      toast.push('Recargando configuración…', 'info');
+      toast.push(t('toast.reload_config'), 'info');
       fetch('/api/server/reload', { method: 'POST' })
         .then(r => r.json())
-        .then(d => toast.push(d.error ? `Error: ${d.error}` : 'Señal de recarga enviada', d.error ? 'error' : 'success'))
-        .catch(e => toast.push(`Error: ${e.message}`, 'error'));
+        .then(d => toast.push(d.error ? `${t('common.error')}: ${d.error}` : t('toast.reload_sent'), d.error ? 'error' : 'success'))
+        .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
       return;
     }
-    const labels = { start: 'Arrancando', stop: 'Deteniendo', restart: 'Reiniciando' };
     const transitional = action === 'stop' ? 'stopping' : 'starting';
     setServer(s => ({...s, status: transitional}));
-    toast.push(`${labels[action]} servidor…`, 'info');
+    const msgMap = { start: t('toast.start_server'), stop: t('toast.stop_server'), restart: t('toast.restart_server') };
+    toast.push(msgMap[action], 'info');
     fetch(`/api/server/${action}`, { method: 'POST' })
       .then(r => r.json())
-      .then(d => { if (d.error) toast.push(`Error: ${d.error}`, 'error'); })
-      .catch(e => toast.push(`Error de red: ${e.message}`, 'error'));
+      .then(d => { if (d.error) toast.push(`${t('common.error')}: ${d.error}`, 'error'); })
+      .catch(e => toast.push(`${t('common.net_error')}: ${e.message}`, 'error'));
   };
 
   const handleKick = (p) => {
@@ -233,7 +245,7 @@ function AppInner(props) {
     }).catch(() => {});
     setPlayers(ps => ps.filter(x => x.id !== p.id));
     setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
-    toast.push(`${p.name} expulsado del servidor`, 'success');
+    toast.push(`${p.name} ${t('toast.kick')}`, 'success');
   };
   const handleBan = (p) => {
     fetch('/api/players/ban', {
@@ -242,8 +254,8 @@ function AppInner(props) {
       body: JSON.stringify({ guid: p.steam }),
     })
       .then(r => r.json())
-      .then(d => toast.push(d.error ? `Error al banear: ${d.error}` : `${p.name} añadido a blacklist`, d.error ? 'error' : 'success'))
-      .catch(e => toast.push(`Error: ${e.message}`, 'error'));
+      .then(d => toast.push(d.error ? `${t('common.error')}: ${d.error}` : `${p.name} ${t('toast.ban')}`, d.error ? 'error' : 'success'))
+      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
     setPlayers(ps => ps.filter(x => x.id !== p.id));
     setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
   };
@@ -259,8 +271,8 @@ function AppInner(props) {
       }),
     })
       .then(r => r.json())
-      .then(d => toast.push(d.error ? `Error: ${d.error}` : 'Sesión escrita en server_cfg.ini — reinicia para aplicar', d.error ? 'error' : 'success'))
-      .catch(e => toast.push(`Error: ${e.message}`, 'error'));
+      .then(d => toast.push(d.error ? `${t('common.error')}: ${d.error}` : t('toast.session_apply'), d.error ? 'error' : 'success'))
+      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
   };
   const handleSaveConfig = () =>
     fetch('/api/config', {
@@ -269,8 +281,8 @@ function AppInner(props) {
       body: JSON.stringify(config),
     })
       .then(r => r.json())
-      .then(() => toast.push('Configuración guardada', 'success'))
-      .catch(() => { toast.push('Error al guardar configuración', 'error'); throw new Error('save failed'); });
+      .then(() => toast.push(t('toast.config_saved'), 'success'))
+      .catch(() => { toast.push(t('common.error'), 'error'); throw new Error('save failed'); });
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
@@ -283,7 +295,7 @@ function AppInner(props) {
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
   else if (page === 'profile')   content = <PageProfile user={user}/>;
-  else content = <div className="card" style={{margin: '32px 0'}}><div className="empty">Página no encontrada.</div></div>;
+  else content = <div className="card" style={{margin: '32px 0'}}><div className="empty">{t('common.not_found')}</div></div>;
 
   return (
     <div className="app">
@@ -305,7 +317,7 @@ function AppInner(props) {
           {backendDown && (
             <div className="alert-banner error">
               <I.IconX size={14}/>
-              Backend no disponible — comprueba que el servidor sigue en ejecución. Los datos mostrados pueden estar desactualizados.
+              {t('common.backend_down')}
             </div>
           )}
           {content}
@@ -348,21 +360,23 @@ function TweaksUI() {
     }
   }, [tw]);
 
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+
   return (
-    <TweaksPanel title="Tweaks">
-      <TweakSection label="Acento">
-        <TweakColor label="Color rojo" value={tw.redHue} onChange={v => setTw('redHue', v)}/>
+    <TweaksPanel title={t('tweaks.title')}>
+      <TweakSection label={t('tweaks.accent')}>
+        <TweakColor label={t('tweaks.red')} value={tw.redHue} onChange={v => setTw('redHue', v)}/>
       </TweakSection>
-      <TweakSection label="Forma">
-        <TweakSlider label="Radio de bordes" value={tw.radius} onChange={v => setTw('radius', v)} min={0} max={16} step={1} unit="px"/>
+      <TweakSection label={t('tweaks.shape')}>
+        <TweakSlider label={t('tweaks.radius')} value={tw.radius} onChange={v => setTw('radius', v)} min={0} max={16} step={1} unit="px"/>
       </TweakSection>
-      <TweakSection label="Densidad">
+      <TweakSection label={t('tweaks.density')}>
         <TweakRadio
           value={tw.density} onChange={v => setTw('density', v)}
           options={[
-            { value: 'compact', label: 'Compacto' },
-            { value: 'comfy',   label: 'Equilibrado' },
-            { value: 'dense',   label: 'Denso' },
+            { value: 'compact', label: t('tweaks.compact') },
+            { value: 'comfy',   label: t('tweaks.comfy') },
+            { value: 'dense',   label: t('tweaks.dense') },
           ]}
         />
       </TweakSection>

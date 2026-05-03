@@ -12,6 +12,7 @@ const fmtDelta = (ms) => {
 const PAGE_SIZE = 50;
 
 function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [trackId,  setTrackId]  = uSt('all');
   const [carId,    setCarId]    = uSt('all');
   const [validOnly, setValidOnly] = uSt(true);
@@ -57,10 +58,13 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   );
 
   const exportCSV = () => {
-    const header = 'Piloto,Tramo,Coche,Tiempo,S1,S2,S3,Valida,Fecha';
+    const header = [
+      t('times.col.driver'), t('times.col.track'), t('times.col.car'),
+      t('times.col.time'), 'S1', 'S2', 'S3', t('times.col.valid'), t('times.col.date')
+    ].join(',');
     const rows = records.map(r =>
       [r.player, trackName(r.track), carName(r.car), fmtMs(r.ms),
-       fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? 'Sí' : 'No', r.date].join(',')
+       fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? t('common.yes') : t('common.no'), r.date].join(',')
     );
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([[header, ...rows].join('\n')], { type: 'text/csv' }));
@@ -71,14 +75,14 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Tiempos</h1>
-        <p className="page-sub">Base de datos de vueltas registradas — filtra y compara entre pilotos.</p>
+        <h1 className="page-title">{t('times.title')}</h1>
+        <p className="page-sub">{t('times.sub')}</p>
       </div>
 
       <div className="toolbar">
         <div className="segmented">
-          <button className={view === 'records' ? 'active' : ''} onClick={()=>setView('records')}>Récords</button>
-          <button className={view === 'compare' ? 'active' : ''} onClick={()=>setView('compare')}>Comparar pilotos</button>
+          <button className={view === 'records' ? 'active' : ''} onClick={()=>setView('records')}>{t('times.tab.records')}</button>
+          <button className={view === 'compare' ? 'active' : ''} onClick={()=>setView('compare')}>{t('times.tab.compare')}</button>
         </div>
         <button className="btn btn-sm right" onClick={exportCSV}>
           <ITi.IconDownload size={11}/> CSV
@@ -87,22 +91,22 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
         {/* Track / car / validity filters */}
         <div className="row" style={{gap: 6, flexWrap:'wrap'}}>
           <select className="select" value={trackId} onChange={e=>setTrackId(e.target.value)} style={{width: 220}}>
-            <option value="all">Todos los tramos</option>
+            <option value="all">{t('times.all_tracks')}</option>
             {tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
           <select className="select" value={carId} onChange={e=>setCarId(e.target.value)} style={{width: 200}}>
-            <option value="all">Todos los coches</option>
+            <option value="all">{t('times.all_cars')}</option>
             {cars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <label className="row" style={{gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor:'pointer'}} onClick={()=>setValidOnly(v=>!v)}>
             <div className={`checkbox ${validOnly ? 'on' : ''}`}></div>
-            Solo válidas
+            {t('times.valid_only')}
           </label>
         </div>
 
         {/* Date range filter */}
         <div className="row" style={{gap: 6, flexWrap:'wrap', alignItems:'center'}}>
-          <span style={{fontSize: 12, color: 'var(--text-muted)'}}>Desde</span>
+          <span style={{fontSize: 12, color: 'var(--text-muted)'}}>{t('times.date.from')}</span>
           <input
             type="date"
             className="input"
@@ -110,7 +114,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
           />
-          <span style={{fontSize: 12, color: 'var(--text-muted)'}}>Hasta</span>
+          <span style={{fontSize: 12, color: 'var(--text-muted)'}}>{t('times.date.to')}</span>
           <input
             type="date"
             className="input"
@@ -119,14 +123,14 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
             onChange={e => setDateTo(e.target.value)}
           />
           {(dateFrom || dateTo) && (
-            <button className="btn btn-sm" onClick={()=>{ setDateFrom(''); setDateTo(''); }} title="Limpiar fechas">
+            <button className="btn btn-sm" onClick={()=>{ setDateFrom(''); setDateTo(''); }} title={t('times.date.clear')}>
               <ITi.IconX size={11}/>
             </button>
           )}
         </div>
 
         <div className="right muted" style={{fontSize: 11.5}}>
-          <span className="mono">{filtered.length}</span> vueltas · <span className="mono">{records.length}</span> récords
+          <span className="mono">{filtered.length}</span> {t('times.laps')} · <span className="mono">{records.length}</span> {t('times.records')}
         </div>
       </div>
 
@@ -134,35 +138,35 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
         <div className="card">
           <div className="card-header">
             <ITi.IconTimer size={14} style={{color:'var(--red)'}}/>
-            <div className="card-title">Mejor vuelta por piloto</div>
+            <div className="card-title">{t('times.best_per_driver')}</div>
             {totalPages > 1 && (
               <span className="right muted" style={{fontSize: 11.5}}>
-                Pág. {page}/{totalPages}
+                {t('times.page')} {page}/{totalPages}
               </span>
             )}
           </div>
           {!lapTimesLoaded && lapTimes.length === 0 ? (
             <div className="loading-row">
               <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
-              Cargando tiempos…
+              {t('common.loading')}
             </div>
           ) : records.length === 0 ? (
-            <div className="empty">No hay tiempos con esos filtros.</div>
+            <div className="empty">{t('common.not_found')}</div>
           ) : (
             <>
               <table className="table">
                 <thead>
                   <tr>
                     <th style={{width: 50}}>#</th>
-                    <th>Piloto</th>
-                    <th>Tramo</th>
-                    <th>Coche</th>
-                    <th style={{width: 110}}>Mejor</th>
+                    <th>{t('times.col.driver')}</th>
+                    <th>{t('times.col.track')}</th>
+                    <th>{t('times.col.car')}</th>
+                    <th style={{width: 110}}>{t('times.col.best')}</th>
                     <th style={{width: 90}}>S1</th>
                     <th style={{width: 90}}>S2</th>
                     <th style={{width: 90}}>S3</th>
-                    <th style={{width: 110}}>Δ líder</th>
-                    <th style={{width: 110}}>Fecha</th>
+                    <th style={{width: 110}}>{t('times.col.delta')}</th>
+                    <th style={{width: 110}}>{t('times.col.date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -193,7 +197,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
                 <div className="pagination">
                   <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
                   <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(p=>p-1)}>‹</button>
-                  <span className="pagination-info">Página {page} de {totalPages}</span>
+                  <span className="pagination-info">{t('times.page_of', { page, totalPages })}</span>
                   <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(p=>p+1)}>›</button>
                   <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(totalPages)}>»</button>
                 </div>
@@ -207,7 +211,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
         <>
           <div className="card" style={{marginBottom: 16}}>
             <div className="card-header">
-              <div className="card-title">Selecciona hasta 4 pilotos</div>
+              <div className="card-title">{t('times.compare.select')}</div>
               <span className="right muted" style={{fontSize: 11.5}}>{selectedPlayers.length} / 4</span>
             </div>
             <div className="card-body">
@@ -228,6 +232,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
             tracks={tracks}
             laps={filtered}
             trackId={trackId}
+            t={t}
           />
         </>
       )}
@@ -235,10 +240,10 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   );
 }
 
-function ComparisonTable({ players, tracks, laps, trackId }) {
+function ComparisonTable({ players, tracks, laps, trackId, t }) {
   if (players.length < 1) {
     return (
-      <div className="card"><div className="empty">Elige al menos 1 piloto para comparar.</div></div>
+      <div className="card"><div className="empty">{t('times.compare.empty_sel')}</div></div>
     );
   }
   const visibleTracks = trackId === 'all' ? tracks : tracks.filter(t => t.id === trackId);
@@ -261,19 +266,19 @@ function ComparisonTable({ players, tracks, laps, trackId }) {
   }).filter(r => r.cells.some(c => c));
 
   if (rows.length === 0) return (
-    <div className="card"><div className="empty">Estos pilotos no tienen tiempos en común con los filtros actuales.</div></div>
+    <div className="card"><div className="empty">{t('times.compare.no_data')}</div></div>
   );
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title">Comparativa</div>
-        <span className="right muted" style={{fontSize: 11.5}}>{rows.length} tramos</span>
+        <div className="card-title">{t('times.compare.title')}</div>
+        <span className="right muted" style={{fontSize: 11.5}}>{t('times.compare.tracks', { count: rows.length })}</span>
       </div>
       <table className="table">
         <thead>
           <tr>
-            <th>Tramo</th>
+            <th>{t('times.col.track')}</th>
             {players.map(p => <th key={p} style={{width: 160}}>{p}</th>)}
           </tr>
         </thead>

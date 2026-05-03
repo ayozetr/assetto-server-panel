@@ -126,7 +126,9 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
             <div className="card-title">{t('dash.players')}</div>
             <span className="badge right">{players.length}</span>
           </div>
-          {players.length === 0 ? (
+          {server.status !== 'running' ? (
+            <div className="empty">{t('topbar.stopped')}</div>
+          ) : players.length === 0 ? (
             <div className="empty">{t('dash.no_players')}</div>
           ) : (
             <div>
@@ -196,9 +198,16 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
   }, [server.status]);
 
   const I2P = window.AppIcons;
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [historySearch]);
+
   const filteredPast = historySearch
     ? pastPlayers.filter(p => p.name.toLowerCase().includes(historySearch.toLowerCase()))
     : pastPlayers;
+
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredPast.length / PAGE_SIZE));
+  const paginatedPast = filteredPast.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const renderPast = (
     <div style={{marginTop: 20}}>
       <div className="card">
@@ -226,7 +235,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
             </tr>
           </thead>
           <tbody>
-            {filteredPast.map(p => {
+            {paginatedPast.map(p => {
               const flagUrl = (window.AppUtils || {}).nationFlag?.(p.nation);
               return (
               <tr key={p.id}>
@@ -267,6 +276,15 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
             })}
           </tbody>
         </table>
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
+            <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(p=>p-1)}>‹</button>
+            <span className="pagination-info">{t('times.page_of', { page, totalPages })}</span>
+            <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(p=>p+1)}>›</button>
+            <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(totalPages)}>»</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -408,7 +426,11 @@ function PageLogs({ server }) {
           <button className="btn btn-sm" onClick={() => setPaused(p => !p)}>
             {paused ? <><I2.IconPlay size={11}/> Play</> : <><I2.IconStop size={11}/> Pause</>}
           </button>
-          <button className="btn btn-sm" onClick={() => setLogs([])}>
+          <button className="btn btn-sm" onClick={() => {
+            if (window.confirm(t('log.clear_confirm'))) {
+              setLogs([]);
+            }
+          }}>
             <I2.IconTrash size={11}/> {t('log.clear')}
           </button>
           <button className="btn btn-sm" onClick={() => {

@@ -25,6 +25,7 @@ const IconPlayers = (p) => <Icon {...p}><path d="M3 21v-2a4 4 0 0 1 4-4h10a4 4 0
 const IconTerminal = (p) => <Icon {...p}><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></Icon>;
 const IconSearch = (p) => <Icon {...p}><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></Icon>;
 const IconBell = (p) => <Icon {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></Icon>;
+const IconAlertTriangle = (p) => <Icon {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></Icon>;
 const IconSun = (p) => <Icon {...p}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.93 19.07 1.41-1.41"/><path d="m17.66 6.34 1.41-1.41"/></Icon>;
 const IconMoon = (p) => <Icon {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></Icon>;
 const IconPlay = (p) => <Icon {...p} fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></Icon>;
@@ -59,7 +60,7 @@ const IconKey    = (p) => <Icon {...p}><circle cx="7.5" cy="15.5" r="5.5"/><path
 
 window.AppIcons = {
   IconDashboard, IconCar, IconTrack, IconFlag, IconSettings, IconUsers, IconPlayers,
-  IconTerminal, IconSearch, IconBell, IconSun, IconMoon, IconPlay, IconStop, IconRefresh,
+  IconTerminal, IconSearch, IconBell, IconAlertTriangle, IconSun, IconMoon, IconPlay, IconStop, IconRefresh,
   IconCheck, IconX, IconPlus, IconEdit, IconTrash, IconLogout, IconDownload, IconShield,
   IconKick, IconClock, IconCloud, IconChevronDown, IconUser, IconLock,
   IconReload, IconPower, IconTimer, IconHistory, IconChip, IconFolder, IconOS, IconSteam,

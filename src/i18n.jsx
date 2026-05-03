@@ -223,6 +223,7 @@ const dict = {
     'log.sub': 'Real-time output of the server process.',
     'log.empty': 'No logs recorded.',
     'log.clear': 'Clear logs',
+    'log.clear_confirm': 'Are you sure you want to discard all current logs in memory?',
 
     // Cars
     'cars.title': 'Cars',
@@ -256,7 +257,27 @@ const dict = {
     'times.col.time': 'Time',
     'times.col.car': 'Car',
     'times.col.track': 'Track',
-    'times.col.date': 'Date'
+    'times.col.date': 'Date',
+    'times.tab.records': 'Records',
+    'times.tab.compare': 'Compare drivers',
+    'times.all_tracks': 'All tracks',
+    'times.all_cars': 'All cars',
+    'times.valid_only': 'Valid only',
+    'times.date.from': 'From',
+    'times.date.to': 'To',
+    'times.date.clear': 'Clear dates',
+    'times.laps': 'laps',
+    'times.records': 'records',
+    'times.best_per_driver': 'Best lap per driver',
+    'times.page': 'Page',
+    'times.page_of': 'Page {page} of {totalPages}',
+    'times.col.best': 'Best',
+    'times.col.delta': 'Δ leader',
+    'times.compare.select': 'Select up to 4 drivers',
+    'times.compare.empty_sel': 'Choose at least 1 driver to compare.',
+    'times.compare.no_data': 'These drivers have no common times with the current filters.',
+    'times.compare.title': 'Comparison',
+    'times.compare.tracks': '{count} tracks',
   },
   es: {
     // Sidebar
@@ -481,6 +502,7 @@ const dict = {
     'log.sub': 'Salida en tiempo real del proceso del servidor.',
     'log.empty': 'No hay logs registrados.',
     'log.clear': 'Limpiar logs',
+    'log.clear_confirm': '¿Seguro que quieres descartar todos los logs actuales en memoria?',
 
     // Cars
     'cars.title': 'Coches',
@@ -514,7 +536,27 @@ const dict = {
     'times.col.time': 'Tiempo',
     'times.col.car': 'Coche',
     'times.col.track': 'Tramo',
-    'times.col.date': 'Fecha'
+    'times.col.date': 'Fecha',
+    'times.tab.records': 'Récords',
+    'times.tab.compare': 'Comparar pilotos',
+    'times.all_tracks': 'Todos los tramos',
+    'times.all_cars': 'Todos los coches',
+    'times.valid_only': 'Solo válidas',
+    'times.date.from': 'Desde',
+    'times.date.to': 'Hasta',
+    'times.date.clear': 'Limpiar fechas',
+    'times.laps': 'vueltas',
+    'times.records': 'récords',
+    'times.best_per_driver': 'Mejor vuelta por piloto',
+    'times.page': 'Pág.',
+    'times.page_of': 'Página {page} de {totalPages}',
+    'times.col.best': 'Mejor',
+    'times.col.delta': 'Δ líder',
+    'times.compare.select': 'Selecciona hasta 4 pilotos',
+    'times.compare.empty_sel': 'Elige al menos 1 piloto para comparar.',
+    'times.compare.no_data': 'Estos pilotos no tienen tiempos en común con los filtros actuales.',
+    'times.compare.title': 'Comparativa',
+    'times.compare.tracks': '{count} tramos',
   },
   it: {
     // Sidebar
@@ -739,6 +781,7 @@ const dict = {
     'log.sub': 'Output in tempo reale.',
     'log.empty': 'Nessun log registrato.',
     'log.clear': 'Pulisci log',
+    'log.clear_confirm': 'Sei sicuro di voler eliminare tutti i log correnti in memoria?',
 
     // Cars
     'cars.title': 'Auto',
@@ -772,7 +815,27 @@ const dict = {
     'times.col.time': 'Tempo',
     'times.col.car': 'Auto',
     'times.col.track': 'Tracciato',
-    'times.col.date': 'Data'
+    'times.col.date': 'Data',
+    'times.tab.records': 'Record',
+    'times.tab.compare': 'Confronta piloti',
+    'times.all_tracks': 'Tutti i tracciati',
+    'times.all_cars': 'Tutte le auto',
+    'times.valid_only': 'Solo validi',
+    'times.date.from': 'Da',
+    'times.date.to': 'A',
+    'times.date.clear': 'Cancella date',
+    'times.laps': 'giri',
+    'times.records': 'record',
+    'times.best_per_driver': 'Miglior giro per pilota',
+    'times.page': 'Pag.',
+    'times.page_of': 'Pagina {page} di {totalPages}',
+    'times.col.best': 'Migliore',
+    'times.col.delta': 'Δ leader',
+    'times.compare.select': 'Seleziona fino a 4 piloti',
+    'times.compare.empty_sel': 'Scegli almeno 1 pilota per confrontare.',
+    'times.compare.no_data': 'Questi piloti non hanno tempi in comune con i filtri attuali.',
+    'times.compare.title': 'Confronto',
+    'times.compare.tracks': '{count} tracciati',
   }
 };
 

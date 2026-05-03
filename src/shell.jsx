@@ -24,7 +24,7 @@ function ToastProvider({ children }) {
           <div key={t.id} className={`toast ${t.kind}`}>
             {t.kind === 'success' && <I.IconCheck size={14}/>}
             {t.kind === 'error'   && <I.IconX size={14}/>}
-            {t.kind === 'warn'    && <I.IconBell size={14}/>}
+            {t.kind === 'warn'    && <I.IconAlertTriangle size={14}/>}
             {t.kind === 'info'    && <I.IconBell size={14}/>}
             <span>{t.msg}</span>
           </div>

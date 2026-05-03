@@ -23,8 +23,17 @@ const AC_BIN_DIR      = process.env.AC_SERVER_DIR || path.dirname(AC_BIN);
 const AC_BLACKLIST    = process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt');
 const ADMIN_TOKEN     = process.env.ADMIN_TOKEN || '';
 const ROOT            = __dirname;
+const KUNOS_ASSETS_DIR = path.join(__dirname, 'src/assets/kunos');
 
 let acChild = null; // tracked child process for the AC server
+
+// Authoritative Kunos content ID sets, populated at startup from bundled assets
+const KUNOS_CAR_IDS   = new Set();
+const KUNOS_TRACK_IDS = new Set();
+async function loadKunosIds() {
+  try { for (const id of await fsp.readdir(path.join(KUNOS_ASSETS_DIR, 'cars')))   KUNOS_CAR_IDS.add(id);   } catch {}
+  try { for (const id of await fsp.readdir(path.join(KUNOS_ASSETS_DIR, 'tracks'))) KUNOS_TRACK_IDS.add(id); } catch {}
+}
 
 // ── Session store ─────────────────────────────────────────────────────────────
 const sessions = new Map(); // token → { username, role, expiresAt }
@@ -940,25 +949,48 @@ async function apiCars(res) {
     const dirs = await fsp.readdir(AC_CARS_DIR);
     const cars = await Promise.all(
       dirs.map(async id => {
-        let ui = {};
-        try { ui = JSON.parse(await fsp.readFile(path.join(AC_CARS_DIR, id, 'ui', 'ui_car.json'), 'utf8')); } catch {}
+        const acUiDir  = path.join(AC_CARS_DIR, id, 'ui');
+        const knUiDir  = path.join(KUNOS_ASSETS_DIR, 'cars', id, 'ui');
+        const knSkinDir = path.join(KUNOS_ASSETS_DIR, 'cars', id, 'skins');
 
+        // ui_car.json: AC content first, kunos assets as fallback
+        let ui = {};
+        try { ui = JSON.parse(await fsp.readFile(path.join(acUiDir, 'ui_car.json'), 'utf8')); } catch {
+          try { ui = JSON.parse(await fsp.readFile(path.join(knUiDir, 'ui_car.json'), 'utf8')); } catch {}
+        }
+
+        // skins: AC content first, kunos assets as fallback
         let skins = [];
+        let skinsFromKunos = false;
         try {
           const entries = await fsp.readdir(path.join(AC_CARS_DIR, id, 'skins'), { withFileTypes: true });
           skins = entries.filter(e => e.isDirectory()).map(e => e.name);
         } catch {}
+        if (skins.length === 0) {
+          try {
+            const entries = await fsp.readdir(knSkinDir, { withFileTypes: true });
+            skins = entries.filter(e => e.isDirectory()).map(e => e.name);
+            if (skins.length > 0) skinsFromKunos = true;
+          } catch {}
+        }
 
         const cls = ui.class || ui.tags?.[0] || '';
 
+        // thumb: prefer first-skin preview, fallback to badge
         let thumb = null;
         if (skins.length > 0) {
-          thumb = `/api/content/cars/${encodeURIComponent(id)}/skins/${encodeURIComponent(skins[0])}/preview`;
+          const prefix = skinsFromKunos
+            ? `/api/content/cars/${encodeURIComponent(id)}/kunos-skin/${encodeURIComponent(skins[0])}/preview`
+            : `/api/content/cars/${encodeURIComponent(id)}/skins/${encodeURIComponent(skins[0])}/preview`;
+          thumb = prefix;
         } else {
-          try { await fsp.access(path.join(AC_CARS_DIR, id, 'ui', 'badge.webp')); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; }
-          catch {
-            try { await fsp.access(path.join(AC_CARS_DIR, id, 'ui', 'badge.png')); thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`; } catch {}
-          }
+          const hasThumb = await Promise.any([
+            fsp.access(path.join(acUiDir, 'badge.webp')),
+            fsp.access(path.join(acUiDir, 'badge.png')),
+            fsp.access(path.join(knUiDir, 'badge.webp')),
+            fsp.access(path.join(knUiDir, 'badge.png')),
+          ]).then(() => true).catch(() => false);
+          if (hasThumb) thumb = `/api/content/cars/${encodeURIComponent(id)}/thumb`;
         }
 
         const brand = inferBrand(id, ui.brand || '');
@@ -978,6 +1010,7 @@ async function apiCars(res) {
           },
           skins,
           thumb,
+          isKunos: KUNOS_CAR_IDS.has(id),
         };
       })
     );
@@ -989,7 +1022,8 @@ async function apiTracks(res) {
   try {
     const dirs = await fsp.readdir(AC_TRACKS_DIR);
     const tracks = await Promise.all(dirs.map(async id => {
-      const uiDir = path.join(AC_TRACKS_DIR, id, 'ui');
+      const uiDir    = path.join(AC_TRACKS_DIR, id, 'ui');
+      const knUiDir  = path.join(KUNOS_ASSETS_DIR, 'tracks', id, 'ui');
       let mainJson = null;
       let layouts  = [];
 
@@ -1015,7 +1049,30 @@ async function apiTracks(res) {
       } catch {}
 
       if (!layouts.length) layouts = [''];
+
+      // Kunos assets fallback: use kunos ui_track.json when AC info is missing/empty
+      let kunosJson = null;
+      if (KUNOS_TRACK_IDS.has(id)) {
+        try { kunosJson = JSON.parse(await fsp.readFile(path.join(knUiDir, 'ui_track.json'), 'utf8')); } catch {
+          // try first kunos layout subdir
+          try {
+            const knEntries = await fsp.readdir(knUiDir, { withFileTypes: true });
+            const knFirst = knEntries.find(e => e.isDirectory());
+            if (knFirst) kunosJson = JSON.parse(await fsp.readFile(path.join(knUiDir, knFirst.name, 'ui_track.json'), 'utf8'));
+          } catch {}
+        }
+      }
+
+      // Merge: AC data takes priority, kunos fills in blanks
       if (!mainJson) mainJson = {};
+      if (kunosJson) {
+        if (!mainJson.name)        mainJson.name        = kunosJson.name;
+        if (!mainJson.country)     mainJson.country     = kunosJson.country;
+        if (!mainJson.city)        mainJson.city        = kunosJson.city;
+        if (!mainJson.description) mainJson.description = kunosJson.description;
+        if (!mainJson.length)      mainJson.length      = kunosJson.length;
+        if (!mainJson.pitboxes)    mainJson.pitboxes    = kunosJson.pitboxes;
+      }
 
       // Per-layout details (only for multi-layout tracks)
       let layoutDetails = {};
@@ -1049,19 +1106,23 @@ async function apiTracks(res) {
         layoutDetails,
         description:   stripHtml(mainJson.description || '').slice(0, 400),
         thumb:         `/api/content/tracks/${encodeURIComponent(id)}/thumb`,
+        isKunos:       KUNOS_TRACK_IDS.has(id),
       };
     }));
     json(res, 200, tracks.sort((a, b) => a.name.localeCompare(b.name)));
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
-// Serve car badge image (badge.png/webp from ui folder)
+// Serve car badge image (badge.png/webp from ui folder), falling back to bundled Kunos assets
 function apiCarThumb(carId, res) {
   if (!isValidContentId(carId)) return respond(res, 400, 'text/plain', 'Invalid ID');
-  const dir = path.join(AC_CARS_DIR, carId, 'ui');
+  const dir     = path.join(AC_CARS_DIR, carId, 'ui');
+  const kunosDir = path.join(KUNOS_ASSETS_DIR, 'cars', carId, 'ui');
   serveAssetFallback(res, [
-    { path: path.join(dir, 'badge.webp'), mime: 'image/webp' },
-    { path: path.join(dir, 'badge.png'), mime: 'image/png' },
+    { path: path.join(dir,      'badge.webp'), mime: 'image/webp' },
+    { path: path.join(dir,      'badge.png'),  mime: 'image/png'  },
+    { path: path.join(kunosDir, 'badge.webp'), mime: 'image/webp' },
+    { path: path.join(kunosDir, 'badge.png'),  mime: 'image/png'  },
   ]);
 }
 
@@ -1069,58 +1130,74 @@ function apiCarThumb(carId, res) {
 function apiCarSkinPreview(carId, skinName, res) {
   if (!isValidContentId(carId) || !isValidSkinName(skinName))
     return respond(res, 400, 'text/plain', 'Invalid ID');
-  const dir = path.join(AC_CARS_DIR, carId, 'skins', skinName);
+  const dir      = path.join(AC_CARS_DIR, carId, 'skins', skinName);
+  const kunosDir = path.join(KUNOS_ASSETS_DIR, 'cars', carId, 'skins', skinName);
   if (!dir.startsWith(AC_CARS_DIR + path.sep))
     return respond(res, 403, 'text/plain', 'Forbidden');
   serveAssetFallback(res, [
-    { path: path.join(dir, 'preview.webp'), mime: 'image/webp' },
-    { path: path.join(dir, 'preview.jpg'), mime: 'image/jpeg' },
-    { path: path.join(dir, 'preview.png'), mime: 'image/png' },
+    { path: path.join(dir,      'preview.webp'), mime: 'image/webp' },
+    { path: path.join(dir,      'preview.jpg'),  mime: 'image/jpeg' },
+    { path: path.join(dir,      'preview.png'),  mime: 'image/png'  },
+    { path: path.join(kunosDir, 'preview.webp'), mime: 'image/webp' },
+    { path: path.join(kunosDir, 'preview.jpg'),  mime: 'image/jpeg' },
+    { path: path.join(kunosDir, 'preview.png'),  mime: 'image/png'  },
   ]);
 }
 
-// Serve track preview image
-function apiTrackThumb(trackId, res) {
-  if (!isValidContentId(trackId)) return respond(res, 400, 'text/plain', 'Invalid ID');
-  const uiDir = path.join(AC_TRACKS_DIR, trackId, 'ui');
-
-  const candidates = [
-    { path: path.join(uiDir, 'preview.webp'), mime: 'image/webp' },
-    { path: path.join(uiDir, 'preview.png'), mime: 'image/png' }
-  ];
-
-  const tryNext = (index) => {
-    if (index >= candidates.length) {
-      // Try first layout sub-folder
-      fsp.readdir(uiDir, { withFileTypes: true }).then(entries => {
-        const dir = entries.find(e => e.isDirectory());
-        if (!dir) return respond(res, 404, 'text/plain', 'Not found');
-        serveAssetFallback(res, [
-          { path: path.join(uiDir, dir.name, 'preview.webp'), mime: 'image/webp' },
-          { path: path.join(uiDir, dir.name, 'preview.png'), mime: 'image/png' }
-        ]);
-      }).catch(() => respond(res, 404, 'text/plain', 'Not found'));
-      return;
-    }
-    const { path: p, mime } = candidates[index];
-    fs.readFile(p, (err, data) => {
-      if (err) tryNext(index + 1);
-      else respondImage(res, data, mime);
-    });
-  };
-  tryNext(0);
+// Serve skin preview from bundled Kunos assets (for cars without skins in AC content)
+function apiKunosSkinPreview(carId, skinName, res) {
+  if (!isValidContentId(carId) || !isValidSkinName(skinName))
+    return respond(res, 400, 'text/plain', 'Invalid ID');
+  const dir = path.join(KUNOS_ASSETS_DIR, 'cars', carId, 'skins', skinName);
+  serveAssetFallback(res, [
+    { path: path.join(dir, 'preview.webp'), mime: 'image/webp' },
+    { path: path.join(dir, 'preview.jpg'),  mime: 'image/jpeg' },
+    { path: path.join(dir, 'preview.png'),  mime: 'image/png'  },
+  ]);
 }
 
-// Serve a specific layout's preview.png/webp
+// Serve track preview image, falling back to layout sub-folders then bundled Kunos assets
+// (Kunos assets may also use layout sub-folders for multi-layout tracks)
+async function apiTrackThumb(trackId, res) {
+  if (!isValidContentId(trackId)) return respond(res, 400, 'text/plain', 'Invalid ID');
+  const uiDir    = path.join(AC_TRACKS_DIR, trackId, 'ui');
+  const kunosDir = path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'ui');
+
+  const subDir = async (dir) => {
+    try {
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      const first = entries.find(e => e.isDirectory());
+      return first ? first.name : null;
+    } catch { return null; }
+  };
+
+  const [acSub, kunosSub] = await Promise.all([subDir(uiDir), subDir(kunosDir)]);
+
+  serveAssetFallback(res, [
+    { path: path.join(uiDir,    'preview.webp'),                    mime: 'image/webp' },
+    { path: path.join(uiDir,    'preview.png'),                     mime: 'image/png'  },
+    ...(acSub    ? [{ path: path.join(uiDir,    acSub,    'preview.webp'), mime: 'image/webp' },
+                    { path: path.join(uiDir,    acSub,    'preview.png'),  mime: 'image/png'  }] : []),
+    { path: path.join(kunosDir, 'preview.webp'),                    mime: 'image/webp' },
+    { path: path.join(kunosDir, 'preview.png'),                     mime: 'image/png'  },
+    ...(kunosSub ? [{ path: path.join(kunosDir, kunosSub, 'preview.webp'), mime: 'image/webp' },
+                    { path: path.join(kunosDir, kunosSub, 'preview.png'),  mime: 'image/png'  }] : []),
+  ]);
+}
+
+// Serve a specific layout's preview.png/webp, falling back to bundled Kunos assets
 function apiTrackLayoutThumb(trackId, layout, res) {
   if (!isValidContentId(trackId) || !isValidContentId(layout))
     return respond(res, 400, 'text/plain', 'Invalid ID');
-  const dir = path.join(AC_TRACKS_DIR, trackId, 'ui', layout);
+  const dir      = path.join(AC_TRACKS_DIR, trackId, 'ui', layout);
   if (!dir.startsWith(AC_TRACKS_DIR + path.sep))
     return respond(res, 403, 'text/plain', 'Forbidden');
+  const kunosDir = path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'ui');
   serveAssetFallback(res, [
-    { path: path.join(dir, 'preview.webp'), mime: 'image/webp' },
-    { path: path.join(dir, 'preview.png'), mime: 'image/png' }
+    { path: path.join(dir,      'preview.webp'), mime: 'image/webp' },
+    { path: path.join(dir,      'preview.png'),  mime: 'image/png'  },
+    { path: path.join(kunosDir, 'preview.webp'), mime: 'image/webp' },
+    { path: path.join(kunosDir, 'preview.png'),  mime: 'image/png'  },
   ]);
 }
 
@@ -1419,9 +1496,11 @@ function handler(req, res) {
 
     // Content image endpoints
     const carSkinMatch         = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);
+    const carKunosSkinMatch    = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/kunos-skin\/([^/]+)\/preview$/);
     const carThumbMatch        = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/thumb$/);
     const trackThumbMatch      = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/thumb$/);
     const trackLayoutThumbMatch= urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/layout\/([^/]+)\/thumb$/);
+    if (carKunosSkinMatch    && req.method === 'GET') return apiKunosSkinPreview(decodeURIComponent(carKunosSkinMatch[1]), decodeURIComponent(carKunosSkinMatch[2]), res);
     if (carSkinMatch         && req.method === 'GET') return apiCarSkinPreview(decodeURIComponent(carSkinMatch[1]), decodeURIComponent(carSkinMatch[2]), res);
     if (carThumbMatch        && req.method === 'GET') return apiCarThumb(decodeURIComponent(carThumbMatch[1]), res);
     if (trackLayoutThumbMatch && req.method === 'GET') return apiTrackLayoutThumb(decodeURIComponent(trackLayoutThumbMatch[1]), decodeURIComponent(trackLayoutThumbMatch[2]), res);
@@ -1459,6 +1538,7 @@ function handler(req, res) {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 seedDefaultUsers();
+loadKunosIds();
 importAllResults();
 startResultsWatcher();
 

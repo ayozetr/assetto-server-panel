@@ -467,17 +467,17 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [query,     setQuery]     = useStateB('');
   const [brand,     setBrand]     = useStateB('all');
-  const [showKunos, setShowKunos] = useStateB(false);
+  const [showKunos, setShowKunos] = useStateB(true);
   const [modalCar,  setModalCar]  = useStateB(null);
 
-  const kunosCount = useMemoB(() => cars.filter(c => c.id.startsWith('ks_')).length, [cars]);
+  const kunosCount = useMemoB(() => cars.filter(c => c.isKunos).length, [cars]);
   const brands     = useMemoB(() => {
-    const base = cars.filter(c => showKunos || !c.id.startsWith('ks_'));
+    const base = cars.filter(c => showKunos || !c.isKunos);
     return ['all', ...Array.from(new Set(base.map(c => c.brand).filter(Boolean))).sort()];
   }, [cars, showKunos]);
 
   const filtered = useMemoB(() => cars.filter(c => {
-    if (!showKunos && c.id.startsWith('ks_')) return false;
+    if (!showKunos && c.isKunos) return false;
     if (brand !== 'all' && c.brand !== brand) return false;
     if (query && !(`${c.brand} ${c.name} ${c.id}`).toLowerCase().includes(query.toLowerCase())) return false;
     return true;
@@ -585,17 +585,17 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [query,      setQuery]      = useStateB('');
   const [country,    setCountry]    = useStateB('all');
-  const [showKunos,  setShowKunos]  = useStateB(false);
+  const [showKunos,  setShowKunos]  = useStateB(true);
   const [modalTrack, setModalTrack] = useStateB(null);
 
-  const kunosCount = useMemoB(() => tracks.filter(t => t.id.startsWith('ks_')).length, [tracks]);
+  const kunosCount = useMemoB(() => tracks.filter(t => t.isKunos).length, [tracks]);
   const countries  = useMemoB(() => {
-    const base = tracks.filter(t => showKunos || !t.id.startsWith('ks_'));
+    const base = tracks.filter(t => showKunos || !t.isKunos);
     return ['all', ...Array.from(new Set(base.map(t => t.countryEs || t.country).filter(Boolean))).sort()];
   }, [tracks, showKunos]);
 
   const filtered = useMemoB(() => tracks.filter(t => {
-    if (!showKunos && t.id.startsWith('ks_')) return false;
+    if (!showKunos && t.isKunos) return false;
     if (country !== 'all' && (t.countryEs || t.country) !== country) return false;
     if (query && !(t.name + ' ' + (t.countryEs || t.country) + ' ' + t.id).toLowerCase().includes(query.toLowerCase())) return false;
     return true;

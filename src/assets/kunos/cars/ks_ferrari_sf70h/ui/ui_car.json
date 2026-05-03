@@ -1,0 +1,30 @@
+{
+
+	"name": "Ferrari SF70H",
+	"brand": "Ferrari",
+	"description": "
+The 63rd single-seater designed and built by Scuderia Ferrari to take part in the 2017 Championship is born out of a regulation change that is without precedent in this category of motor sport. In the past, regulations generally went in the direction of slowing the cars down. However, in the year 2017 the rule changes went in the opposite direction, meaning the cars can have more aerodynamic downforce and more mechanical grip.
+<br><br>
+There are several differences between the 668 project and Ferraris from the recent past: the lengthened nose and the arrow-shaped wing are a consequence of the regulations, as is the obvious fin on the engine cover and more complex aero appendages ahead of the air intakes on the sidepods.
+<br><br>
+The layout of some of the mechanical components on the hybrid power unit has been revised, while other areas maintain a similar layout to the 2016 car.
+
+	",
+	"tags": ["#SF70H", "rwd", "race", "sequential", "gp", "singleseater", "italy"],
+	"onlywith": ["ks_ferrari_f138","ks_ferrari_sf15t","ks_ferrari_f2004","ks_ferrari_sf70h"],
+	"class": "race",
+	"specs":
+	{
+		"bhp": "--bhp",
+		"torque": "--Nm",
+		"weight": "--kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "--kg/hp"
+		},
+		"torqueCurve": [
+		],
+		"powerCurve": [
+		]
+
+	}

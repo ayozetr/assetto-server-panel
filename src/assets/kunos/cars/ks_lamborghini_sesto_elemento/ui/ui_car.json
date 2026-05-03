@@ -1,0 +1,65 @@
+{
+
+	"name": "Lamborghini Sesto Elemento",
+	"brand": "Lamborghini", 
+	"description": "Automobili Lamborghini is redefining the future of super sports cars with this very limited special edition.
+The Sesto Elemento is a masterpiece of extreme lightweight engineering that demonstrates the outstanding expertise of Automobili Lamborghini in all areas of carbon-fiber technology.
+Boasting an extremely lightweight construction thanks to advanced carbon fiber technology, the Lamborghini Sesto Elemento has an overall curb weight of just 999 kilograms (2,202 lb) - including the V10 power unit and the permanent all-wheel drive. With its sensational power-to-weight ratio of only 1.75 kilograms per CV, this limited-edition super sports car offers unrivalled performance: from 0 to 100 km/h in a record time of only 2.5 seconds.",
+	"tags": ["#Hypercars", "awd", "street", "sequential", "italy"],  
+	"class": "street",
+	"specs":
+	{
+		"bhp": "570hp",
+		"torque": "540Nm",
+		"weight": "999kg",
+		"topspeed": "350km/h",
+		"acceleration": "2.5s 0-100",
+		"pwratio": "1.75kg/hp"
+	},
+	"torqueCurve": [
+		["500","171"],
+		["1000","274"],
+		["1500","324"],
+		["2000","333"],
+		["2500","356"],
+		["3000","406"],
+		["3500","455"],
+		["4000","504"],
+		["4500","506"],
+		["5000","522"],
+		["5500","511"],
+		["6000","531"],
+		["6500","540"],
+		["7000","536"],
+		["7500","507"],
+		["8000","506"],
+		["8500","467"],
+		["9000","450"],
+		["9250","410"]
+	],
+	"powerCurve": [
+		["500","12"],
+		["1000","38"],
+		["1500","68"],
+		["2000","94"],
+		["2500","125"],
+		["3000","171"],
+		["3500","224"],
+		["4000","283"],
+		["4500","320"],
+		["5000","367"],
+		["5500","395"],
+		["6000","447"],
+		["6500","493"],
+		["7000","527"],
+		["7500","534"],
+		["8000","568"],
+		["8500","557"],
+		["9000","569"],
+		["9250","533"]
+	]
+
+}
+
+
+

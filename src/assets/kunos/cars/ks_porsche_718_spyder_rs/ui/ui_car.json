@@ -1,0 +1,60 @@
+{
+	"name": "Porsche 718 RS 60 Spyder",
+	"brand": "Porsche",
+	"description": "In 1960, Porsche continued its long list of victories, which began with the legendary Porsche 550 Spyder race car in 1953, with an exceptional vehicle: the Type 718 RS 60. In response to a new FIA race car rule, which demanded they more closely resemble standard production vehicles, the displacement of the RS 60 developed on the basis of the 718 RSK was not only increased to 1,600 cc, it also gained some rather unusual features for a race car, namely a larger windshield, functional hood and luggage compartment located at the rear, behind the four-cam four-cylinder engine which now produced 160 hp. Externally, the new Spyder was recognisable by its deep, rounded front and a backward tapering bulge at the rear. 
+ <br> <br>
+From the outset, the 718 RS 60 became a racing big shot, recording the sports car manufacturer's greatest successes to date, particularly in long-distance events: at its very first outing, the 12h of Sebring, the Gendebien/Herrmann and Holbert/Sheckter driver teams achieved the top two spots. Overall victory at the 44th Targa Florio in 1960 also went to Porsche, when Joakim Bonnier and Hans Hermann crossed the finish line with a lead of more than six minutes over the three-litre Ferrari. Second place in the 1000 kilometres of Nürburgring completed its triumphant run. With the Swiss racing driver, Heini Walter, at the wheel, the 718 RS proved its climbing qualities by consecutively winning the third and fourth European Hill Climb Championships in 1960 and 1961.",
+	"tags": ["#Vintage Touring", "rwd", "manual", "race", "vintage", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "150hp",
+		"torque": "148Nm",
+		"weight": "580kg",
+		"topspeed": "230km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "3.8kg/hp"
+	},
+	"torqueCurve": [
+		["500","89"],
+		["1000","110"],
+		["1500","116"],
+		["2000","118"],
+		["2500","121"],
+		["3000","117"],
+		["3500","122"],
+		["4000","129"],
+		["4500","135"],
+		["5000","137"],
+		["5500","147"],
+		["6000","144"],
+		["6500","140"],
+		["7000","142"],
+		["7500","139"],
+		["7800","138"],
+		["8000","129"],
+		["8100","112"]
+	],
+	"powerCurve": [
+		["500","6"],
+		["1000","15"],
+		["1500","24"],
+		["2000","33"],
+		["2500","42"],
+		["3000","49"],
+		["3500","60"],
+		["4000","72"],
+		["4500","85"],
+		["5000","96"],
+		["5500","114"],
+		["6000","121"],
+		["6500","128"],
+		["7000","140"],
+		["7500","146"],
+		["7800","151"],
+		["8000","145"],
+		["8100","127"]
+	]
+}
+

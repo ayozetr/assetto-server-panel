@@ -1,0 +1,76 @@
+{
+
+	"name": "Ferrari F2004",
+	"brand": "Ferrari",
+	"description": "
+The year 2004, the record season for Ferrari, went into a second act with the 2004 Championship: out of the 18 GPs, the Scuderia won 15 races (13 by Schumacher, 2 by Barrichello), 8 one-two wins, 12 pole positions for a total of 262 points in the Constructors' Championship. Already in August, Ferrari archived the Championship files: at the Hungarian GP the Scuderia won the Constructors' Title – the 14th in its history – with a one-two win, while Schumacher gained his fifth title in a row, the seventh of his career, in Belgium, on the same track where he debuted in the year 1991. 
+<br><br>
+The season made history also thanks to one of the most competitive single-seaters ever built: the F2004, fitted with the new engine dubbed 053, a 10-cylinder unit with 865 bhp at 18,300 rpm, which exceeded all expectations in terms of performance and reliability, also regarding the new challenge set by the regulations, which aimed at reducing costs: one engine per race weekend, with an average lifespan of 800 instead of 350 kilometres.
+
+",
+	"tags": ["#F2004", "rwd", "race", "sequential", "gp", "singleseater", "italy"],
+	"onlywith": ["ks_ferrari_f138","ks_ferrari_sf15t","ks_ferrari_f2004","ks_ferrari_sf70h"],
+	"class": "race",
+	"specs":
+	{
+		"bhp": "865bhp",
+		"torque": "--Nm",
+		"weight": "--kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "--kg/hp"
+	},
+	"torqueCurve": [
+		["500","62"],
+		["1000","89"],
+		["2000","95"],
+		["3000","103"],
+		["4000","203"],
+		["5000","228"],
+		["6000","308"],
+		["7000","352"],
+		["8000","357"],
+		["9000","355"],
+		["10000","353"],
+		["11000","351"],
+		["12000","349"],
+		["13000","347"],
+		["14000","345"],
+		["15000","343"],
+		["16000","341"],
+		["17000","339"],
+		["18000","337"],
+		["18500","335"],
+		["18800","333"],
+		["19000","332"],
+		["19100","332"],
+		["19500","300"]
+	],
+	"powerCurve": [
+		["500","4"],
+		["1000","12"],
+		["2000","27"],
+		["3000","43"],
+		["4000","114"],
+		["5000","160"],
+		["6000","260"],
+		["7000","346"],
+		["8000","401"],
+		["9000","449"],
+		["10000","496"],
+		["11000","542"],
+		["12000","588"],
+		["13000","633"],
+		["14000","678"],
+		["15000","723"],
+		["16000","766"],
+		["17000","809"],
+		["18000","852"],
+		["18500","870"],
+		["18800","879"],
+		["19000","886"],
+		["19100","890"],
+		["19500","822"]
+	]
+
+}

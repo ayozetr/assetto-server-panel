@@ -1,0 +1,71 @@
+{
+	"name": "McLaren 570S",
+	"brand": "McLaren", 
+	"description": "
+	Like every McLaren, the performance of the 570S Coupé is breathtaking. It combines, as its name suggests, a power output of 562bhp with lightweight construction to give a class leading power-to-weight ratio of 434PS per ton. The 570S accelerates from 0 to 100km/h in 3.2 seconds, while 200km/h is reached in just 9.5 seconds with the pace not letting up till the car reaches a top speed of 328km/h.
+<br><br>
+	The McLaren design team has created a shape of beauty highlighted by details such as the rear flying buttresses that increase downforce as well as adding grace, and complex door tendons that direct additional air to cool the mid-mounted V8 engine.
+<br><br>
+	The Sports Series features an evolution of the 3.8-litre V8 twin turbo engine, named M838TE, with 30 percent of components bespoke to the new model. Engineered by McLaren, it produces 562bhp at 7,400 rpm, and 600Nm of torque at 5,000-6,500 rpm. Power is delivered through a seven-speed SSG transmission, and transferred to the road through the rear wheels. This power is brought under control with standard-fit carbon ceramic brakes.
+<br><br>
+	The unique carbon fiber MonoCell II chassis has been newly designed with more of a focus on day-to-day usability, offering improved ingress and egress from the cabin. It is incredibly strong and stiff yet weighs less than 80kg, offering optimum levels of protection. This lightweight structure, and the use of aluminum body panels, contributes to a dry weight of as low as 1,313kg, almost 150kg lighter than its closest competitor.
+	",
+	"tags": ["#Supercars", "rwd", "street", "semiautomatic", "supercar", "great britain"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "562bhp",
+		"torque": "600Nm",
+		"weight": "1313kg",
+		"topspeed": "328km/h",
+		"acceleration": "3.2s 0-100",
+		"pwratio": "2.33kg/hp"
+	},
+	"torqueCurve": [
+		["500","197"],
+		["1000","258"],
+		["1500","161"],
+		["2000","211"],
+		["2500","379"],
+		["3000","520"],
+		["3500","557"],
+		["4000","584"],
+		["4300","613"],
+		["4500","588"],
+		["4750","592"],
+		["5000","601"],
+		["5500","592"],
+		["6000","594"],
+		["6500","590"],
+		["7000","565"],
+		["7250","554"],
+		["7500","531"],
+		["8000","496"],
+		["8200","479"],
+		["8500","454"]
+	],
+	"powerCurve": [
+		["500","14"],
+		["1000","36"],
+		["1500","34"],
+		["2000","59"],
+		["2500","133"],
+		["3000","219"],
+		["3500","274"],
+		["4000","328"],
+		["4300","370"],
+		["4500","372"],
+		["4750","395"],
+		["5000","422"],
+		["5500","457"],
+		["6000","501"],
+		["6500","539"],
+		["7000","555"],
+		["7250","564"],
+		["7500","560"],
+		["8000","557"],
+		["8200","551"],
+		["8500","541"]
+	]
+}

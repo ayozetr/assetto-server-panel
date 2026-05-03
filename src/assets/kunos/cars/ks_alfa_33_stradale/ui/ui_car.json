@@ -1,0 +1,76 @@
+{
+
+	"name": "Alfa Romeo 33 Stradale",
+	"brand": "Alfa Romeo",
+	"description": "The Alfa Romeo 33 is not just beautiful, it is sublime! Without a doubt everyone, inside and outside the industry, recognises it as one of the most beautiful cars of all time. 
+	<br><br>
+	The 33 Stradale, first built in 1967, was based on the Autodelta Alfa Romeo Tipo 33 racing car. The car, designed by Franco Scaglione, and built by Carrozzeria Marazzi, made its debut at the 1967 Turin Motorshow. Just 18 examples were ever built.
+	<br><br>
+	The 33 Stradale is the first production vehicle to feature dihedral doors, also known as butterfly doors. The 33 Stradale also features windows which seamlessly curve upward into the 'roof' of the vehicle. The car has aluminium body on aluminium tubular chassis. As a result of being built by hand, each model differs from the others for some details.
+	The car has 13-inch Campagnolo magnesium wheels, the fronts eight and the rears nine inches wide; there are Girling disc brakes on all four corners, the rear ones are inboard. Suspension is like in mid-1960s race car with upper and lower control arms in front and double trailing arms in the rear, along with substantial antiroll bars.
+	The race-bred engine bore no relation to the mass-produced units in Alfa's more mainstream vehicles. The engine is closely related to the V8 of the Alfa Montreal, albeit with smaller capacity and in a much higher state of tune.
+	<br>
+	The car takes 5.5 seconds to reach 60 mph (96.6 km/h) from a standing start and has a top speed of 260 km/h (160 mph). In 1968 it was the fastest commercially available car in the standing kilometre with the time of 24.0 seconds measured by German Auto, Motor und Sport magazine.
+	",
+	"tags": ["#Vintage Supercars", "rwd", "manual", "street", "supercar", "vintage", "italy"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "230bhp",
+		"torque": "206Nm",
+		"weight": "700kg",
+		"topspeed": "260 km/h",
+		"acceleration": "s 0-100",
+		"pwratio": "3.04kg/hp"
+	},
+	"torqueCurve": [
+		["500","82"],
+		["1000","100"],
+		["1500","108"],
+		["2000","100"],
+		["2500","95"],
+		["3000","102"],
+		["3500","109"],
+		["4000","116"],
+		["4500","127"],
+		["5000","148"],
+		["5500","169"],
+		["6000","190"],
+		["6500","199"],
+		["7000","200"],
+		["7500","199"],
+		["8000","196"],
+		["8500","193"],
+		["8800","190"],
+		["9000","187"],
+		["9400","184"],
+		["10000","181"],
+		["10500","168"]
+	],
+	"powerCurve": [
+		["500","6"],
+		["1000","14"],
+		["1500","23"],
+		["2000","28"],
+		["2500","33"],
+		["3000","43"],
+		["3500","54"],
+		["4000","65"],
+		["4500","80"],
+		["5000","104"],
+		["5500","131"],
+		["6000","160"],
+		["6500","182"],
+		["7000","197"],
+		["7500","210"],
+		["8000","220"],
+		["8500","230"],
+		["8800","235"],
+		["9000","236"],
+		["9400","243"],
+		["10000","254"],
+		["10500","248"]
+	]
+
+}

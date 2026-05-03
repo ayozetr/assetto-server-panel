@@ -1,0 +1,70 @@
+{
+
+	"name": "Ferrari 312/67",
+	"brand": "Ferrari",
+	"description": "
+Scuderia Ferrari started the 1967 Championship with the 312/67. The car's official debut was at the Champions' Race in Brands-Hatch with Bandini and Scarfiotti behind the wheel.
+<br><br>
+The Scuderia's best results came courtesy of New Zealander Chris Amon, who managed third position on the podium on three occasions.
+",
+	"tags": ["#Vintage Racecar", "rwd", "race", "manual", "gp", "singleseater", "vintage", "italy"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "390bhp",
+		"torque": "--Nm",
+		"weight": "548kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.41kg/hp"
+	},
+	"torqueCurve": [
+		["500","32"],
+		["1000","69"],
+		["1500","111"],
+		["2000","88"],
+		["2500","113"],
+		["3000","138"],
+		["3500","163"],
+		["4000","188"],
+		["4500","213"],
+		["5000","238"],
+		["5500","263"],
+		["6000","288"],
+		["6500","313"],
+		["7000","338"],
+		["7500","328"],
+		["8000","318"],
+		["8500","308"],
+		["9000","298"],
+		["9500","288"],
+		["10000","278"],
+		["10500","261"],
+		["11000","238"]
+	],
+	"powerCurve": [
+		["500","2"],
+		["1000","10"],
+		["1500","23"],
+		["2000","25"],
+		["2500","40"],
+		["3000","58"],
+		["3500","80"],
+		["4000","106"],
+		["4500","135"],
+		["5000","167"],
+		["5500","203"],
+		["6000","243"],
+		["6500","286"],
+		["7000","332"],
+		["7500","345"],
+		["8000","357"],
+		["8500","368"],
+		["9000","377"],
+		["9500","384"],
+		["10000","390"],
+		["10500","385"],
+		["11000","368"]
+	]
+
+}

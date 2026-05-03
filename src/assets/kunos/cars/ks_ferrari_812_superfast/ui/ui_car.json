@@ -1,0 +1,63 @@
+{
+	"name": "Ferrari 812 Superfast",
+	"brand": "Ferrari", 
+	"description": "
+Ferrari chose the 87th edition of the Geneva International Motor Show for the world premiere of the new 12-cylinder berlinetta, the 812 Superfast, the most powerful and fastest Ferrari in the marque's history. This new car not only introduces a plethora of innovative features but is also particularly significant as the V12 series marked the official start of the glorious Prancing Horse story in 1947, 70 years ago.
+<br><br>
+The 812 Superfast thus ushers in a new era in Ferrari 12-cylinder history, in doing so building on the invaluable legacies of the F12berlinetta and F12tdf. It is aimed at clients demanding the most powerful and exclusive Ferrari in the range: an uncompromising sports car that will deliver exhilarating driving both on road and track yet also be comfortable enough to allow its owners to enjoy it as an all-round experience.
+
+	",
+	"tags": ["#Supercars", "rwd", "semiautomatic", "street", "supercar", "italy"],  
+	"class": "street",
+	"specs":
+	{
+		"bhp": "800bhp",
+		"torque": "718Nm",
+		"weight": "1525kg",
+		"topspeed": ">340km/h",
+		"acceleration": "2.9s 0-100",
+		"pwratio": "1.91kg/hp"
+	},
+	"torqueCurve": [
+		["500","158"],
+		["1000","294"],
+		["1500","330"],
+		["2000","406"],
+		["2500","489"],
+		["3000","538"],
+		["3500","574"],
+		["4000","619"],
+		["4500","631"],
+		["5000","658"],
+		["5500","667"],
+		["6000","680"],
+		["6500","715"],
+		["7000","718"],
+		["7500","691"],
+		["8000","678"],
+		["8500","670"],
+		["9000","622"],
+		["9250","579"]
+	],
+	"powerCurve": [
+		["500","11"],
+		["1000","41"],
+		["1500","70"],
+		["2000","114"],
+		["2500","172"],
+		["3000","227"],
+		["3500","282"],
+		["4000","348"],
+		["4500","399"],
+		["5000","462"],
+		["5500","515"],
+		["6000","573"],
+		["6500","653"],
+		["7000","706"],
+		["7500","728"],
+		["8000","762"],
+		["8500","800"],
+		["9000","786"],
+		["9250","752"]
+	]
+}

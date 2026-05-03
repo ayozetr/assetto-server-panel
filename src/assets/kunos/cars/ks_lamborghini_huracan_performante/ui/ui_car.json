@@ -1,0 +1,68 @@
+{
+
+	"name": "Lamborghini Huracan Performante",
+	"brand": "Lamborghini", 
+	"description": "The Huracán Performante has reworked the concept of super sports cars and taken the notion of performance to levels never seen before. The vehicle has been re-engineered in its entirety, as regards its weight, engine power, chassis and above all by introducing an innovative system of active aerodynamics: ALA. The use of the awarded Forged Composites®, a shapable forged carbon fiber material patented by Automobili Lamborghini, is a real nice touch and it contributes to make the vehicle even lighter in weight.
+<br><br>
+	The front and rear spoilers, made entirely of Forged Composites®, enable the aerodynamics to be actively exploited to achieve maximum performance by increasing or decreasing the downforce as required. The new, even lighter wheel rims hold the new Pirelli P Zero Corsa tyres, providing incredible grip. 
+<br><br>
+The even more powerful V10 engine, massive use of Forged Composites® to make it even lighter in weight, the LDF 7-speed dual-clutch transmission and the new ALA active aerodynamic system that controls air and directs it in its favor.
+<br><br>
+Aerodinamica Lamborghini Attiva is a smart and innovative system that manages active aerodynamics. ALA adapts to the driving style and type of route. When necessary, it increases vertical load to assist stability and speed through curves, or it reduces aerodynamic resistance to assist acceleration and reaching the top speed.",
+	"tags": ["#Supercars", "awd", "semiautomatic", "street", "supercar", "italy"],  
+	"class": "street",
+	"specs":
+	{
+		"bhp": "640bhp",
+		"torque": "600Nm",
+		"weight": "1382kg",
+		"topspeed": "325km/h",
+		"acceleration": "2.9s 0-100",
+		"pwratio": "2.15kg/hp"
+	},
+	"torqueCurve": [
+		["500","171"],
+		["1000","355"],
+		["1500","370"],
+		["2000","375"],
+		["2500","384"],
+		["3000","412"],
+		["3500","457"],
+		["4000","505"],
+		["4500","543"],
+		["5000","574"],
+		["5500","586"],
+		["6000","595"],
+		["6500","600"],
+		["7000","599"],
+		["7500","592"],
+		["8000","574"],
+		["8250","552"],
+		["8500","531"],
+		["9000","436"],
+		["9250","342"]
+	],
+	"powerCurve": [
+		["500","12"],
+		["1000","50"],
+		["1500","78"],
+		["2000","105"],
+		["2500","135"],
+		["3000","174"],
+		["3500","225"],
+		["4000","284"],
+		["4500","343"],
+		["5000","403"],
+		["5500","453"],
+		["6000","501"],
+		["6500","548"],
+		["7000","589"],
+		["7500","624"],
+		["8000","645"],
+		["8250","640"],
+		["8500","634"],
+		["9000","551"],
+		["9250","444"]
+	]
+
+}

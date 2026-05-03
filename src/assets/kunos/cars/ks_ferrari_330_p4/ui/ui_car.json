@@ -1,0 +1,64 @@
+{
+
+	"name": "Ferrari 330 P4",
+	"brand": "Ferrari",
+	"description": "
+With a styling very similar to that of the 330 P3, this model was powered by a V12 engine that had been radically redesigned by Franco Rocchi. The most obvious modification was the introduction of a three-valve cylinder head – two inlet and one exhaust.
+<br><br>
+Fuel feed was provided by a Lucas injection system. The chassis was slightly shorter than the 330 P3's, and the new suspension system improved roadholding. The car won numerous races and earned its place in the history books after a memorable 1-2-3 at Daytona.
+
+",
+	"tags": ["rwd", "manual", "lightweight", "vintage", "race", "trackday", "historic"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "450bhp",
+		"torque": "--Nm",
+		"weight": "792kg",
+		"topspeed": "320km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.76kg/hp"
+	},
+	"torqueCurve": [
+		["500","32"],
+		["1000","119"],
+		["1500","151"],
+		["2000","168"],
+		["2500","193"],
+		["3000","218"],
+		["3500","243"],
+		["4000","268"],
+		["4500","293"],
+		["5000","318"],
+		["5500","343"],
+		["6000","368"],
+		["6500","393"],
+		["7000","418"],
+		["7500","408"],
+		["8000","398"],
+		["8500","368"],
+		["9000","328"]
+	],
+	"powerCurve": [
+		["500","2"],
+		["1000","17"],
+		["1500","32"],
+		["2000","47"],
+		["2500","68"],
+		["3000","92"],
+		["3500","119"],
+		["4000","151"],
+		["4500","185"],
+		["5000","223"],
+		["5500","265"],
+		["6000","310"],
+		["6500","359"],
+		["7000","411"],
+		["7500","430"],
+		["8000","447"],
+		["8500","439"],
+		["9000","415"]
+	]
+
+}

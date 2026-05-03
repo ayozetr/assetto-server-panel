@@ -1,0 +1,66 @@
+{
+
+	"name": "Porsche 917/30 Spyder",
+	"brand": "Porsche",
+	"description": "
+	The Porsche 917/30 Spyder owed its outstanding performance to its twelve-cylinder twin-turbo engine. Unlike the strictly regulated European motorsport series, the CanAm series placed no restrictions on technicians' ingenuity in terms of weight or displacement limits. The team supporting the Porsche race engine designer, Hans Mezger, was therefore able to dig deep into its box of tricks to ensure that the twelve-cylinder turbo engine of the 917/30 steadfastly produced 1,100 to 1,400 hp and a maximum torque of 1,210 Newton metres, thereby guaranteeing exceptional acceleration: from zero to 100 km/h in just 2.4 seconds, a mere 5.4 seconds to the 200 mark and only 11.3 seconds to reach a speed of 300 km/h. 
+	<br><br>
+	And above all, the turbocharger of the Porsche 917/30 Spyder proved to be highly reliable, even on twisting circuits. Porsche driver Mark Donohue beat his McLaren and Chevrolet rivals so comprehensively, that the race car received the equally rare and coveted title of \"unbeatable\". Only the CanAm series rules prevented the fast, reliable Porsche 917/30 Spyder from entering the race again in 1974. But the Porsche 917/30 Spyder was much talked about even after the 1973 race season. 
+	<br><br>
+	In 1975, Mark Donohue set a new world lap record in Talladega, Alabama, in an aerodynamically optimised 917/30. The absolute top speed of the American's fastest lap was 385.85 km/h. 
+	<br><br>
+	Today, the race car can be admired in the Porsche Museum in Zuffenhausen, where it is considered a highlight of the museum's collection. The 917/30 also regularly tours the world as a brand ambassador as part of the \"Rolling Porsche Museum\".
+	",
+	"tags": ["#Vintage Can Am", "manual", "turbo", "vintage", "race", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "1200bhp",
+		"torque": "1200Nm",
+		"weight": "800kg",
+		"topspeed": "385km/h",
+		"acceleration": "2.4s 0-100",
+		"pwratio": "0.66kg/hp"
+	},
+	"torqueCurve": [
+		["500","221"],
+		["1000","248"],
+		["1500","294"],
+		["2000","340"],
+		["2500","381"],
+		["3000","411"],
+		["3500","441"],
+		["4000","447"],
+		["4500","439"],
+		["5000","548"],
+		["5500","864"],
+		["6000","1138"],
+		["6500","1296"],
+		["7000","1241"],
+		["7500","1173"],
+		["8000","1118"],
+		["8500","1045"],
+		["9000","908"]
+	],
+	"powerCurve": [
+		["500","16"],
+		["1000","35"],
+		["1500","62"],
+		["2000","96"],
+		["2500","134"],
+		["3000","173"],
+		["3500","217"],
+		["4000","251"],
+		["4500","277"],
+		["5000","384"],
+		["5500","667"],
+		["6000","959"],
+		["6500","1183"],
+		["7000","1220"],
+		["7500","1235"],
+		["8000","1256"],
+		["8500","1247"],
+		["9000","1148"]
+	]
+}

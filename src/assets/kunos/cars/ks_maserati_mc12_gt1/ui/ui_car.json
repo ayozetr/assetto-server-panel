@@ -1,0 +1,80 @@
+{
+	"name": "Maserati MC12 GT1",
+	"brand": "Maserati", 
+	"description": "
+
+The Maserati MC12 entered production in 2004 as base for the racing variant to compete in the GT Championship. In fact, one requirement for participation in the GT Championship was the production of at least 25 road cars; so 25 cars were produced in 2004 and another 25 in 2005.
+<br><br>
+The car was based on the Enzo Ferrari chassis and gearbox, mounting a variant of the Ferrari Dino V12 engine.
+<br><br>
+The racing results of the racing version were magnificent. The Maserati MC12 GT1 team managed to end second and third in the debut race, winning the next round's race. The second year Maserati won the Manufacturers' Cup with a great point gap, and continued to compete at great level during the next years. It participated in 94 races, winning 40 of them.
+",
+	"tags": ["#Vintage GT", "rwd", "race", "sequential", "gt", "vintage", "italy"], 
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "580bhp",
+		"torque": "650Nm",
+		"weight": "1100kg",
+		"topspeed": "320km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.89kg/hp"
+	},
+	"torqueCurve": [
+		["500","235"],
+		["1000","278"],
+		["1500","294"],
+		["2000","317"],
+		["2500","345"],
+		["3000","398"],
+		["3250","434"],
+		["3500","486"],
+		["3750","517"],
+		["4000","581"],
+		["4250","627"],
+		["4500","641"],
+		["4750","645"],
+		["5000","649"],
+		["5250","651"],
+		["5500","652"],
+		["5750","651"],
+		["6000","648"],
+		["6250","631"],
+		["6500","623"],
+		["6750","604"],
+		["6900","594"],
+		["7000","581"],
+		["7250","559"],
+		["7500","530"],
+		["8000","450"]
+	],
+	"powerCurve": [
+		["500","17"],
+		["1000","39"],
+		["1500","62"],
+		["2000","89"],
+		["2500","121"],
+		["3000","168"],
+		["3250","198"],
+		["3500","239"],
+		["3750","272"],
+		["4000","326"],
+		["4250","374"],
+		["4500","405"],
+		["4750","430"],
+		["5000","456"],
+		["5250","480"],
+		["5500","504"],
+		["5750","526"],
+		["6000","546"],
+		["6250","554"],
+		["6500","569"],
+		["6750","573"],
+		["6900","576"],
+		["7000","571"],
+		["7250","569"],
+		["7500","558"],
+		["8000","506"]
+	]
+}

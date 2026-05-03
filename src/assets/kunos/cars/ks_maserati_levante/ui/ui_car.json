@@ -1,0 +1,59 @@
+{
+
+	"name": "Maserati Levante S",
+	"brand": "Maserati",
+	"description": "Maserati Levante is the first SUV in the brand's more than one hundred year history.<br><br>
+
+	The design of the Levante features clear associations with the Maserati brand and its distinctive Italian character: the aggressive front introduces new, tapered headlights separated into two elements, with the upper headlight unit connected to the radiator grille. Maserati's design signature is clearly visible on the sides: the three iconic air vents on the front wings, the trapezoidal C-pillar with the &quot;Saetta&quot; logo and the large, frameless door windows. The rear is dominated by the very tapered back window and streamlined shape, both typical of a high-performance sports car.<br><br>
+
+	At a technical level, the Levante's chassis is designed to combine the outstanding on-road performance typical of every Maserati with unrivalled handling even on very low-grip surfaces and an excellent off-road performance and ride. The new SUV boasts a high level of content as standard, with all versions featuring: sophisticated electronic suspension with controlled damping and air springs, which can be set on several levels, &quot;Q4&quot; intelligent all-wheel drive and 8-speed automatic transmission specially calibrated for the brand's new SUV.",
+	"tags": ["#SUV", "awd", "street", "italy"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "424bhp",
+		"torque": "580Nm",
+		"weight": "2108kg",
+		"topspeed": "--km/h",
+		"acceleration": "5.0s 0-100",
+		"pwratio": "4.97kg/cv"
+	},
+	"torqueCurve": [
+		["500","200"],	
+		["1000","350"],
+		["1500","525"],
+		["1750","580"],
+		["2000","580"],
+		["2500","580"],
+		["3000","580"],
+		["3500","580"],
+		["4000","580"],
+		["4500","580"],
+		["5000","580"],
+		["5500","553"],
+		["5750","533"],
+		["6000","509"],
+		["6500","425"],
+		["7000","348"]
+	],
+	"powerCurve": [
+		["500","14"],
+		["1000","49"],
+		["1500","111"],
+		["1750","143"],
+		["2000","163"],
+		["2500","204"],
+		["3000","244"],
+		["3500","285"],
+		["4000","326"],
+		["4500","367"],
+		["5000","407"],
+		["5500","427"],
+		["5750","430"],
+		["6000","429"],
+		["6500","388"],
+		["7000","342"]
+	]
+}
+

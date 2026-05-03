@@ -1,0 +1,75 @@
+{
+
+	"name": "Maserati GranTurismo MC GT4",
+	"brand": "Maserati", 
+	"description": "After the experience with Trofeo Series, Maserati is ready to push the GranTurismo MCs into a new challenge: the international GT4 series.<br><br>
+	The modifications needed for GT4 homologation mainly concern the engine and aerodynamics. The car's overall technical make-up will be unchanged: the 4700cc engine, electro-actuated transmission with paddle-shift commands and a kerb weight of 1410 kg will stay. The fitting of an air scoop will reduce the car's power output to 430 bhp from its current 488 bhp while a newly-designed rear spoiler and modified diffuser will bring the car's performance into line with that of the other GT4 cars.",
+	"tags": ["#GT4", "rwd", "race", "sequential", "italy"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "430bhp",
+		"torque": "535Nm",
+		"weight": "1410kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "3.27kg/hp"
+	},
+	"torqueCurve": [
+		["500","117"],
+		["1000","290"],
+		["1500","356"],
+		["2000","360"],
+		["2500","460"],
+		["3000","489"],
+		["3250","498"],
+		["3500","490"],
+		["3750","478"],
+		["4000","487"],
+		["4250","498"],
+		["4500","532"],
+		["4750","535"],
+		["5000","520"],
+		["5250","520"],
+		["5500","508"],
+		["5750","512"],
+		["6000","490"],
+		["6250","479"],
+		["6500","466"],
+		["6750","451"],
+		["7000","440"],
+		["7250","411"],
+		["7500","381"]
+	],
+	"powerCurve": [
+		["500","8"],
+		["1000","41"],
+		["1500","75"],
+		["2000","101"],
+		["2500","161"],
+		["3000","206"],
+		["3250","227"],
+		["3500","241"],
+		["3750","252"],
+		["4000","274"],
+		["4250","297"],
+		["4500","336"],
+		["4750","357"],
+		["5000","365"],
+		["5250","383"],
+		["5500","392"],
+		["5750","413"],
+		["6000","413"],
+		["6250","420"],
+		["6500","425"],
+		["6750","428"],
+		["7000","433"],
+		["7250","418"],
+		["7500","401"]
+	]
+
+}
+
+
+
+

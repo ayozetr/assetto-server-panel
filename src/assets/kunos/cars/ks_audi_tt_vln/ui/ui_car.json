@@ -1,0 +1,54 @@
+{
+
+	"name": "Audi TT RS (VLN)",
+	"brand": "Audi",
+	"description": "
+Audi TT RS (VLN) has been developed in order to respond to the high demand by customers wishing to use the TT and other vehicles of the brand in motorsport.
+<br><br>
+It's based on a five-cylinder TFSI engine and features racing-specific new developments in the areas of the body, suspension and aerodynamics. 
+	",
+	"tags": ["sequential", "fwd", "gt", "race", "germany"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "390bhp",
+		"torque": "530Nm",
+		"weight": "1120kg",
+		"topspeed": "km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.87kg/hp"
+	},
+	"torqueCurve": [
+		["500","200"],
+		["1000","225"],
+		["1500","243"],
+		["2000","376"],
+		["2500","464"],
+		["3000","530"],
+		["3500","528"],
+		["4000","530"],
+		["4500","518"],
+		["5000","501"],
+		["5500","482"],
+		["6000","458"],
+		["6500","364"],
+		["7000","201"]
+	],
+	"powerCurve": [
+		["500","14"],
+		["1000","32"],
+		["1500","51"],
+		["2000","106"],
+		["2500","163"],
+		["3000","223"],
+		["3500","260"],
+		["4000","298"],
+		["4500","327"],
+		["5000","352"],
+		["5500","372"],
+		["6000","386"],
+		["6500","332"],
+		["7000","198"]
+	]
+
+}

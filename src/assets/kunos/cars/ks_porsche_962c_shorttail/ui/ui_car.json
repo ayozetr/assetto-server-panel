@@ -1,0 +1,58 @@
+{
+	"name": "Porsche 962 C Short Tail",
+	"brand": "Porsche",
+	"description": "
+First developed in 1984 for use in the USA, from 1985 the Porsche 962 C continued the successful global motorsport story begun by its predecessor model, the 956, in 1982. Porsche undertook pioneering work in developing these race cars, adapting the aerodynamic ground-effect used in Formula 1 to the new race cars. Wing profiles in the sidepods and diffusers in the underbody produced a vacuum that 'sucked' the car to the track surface during driving, resulting in extreme cornering speeds. The 956 and 962 C had aluminium monocoques that were around 80% stiffer than the tubular space frame of their predecessors. As the rules limited fuel consumption, Porsche used ground-breaking injection and ignition systems. Some of the differences between the 962 C and the 956 were a longer wheelbase, narrower tyres and increased weight (minimum weight of 850 instead of 800 kilograms), along with further improved aerodynamics. Initially fitted with a 2.65-litre twin-turbo engine, the 962 C was first powered by a fully water-cooled three-litre twin-turbo engine producing up to 700 hp during practice at Le Mans in 1985. The 962 C won Le Mans in 1986, 1987 and 1994, following the 956's unbeaten run in the 24h race from 1982 to 1985. Porsche won five driver and three manufacturer's World Championship titles with these \"wing cars\" between 1982 and 1986. ",
+	"tags": ["#Proto C", "rwd", "race", "sequential", "gt", "prototype C", "vintage", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "625hp",
+		"torque": "---Nm",
+		"weight": "850kg",
+		"topspeed": "330km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.36kg/hp"
+	},
+	"torqueCurve": [
+		["500","120"],
+		["1000","150"],
+		["1500","200"],
+		["2000","290"],
+		["2500","331"],
+		["3000","386"],
+		["3500","497"],
+		["4000","531"],
+		["4500","585"],
+		["5000","601"],
+		["5400","630"],
+		["6000","628"],
+		["6500","624"],
+		["7000","618"],
+		["7500","567"],
+		["8000","543"],
+		["8200","535"],
+		["8500","508"]
+	],
+	"powerCurve": [
+		["500","8"],
+		["1000","21"],
+		["1500","42"],
+		["2000","81"],
+		["2500","116"],
+		["3000","163"],
+		["3500","244"],
+		["4000","298"],
+		["4500","370"],
+		["5000","422"],
+		["5400","478"],
+		["6000","529"],
+		["6500","570"],
+		["7000","607"],
+		["7500","597"],
+		["8000","610"],
+		["8200","616"],
+		["8500","606"]
+	]
+}

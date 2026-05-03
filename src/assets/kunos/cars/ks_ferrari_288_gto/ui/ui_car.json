@@ -1,0 +1,63 @@
+{
+	"name": "Ferrari GTO",
+	"brand": "Ferrari", 
+	"description": "
+Announced by Enzo Ferrari in September 1983, and unveiled at the Geneva Motor Show in March 1984, the GTO (also unofficially known with the 288 prefix) sparked off a wave of enthusiasm. The legendary name, the stunning styling by Pininfarina, the engine with its seemingly inexhaustible power (2.8 litres and 8 cylinders) and the widespread use of composite materials made the GTO the closest thing to a racing car.
+<br><br>
+To meet customer demand, 272 were built instead of the planned 200: all were sold before production began.
+<br><br>
+The 288 appellation refers to the total cubic capacity of the engine and number of cylinders, 2.8 litres with 8 cylinders. Obviously, the \"GTO\" model name was a retro touch referring to the legendary 250 GTO of the early sixties, to which it was intended to be the spiritual successor in GT racing.",
+	"tags": ["#Vintage Supercars", "rwd", "manual", "street", "turbo", "supercar", "vintage", "italy"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "400bhp",
+		"torque": "496Nm",
+		"weight": "1160kg",
+		"topspeed": "305km/h",
+		"acceleration": "4.9s 0-100",
+		"pwratio": "2.9kg/hp"
+	},
+	"torqueCurve": [
+		["500","156"],
+		["1000","209"],
+		["1500","246"],
+		["2000","297"],
+		["2500","329"],
+		["3000","452"],
+		["3500","494"],
+		["3800","498"],
+		["4000","495"],
+		["4500","493"],
+		["5000","484"],
+		["5500","479"],
+		["6000","465"],
+		["6500","436"],
+		["7000","408"],
+		["7500","372"],
+		["8000","306"],
+		["8500","267"]
+	],
+	"powerCurve": [
+		["500","11"],
+		["1000","29"],
+		["1500","52"],
+		["2000","83"],
+		["2500","115"],
+		["3000","191"],
+		["3500","243"],
+		["3800","266"],
+		["4000","278"],
+		["4500","312"],
+		["5000","340"],
+		["5500","370"],
+		["6000","391"],
+		["6500","398"],
+		["7000","401"],
+		["7500","392"],
+		["8000","344"],
+		["8500","319"]
+	]
+
+}

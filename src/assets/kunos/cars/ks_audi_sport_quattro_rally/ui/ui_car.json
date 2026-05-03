@@ -1,0 +1,62 @@
+{
+
+	"name": "Audi Sport quattro S1 E2",
+	"brand": "Audi",
+	"description": "Introduced in 1984, the Audi Sport quattro S1 E2 revolutionized rallying. Just like the other manufacturers, Audi used the lenient homologation requirements to create a new rally car. All the car maker needed for homologation was a production run of a mere 200 cars.<br>
+Blomqvist's spectacular, sideways driving style suited the Sport quattro perfectly. By flicking the tail out, the Swede overcame the natural understeer of the nose-heavy Audi. He won five of the twelve rounds and was crowned the 1984 World Champion. Mikkola and Roehrl also won a round, which was enough to clinch the constructor's trophy as well.",
+	"tags": ["#rally", "awd", "manual", "race", "turbo", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "540bhp",
+		"torque": "570Nm",
+		"weight": "1090kg",
+		"topspeed": "250+km/h",
+		"acceleration": "3.1s 0-100",
+		"pwratio": "2.01kg/hp"
+	},
+	 "torqueCurve": [
+		["0","56"],
+	    ["500","100"],
+		["1000","110"],
+		["1500","108"],
+	    ["2000","165"],
+	    ["2500","178"],
+	    ["3000","221"],
+	    ["3500","279"],
+	    ["4000","350"],
+	    ["4500","503"],
+	    ["5000","573"],
+	    ["5500","590"],
+	    ["6000","593"],
+	    ["6500","585"],
+	    ["7000","583"],
+	    ["7500","563"],
+	    ["8000","535"],
+	    ["8500","498"],
+	    ["8750","450"]
+       ],
+       "powerCurve": [
+		 ["0","0"],
+		 ["500","7"],
+	     ["1000","14"],
+	     ["1500","23"],
+		 ["2000","46"],
+		 ["2500","63"],
+		 ["3000","93"],
+		 ["3500","137"],
+		 ["4000","197"],
+		 ["4500","318"],
+		 ["5000","402"],
+		 ["5500","456"],
+		 ["6000","499"],
+		 ["6500","534"],
+		 ["7000","573"],
+	     	 ["7500","592"],
+	    	 ["8000","601"],
+	    	 ["8500","594"],
+	    	 ["8750","553"]
+	        ]
+
+}

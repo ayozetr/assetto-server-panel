@@ -1,0 +1,59 @@
+{
+	"name": "Audi S1",
+	"brand": "Audi",
+	"description": "Back in the 1980s an Audi S1 garnered a legendary reputation – it was the car that would see the brand dominate the World Rally Championship in its day. Now the abbreviation is coming back – but this time as a road-going version: the Audi S1 and the S1 Sportback constitute the new flagship models in the compact A1 model line, adding an entry-level version to the Audi S model portfolio.
+	<br><br>
+	Like all Audi S models, the S1 and the S1 Sportback also come with quattro permanent all-wheel drive onboard. At its heart is a hydraulic multi-plate clutch located on the rear axle. Its specifically tuned control software boasts a decidedly dynamic setup. The electronic differential lock with the fine-tuned wheel-selective torque control is a function of the Electronic Stabilization Control (ESC).
+	<br><br>
+	The Audi S1 and the S1 Sportback are instantly recognizable as the flagship models in the A1 model line. Their xenon plus headlights are all-new while the LED rear lights come with new, horizontally structured graphics. A host of details – particularly on the front and rear bumper, the side sills and the exhaust system – boast more striking styling. Four new exterior colors supplement the available paint finishes. The optional quattro exterior styling package hones the look further, courtesy of features such as a large roof spoiler.
+	",
+	"tags": ["#small sports", "awd", "street", "hot hatchback", "germany"], 
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "231bhp",
+		"torque": "370Nm",
+		"weight": "1340kg",
+		"topspeed": "241km/h",
+		"acceleration": "5.8s 0-100",
+		"pwratio": "5.80kg/hp"
+	},
+	"torqueCurve": [
+	["500","88"],
+	["1000","168"],
+	["1500","265"],
+	["2000","330"],
+	["2200","376"],
+	["2500","374"],
+	["3000","356"],
+	["3500","367"],
+	["4000","348"],
+	["4250","352"],
+	["4500","350"],
+	["5000","323"],
+	["5500","293"],
+	["6000","273"],
+	["6500","244"],
+	["7000","176"]
+	],
+	"powerCurve": [
+	["500","6"],
+	["1000","24"],
+	["1500","56"],
+	["2000","93"],
+	["2200","116"],
+	["2500","131"],
+	["3000","150"],
+	["3500","181"],
+	["4000","195"],
+	["4250","210"],
+	["4500","221"],
+	["5000","227"],
+	["5500","226"],
+	["6000","230"],
+	["6500","223"],
+	["7000","173"]
+	]
+
+}

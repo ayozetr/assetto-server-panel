@@ -1,0 +1,60 @@
+{
+
+	"name": "Audi TT Cup",
+	"brand": "Audi",
+	"description": "
+For the Audi Sport TT Cup, the German manufacturer has developed a visually as well as technologically attractive sports car for racing, the Audi TT cup.<br><br>
+The body shell of the Audi TT racing version consists of aluminum and carbon fiber. This ensures that the Audi TT cup that tips the scales at
+1,125 kilograms is a lightweight and extremely agile car.<br><br>
+The Audi TT cup car uses the 2.0 TFSI from the Audi TTS. The four-cylinder engine delivers 228kW (310hp) in the production model and accelerates the TTS from 0 to 100km/h in 4.7 seconds. By means of a so-called Push-to-pass function, the drivers can briefly boost the engine's output by 22kW (30hp) for overtaking maneuvers by pushing a button on the steering wheel. A blue lamp in the windshield indicates the boost activation. LEDs in the rear side windows show how many times the driver can still use the additional power. The number of available boosts is defined by the regulations.<br><br>
+Power is transmitted to the front wheels via a direct-shift dual-clutch transmission. The six-speed S tronic, which has been specifically tuned for use in racing, is operated by shift paddles on the steering wheel. Accordingly, the Audi TT cup only has two pedals, used for acceleration and braking.
+	",
+	"tags": ["#TT Cup", "sequential", "fwd", "race", "germany"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "310bhp",
+		"torque": "400+Nm",
+		"weight": "1125kg",
+		"topspeed": "--km/h",
+		"acceleration": "4.7s 0-100",
+		"pwratio": "3.62kg/hp"
+	},
+	"torqueCurve": [
+		["500","301"],
+		["1000","322"],
+		["1500","400"],
+		["2000","400"],
+		["2500","400"],
+		["3000","400"],
+		["3500","400"],
+		["4000","400"],
+		["4300","400"],
+		["5000","395"],
+		["5500","392"],
+		["5750","385"],
+		["6000","357"],
+		["6500","304"],
+		["7000","253"],
+		["7200","228"]
+	],
+	"powerCurve": [
+		["500","21"],
+		["1000","87"],
+		["1500","84"],
+		["2000","112"],
+		["2500","140"],
+		["3000","169"],
+		["3500","197"],
+		["4000","225"],
+		["4300","242"],
+		["5000","277"],
+		["5500","303"],
+		["5750","311"],
+		["6000","301"],
+		["6500","277"],
+		["7000","249"],
+		["7200","231"]
+	]
+
+}

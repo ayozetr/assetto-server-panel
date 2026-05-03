@@ -1,0 +1,58 @@
+{
+
+	"name": "Toyota Celica ST185 4WD Turbo",
+	"brand": "Toyota",
+	"description": "
+	The Toyota Celica ST185 is Toyota's most successful rally car, as it won the WRC Driver's Championship in 1992, and the WRC Manufacturer's and Driver's Championships in 1993 and 1994. 
+	<br><br>
+	In order to meet the Group A competition's homologation requirements, 5,000 GT-Four RC production versions of the Celica were manufactured, starting from September 1989.
+	<br><br>
+	This car made its debut on the Monte Carlo Rally, the opening round of the 1992 World Rally Championship series, but it was not successful until half of the season.
+	",
+	"tags": ["#rally", "awd", "manual", "race", "turbo", "japan"],   
+	"class": "race",
+	"specs":
+	{
+		"bhp": "295bhp",
+		"torque": "459Nm",
+		"weight": "1045kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "3.54kg/hp"
+	},
+	"torqueCurve": [
+		["500","200"],
+		["1000","225"],
+		["1500","243"],
+		["2000","326"],
+		["2500","389"],
+		["3000","443"],
+		["3500","455"],
+		["4000","457"],
+		["4400","460"],
+		["5000","412"],
+		["5600","388"],
+		["6000","351"],
+		["6500","317"],
+		["7100","269"],
+		["7500","221"]
+	],
+	"powerCurve": [
+		["500","14"],
+		["1000","32"],
+		["1500","51"],
+		["2000","92"],
+		["2500","137"],
+		["3000","187"],
+		["3500","224"],
+		["4000","257"],
+		["4400","284"],
+		["5000","289"],
+		["5600","305"],
+		["6000","296"],
+		["6500","289"],
+		["7100","268"],
+		["7500","233"]
+	]
+
+}

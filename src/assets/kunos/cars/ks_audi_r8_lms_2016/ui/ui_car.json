@@ -1,0 +1,63 @@
+{
+
+	"name": "Audi R8 LMS 2016",
+	"brand": "Audi",
+	"description": "
+	The new Audi R8 LMS, now featuring even more race car technology, is following in the footsteps of its successful predecessor.<br><br>
+	Audi fans were already able to marvel at the new GT3 sports car from Neckarsulm in full action in 2015, for instance in the 24-hour race at the Nurburgring, where the Audi Sport Team WRT celebrated overall victory with the new R8 LMS. At the 12-hour race at Sepang the Audi R8 LMS took a one-two-three win. The 2016 season also began successfully: An overall victory in the Dubai 24 Hours and a class win in the classic Daytona 24 Hours.",
+	"tags": ["#GTE-GT3", "rwd", "race", "sequential", "gt", "gt3", "germany"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "500bhp",
+		"torque": "500Nm",
+		"weight": "1270kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.54kg/hp"
+	},
+	"torqueCurve": [
+		["500","171"],
+		["1000","274"],
+		["1500","324"],
+		["2000","333"],
+		["2500","356"],
+		["3000","406"],
+		["3500","426"],
+		["4000","458"],
+		["4500","466"],
+		["5000","473"],
+		["5500","488"],
+		["6000","492"],
+		["6500","494"],
+		["7000","491"],
+		["7500","470"],
+		["8000","442"],
+		["8600","407"],
+		["9000","371"],
+		["9250","342"]
+	],
+	"powerCurve": [
+		["500","12"],
+		["1000","38"],
+		["1500","68"],
+		["2000","94"],
+		["2500","125"],
+		["3000","171"],
+		["3500","209"],
+		["4000","257"],
+		["4500","294"],
+		["5000","332"],
+		["5500","377"],
+		["6000","415"],
+		["6500","451"],
+		["7000","483"],
+		["7500","495"],
+		["8000","497"],
+		["8600","492"],
+		["9000","469"],
+		["9250","444"]
+	]
+
+
+}

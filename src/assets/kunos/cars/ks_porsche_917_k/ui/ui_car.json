@@ -1,0 +1,64 @@
+{
+	"name": "Porsche 917 K",
+	"brand": "Porsche",
+	"description": "The bad results of the 917 in the 1969 forced Porsche to review the aero design, since its main problem was handling at high speeds. 
+<br><br>
+	Those improvements gave birth to the 917 Kurzheck: that year this car won 7 out of 10 races, smashing the record distance by 190 miles at the 24 Hours of Daytona (724 laps).",
+	"tags": ["#Vintage GT", "rwd", "manual", "vintage", "race", "germany"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "600hp",
+		"torque": "--Nm",
+		"weight": "820kg",
+		"topspeed": "350km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.36kg/hp"
+	},
+	"torqueCurve": [
+		["500","149"],
+		["1000","173"],
+		["1500","196"],
+		["2000","240"],
+		["2500","300"],
+		["3000","379"],
+		["3500","435"],
+		["4000","477"],
+		["4500","509"],
+		["4750","525"],
+		["5000","537"],
+		["5500","511"],
+		["6000","518"],
+		["6500","546"],
+		["7000","528"],
+		["7500","510"],
+		["7800","486"],
+		["8000","516"],
+		["8250","522"],
+		["8500","487"],
+		["9000","446"]
+	],
+	"powerCurve": [
+		["500","10"],
+		["1000","24"],
+		["1500","41"],
+		["2000","67"],
+		["2500","105"],
+		["3000","160"],
+		["3500","214"],
+		["4000","268"],
+		["4500","322"],
+		["4750","350"],
+		["5000","377"],
+		["5500","395"],
+		["6000","436"],
+		["6500","498"],
+		["7000","519"],
+		["7500","537"],
+		["7800","532"],
+		["8000","580"],
+		["8250","605"],
+		["8500","581"],
+		["9000","563"]
+	]
+}

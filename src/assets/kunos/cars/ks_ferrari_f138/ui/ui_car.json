@@ -1,0 +1,64 @@
+	{
+
+		"name": "Ferrari F138",
+		"brand": "Ferrari",
+		"description": "The Ferrari F138 (originally known as the Ferrari F2013, and sometimes referred to by its project number, the Ferrari 664) is a Formula One racing car designed and built by Scuderia Ferrari for use in the 2013 Formula One season. It was driven by two-times World Champion Fernando Alonso and his team-mate Felipe Massa. The chassis was named &quot;F138&quot; to represent the year that it would be raced in, 2013, 
+		and to mark the final season that Formula One would use V8 engines.<br><br>
+		* Weight includes driver",
+		"tags": ["#F138", "rwd", "race", "sequential", "gp", "singleseater", "italy"],
+		"onlywith": ["ks_ferrari_f138","ks_ferrari_sf15t","ks_ferrari_f2004","ks_ferrari_sf70h"],
+		"class": "race",
+		"specs":
+		{
+			"bhp": "763bhp",
+			"torque": "310Nm",
+			"weight": "642kg*",
+			"topspeed": "--km/h",
+			"acceleration": "--s 0-100",
+			"pwratio": "0.84kg/hp"
+		},
+		"torqueCurve": [
+			["500","62"],
+			["1000","89"],
+			["2000","95"],
+			["3000","103"],
+			["4000","103"],
+			["5000","128"],
+			["6000","138"],
+			["7000","162"],
+			["8000","192"],
+			["9000","210"],
+			["10000","220"],
+			["11000","242"],
+			["12000","256"],
+			["13000","256"],
+			["14000","260"],
+			["15000","278"],
+			["16000","301"],
+			["17000","310"],
+			["18000","302"],
+			["19000","254"]
+		],
+		"powerCurve": [
+			["500","4"],
+			["1000","12"],
+			["2000","27"],
+			["3000","43"],
+			["4000","58"],
+			["5000","90"],
+			["6000","116"],
+			["7000","159"],
+			["8000","216"],
+			["9000","265"],
+			["10000","309"],
+			["11000","374"],
+			["12000","431"],
+			["13000","467"],
+			["14000","511"],
+			["15000","586"],
+			["16000","676"],
+			["17000","740"],
+			["18000","763"],
+			["19000","678"]
+		]
+	}

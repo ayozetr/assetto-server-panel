@@ -1,0 +1,66 @@
+{
+	"name": "Porsche 718 Boxster S",
+	"brand": "Porsche",
+	"description": "
+20 years after the first Boxster made its debut, Porsche has restructured its mid-engine roadsters in 2016. The designation for the new generation of models is 718 Boxster and 718 Boxster S. This way, Porsche continues the tradition of the four-cylinder flat engines that were used in the Porsche 718 mid-engine sports cars that won numerous races back in the 1950s and 1960s, among them being the legendary Targa Florio and Le Mans.
+<br><br>
+The centrepiece of the new model series is the newly developed four-cylinder flat engine with turbocharging - the first time since the late 1960s that Porsche is again implementing sports cars with this type of engine. The 718 Boxster S develops 257 kW (350 hp) from 2.5 litres of displacement. In the S-model, Porsche also uses a turbocharger with variable turbine geometry. In fact Porsche is now the only manufacturer to offer VTG technology in production cars with petrol-driven engines, both in the 911 Turbo and in the 718 Boxster S.
+<br><br>
+Turbocharging significantly boosts torque. The 2.5-litre engine of the 718 Boxster S attains 420 Newton metres over a speed range from 1,900 rpm to 4,500 rpm, which also leads to a faster sprint performance. The 718 Boxster S – with Porsche Doppelkupplungsgetriebe (PDK) and Sport Chrono Package – sprints from zero to 100 km/h in 4.2 seconds. The top speed is 285 km/h. 
+<br><br>
+In its driving dynamics, the new roadster also follows in the tracks of the original 718. The car's completely retuned chassis enhances cornering performance. The electromechanical steering system is configured to be ten per cent more direct. This makes the 718 Boxster even more agile and easier to steer, both on circuit tracks and in everyday traffic, and provides passionate and sporty driving pleasure.
+",
+	"tags": ["#Sportscars", "rwd", "turbo", "manual", "street",  "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "350hp",
+		"torque": "420Nm",
+		"weight": "1355kg",
+		"topspeed": "285km/h",
+		"acceleration": "4.6s 0-100",
+		"pwratio": "3.87kg/hp"
+	},
+	"torqueCurve": [
+		["500","0"],
+		["1000","150"],
+		["1250","200"],
+		["1500","304"],
+		["1900","420"],
+		["2000","420"],
+		["2500","420"],
+		["3000","420"],
+		["3500","420"],
+		["4000","420"],
+		["4500","420"],
+		["5000","410"],
+		["5500","397"],
+		["6000","392"],
+		["6500","377"],
+		["7000","339"],
+		["7500","290"],
+		["8000","260"]
+	],
+	"powerCurve": [
+		["500","22"],
+		["1000","21"],
+		["1250","35"],
+		["1500","64"],
+		["1900","112"],
+		["2000","118"],
+		["2500","147"],
+		["3000","177"],
+		["3500","206"],
+		["4000","236"],
+		["4500","265"],
+		["5000","288"],
+		["5500","307"],
+		["6000","330"],
+		["6500","344"],
+		["7000","333"],
+		["7500","305"],
+		["8000","292"]
+	]
+}
+

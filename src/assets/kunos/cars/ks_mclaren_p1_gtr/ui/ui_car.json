@@ -1,0 +1,70 @@
+{
+	"name": "McLaren P1™ GTR",
+	"brand": "McLaren", 
+	"description": "
+	Based on the McLaren P1™ road car, the track-focused McLaren P1™ GTR design concept further optimizes the aerodynamically efficient \"shrink-wrapped\" body shape in order to offer maximum performance, superior handling characteristics and optimized driver engagement on track. A host of changes have been made, and the car has been thoroughly re-engineered from the ground up to ensure the McLaren P1™ GTR achieves its target of being the ultimate drivers' car on track.
+	<br><br>
+	The front track of the McLaren P1™ GTR design concept has been widened by 80mm over the McLaren P1™, and is coupled with a more aggressive GT-style front splitter. Reprofiled low-temperature radiator ducts seamlessly flow into the leading edge of the aggressively flared front wheel arches, while the bodywork is \"shrink-wrapped\" around the carbon fiber MonoCage chassis behind the front wheels, cleaning the flow of air along the car's flanks.
+	<br><br>
+	The profile of the McLaren P1™ GTR design concept remains as dramatic as ever, hunkered down on to the race-prepared suspension with a fixed ride height, lower than the standard car. The snorkel air intake, inspired by the design of the original McLaren F1, is still present within the roof structure of the carbon fiber MonoCage chassis.
+	<br><br>
+	At the rear, a large, twin-element wing is mounted on dramatic carbon fiber pylons which extend around the rear of the bodywork. This fixed-height wing is fitted with a hydraulically operated Drag Reduction System (DRS) to boost acceleration performance, and has been honed to provide increased levels of downforce compared to the road car, working with the active aerodynamic flaps located ahead of the front wheels.
+	<br><br>
+	The road legal McLaren P1™ stows the rear wing within the bodywork, but with the fixed height wing, and therefore no pistons or moving mechanical parts, the bodywork of the McLaren P1™ GTR design concept behind the engine bay is now a smooth, flowing surface, feeding clean air below the wing and over the back of the car.
+	<br><br>
+	Below the rear wing sits the exposed, centrally mounted exhaust, which is an all-new design, developed exclusively for the McLaren P1™ GTR. Made from inconel and titanium alloy, the system maximizes the aural characteristic of the higher output 3.8-litre twin turbo V8 engine to maintain, and further emphasize, the McLaren sound. The design of the exhaust has also changed, with a straight cut twin-pipe setup now used in place of the single-exit exhaust.",
+	"tags": ["#Hypercars R", "rwd", "street", "semiautomatic", "great britain"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "986bhp",
+		"torque": "1000+Nm",
+		"weight": "1400kg",
+		"topspeed": "350+km/h",
+		"acceleration": "2.4s 0-100",
+		"pwratio": "1.41kg/hp"
+	},
+	"torqueCurve": [
+		["500","424"],
+		["1000","605"],
+		["1500","677"],
+		["2000","796"],
+		["2500","872"],
+		["3000","949"],
+		["3500","1042"],
+		["4000","1048"],
+		["4500","1038"],
+		["5000","1025"],
+		["5500","1016"],
+		["6000","993"],
+		["6500","983"],
+		["7000","968"],
+		["7500","934"],
+		["8000","873"],
+		["8250","858"],
+		["8500","808"],
+		["9000","639"]
+	],
+	"powerCurve": [
+		["500","30"],
+		["1000","85"],
+		["1500","143"],
+		["2000","224"],
+		["2500","306"],
+		["3000","400"],
+		["3500","512"],
+		["4000","589"],
+		["4500","656"],
+		["5000","719"],
+		["5500","785"],
+		["6000","836"],
+		["6500","897"],
+		["7000","952"],
+		["7500","984"],
+		["8000","981"],
+		["8250","994"],
+		["8500","965"],
+		["9000","807"]
+	]
+}

@@ -1,0 +1,62 @@
+{
+	"name": "Porsche Panamera Turbo",
+	"brand": "Porsche",
+	"description": "
+	The new Porsche Panamera reconciles two contrasting characteristics more than ever before: the performance of a genuine sports car and the comfort of a luxury saloon. It is a Gran Turismo that has been rethought and realigned. The second generation of the Panamera is advancing to become a performance icon of the luxury class. 
+	<br><br>
+	Its 4.0-litre V8 engine develops between 5,750 and 6,000 rpm and reaches a peak power of 404 kW (550 hp). At just above 3,000 rpm the engine already breaks through the 250-kW (340 hp) threshold – pure power from a mid-range of engine speeds. Its maximum torque of 770 Nm is available between 1,960 and 4,500 rpm – pure force from very low revs. The eight-cylinder accelerates the Panamera Turbo with Sport Chrono Package from a standstill to 100 km/h in 3.6 seconds up to a top speed of 306 km/h.
+	Porsche is also taking the steering precision and handling of sports cars into the class of Gran Turismo cars with rear axle steering – which is also new and has been adapted from the 918 Spyder and 911 Turbo.
+	<br><br>
+	That way, the Panamera Turbo delivers the performance of a genuine sports car. On the Nürburging-Nordschleife, it set a new world record for a four-door luxury sedan with 7 minutes 38 seconds.
+	",
+	"tags": ["#Sportscars", "awd", "turbo", "semiautomatic", "street",  "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "550bhp",
+		"torque": "770Nm",
+		"weight": "2070kg",
+		"topspeed": "306km/h",
+		"acceleration": "3.6s 0-100",
+		"pwratio": "3.76kg/hp"
+	},
+
+	"torqueCurve": [
+		["1000","350"],
+		["1250","430"],
+		["1500","520"],
+		["1750","640"],
+		["1900","730"],
+		["1960","770"],
+		["2000","770"],
+		["3000","770"],
+		["3500","770"],
+		["4000","770"],
+		["4500","770"],
+		["5000","730"],
+		["5500","690"],
+		["5750","671"],
+		["6000","643"],
+		["6250","611"]
+	],
+	"powerCurve": [
+		["1000","50"],
+		["1250","77"],
+		["1500","111"],
+		["1750","160"],
+		["1900","198"],
+		["1960","215"],
+		["2000","219"],
+		["3000","329"],
+		["3500","384"],
+		["4000","439"],
+		["4500","494"],
+		["5000","520"],
+		["5500","541"],
+		["5750","550"],
+		["6000","550"],
+		["6250","544"]
+	]
+
+}

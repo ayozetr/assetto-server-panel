@@ -1,0 +1,67 @@
+{
+	"name": "Porsche 908 LH",
+	"brand": "Porsche",
+	"description": "The 908 debut came in the Monza 1000km race on April 25 1968.
+	<br><br> 
+	In September of the same year it was driven at the 24 Hours of Le Mans: here the 908s were the fastest cars in qualifying and the early stages of the race, however, unlucky for them the repair rules were misinterpreted by Porsche team leaders, resulting in their disqualification.
+<br><br> 
+Things went better in next year's race: although Jacky Ickx won in a Ford GT40, Hans Herrmann' 908 LH finished in 2nd place, just a few seconds behind due to a brake pad issue towards the end of the race. 
+",
+	"tags": ["#Vintage GT", "rwd", "manual", "vintage", "race", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "350bhp",
+		"torque": "320Nm",
+		"weight": "680kg",
+		"topspeed": "320km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.94kg/hp"
+	},
+	"torqueCurve": [
+		["500","134"],
+		["1000","144"],
+		["1500","151"],
+		["2000","151"],
+		["2500","153"],
+		["3000","167"],
+		["3500","172"],
+		["4000","181"],
+		["4500","198"],
+		["4750","216"],
+		["5000","247"],
+		["5500","297"],
+		["6000","308"],
+		["6600","319"],
+		["7000","316"],
+		["7500","314"],
+		["8000","308"],
+		["8500","293"],
+		["8600","292"],
+		["9000","200"]
+	],
+	"powerCurve": [
+		["500","9"],
+		["1000","20"],
+		["1500","32"],
+		["2000","42"],
+		["2500","54"],
+		["3000","70"],
+		["3500","85"],
+		["4000","102"],
+		["4500","125"],
+		["4750","144"],
+		["5000","173"],
+		["5500","229"],
+		["6000","260"],
+		["6600","296"],
+		["7000","311"],
+		["7500","331"],
+		["8000","346"],
+		["8500","350"],
+		["8600","353"],
+		["9000","253"]
+	]
+
+}

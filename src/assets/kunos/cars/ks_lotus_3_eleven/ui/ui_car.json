@@ -1,0 +1,64 @@
+{
+
+	"name": "Lotus 3-Eleven",
+	"brand": "Lotus",
+	"description": "
+	Designed as an uncompromised manifestation of the Lotus spirit, the new car is focused on providing an undiluted driving experience and underlines the company’s ability to deliver legendary handling and blistering speed.
+	<br><br>
+	Working on the concept of less is more, and keeping close to Lotus’ track roots, the dramatic new vehicle features an all-new lightweight body, with an open cockpit design and a revised V6 supercharged engine developing 460hp.
+	<br><br>
+	Two variations of the Lotus 3-Eleven are available: Road and Race; both delivering an impressive combination of high performance, agility and precision. Based on the Road version, the Race includes a much more aggressive aero kit, a sequential gearbox and an FIA approved driver’s seat with a six-point harness.
+	<br><br>
+	Assetto Corsa simulates the Race version. With a dry weight of below 900kg (Race version), the 3-Eleven offers an enviable power to weight ratio, in excess of 500hp per tonne, and is capable of sprinting from 0-60 mph in less than 3.0 seconds before reaching a maximum speed of 290km/h for the Race version and 280 km/h for the Road version
+	",
+	"tags": ["#Supercars", "rwd", "sequential", "lightweight", "race", "great britain"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "460bhp",
+		"torque": "525Nm",
+		"weight": "890kg",
+		"topspeed": "290km/h",
+		"acceleration": "2.9s 0-100",
+		"pwratio": "1.93kg/hp"
+	},
+	"torqueCurve": [
+		["500","122"],
+		["1000","259"],
+		["1500","376"],
+		["2000","432"],
+		["2500","478"],
+		["3000","504"],
+		["3500","525"],
+		["4000","524"],
+		["4500","520"],
+		["5000","512"],
+		["5500","503"],
+		["6000","493"],
+		["6500","481"],
+		["7000","468"],
+		["7500","420"],
+		["7750","364"],
+		["8000","320"]
+	],
+	"powerCurve": [
+		["500","9"],
+		["1000","36"],
+		["1500","79"],
+		["2000","121"],
+		["2500","168"],
+		["3000","212"],
+		["3500","258"],
+		["4000","294"],
+		["4500","329"],
+		["5000","360"],
+		["5500","388"],
+		["6000","415"],
+		["6500","439"],
+		["7000","460"],
+		["7500","442"],
+		["7750","396"],
+		["8000","360"]
+	]
+
+}

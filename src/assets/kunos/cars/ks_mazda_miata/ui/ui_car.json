@@ -1,0 +1,58 @@
+{
+
+	"name": "Mazda Miata NA",
+	"brand": "Mazda",
+	"description": "The Mazda MX5 NA was presented in Chicago on February 1989. Provided with an all-steel body shell and a light-weight aluminium hood, in Japan it was sold as Eunos Roadster. 
+	<br><br>
+	Initially build mounting a 1.6 L engine, in 1994 the model was freshened with the introduction of the more powerful 1.8 L.
+	",
+	"tags": ["#small sports", "rwd", "manual", "street", "japan"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "130bhp",
+		"torque": "152Nm",
+		"weight": "1040kg",
+		"topspeed": "197+km/h",
+		"acceleration": "8.8s 0-100km/h",
+		"pwratio": "8kg/hp"
+	},
+	"torqueCurve": [
+		["0","50"],
+		["500","62"],
+		["1000","78"],
+		["1500","101"],
+		["2000","113"],
+		["2500","128"],
+		["3000","134"],
+		["3500","139"],
+		["4000","143"],
+		["4500","147"],
+		["5000","149"],
+		["5500","152"],
+		["6000","149"],
+		["6500","141"],
+		["7000","125"],
+		["7500","112"]
+	],
+	"powerCurve": [
+		["0","0"],
+		["500","4"],
+		["1000","11"],
+		["1500","21"],
+		["2000","32"],
+		["2500","45"],
+		["3000","56"],
+		["3500","68"],
+		["4000","80"],
+		["4500","93"],
+		["5000","105"],
+		["5500","115"],
+		["6000","126"],
+		["6500","130"],
+		["7000","123"],
+		["7500","118"]
+	]
+
+}

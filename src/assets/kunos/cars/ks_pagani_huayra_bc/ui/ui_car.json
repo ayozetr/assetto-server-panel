@@ -1,0 +1,64 @@
+{
+
+	"name": "Pagani Huayra BC",
+	"brand": "Pagani",
+	"description": "The name 'BC' represents the initials of Benny Caiola, a person who has greatly inspired Horacio Pagani over the years. Benny was so impressed by the passion and technology of the cars Horacio was designing from the very beginning, he made history as the first customer to buy a Pagani Automobile.
+<br><br>
+	The Huayra BC is the most technologically advanced Huayra Coupé yet, introducing innovative technical solutions which will be applied in the Pagani cars of the future. This not just a 'restyling' of the Huayra, but a product that includes innovative changes in every part of the vehicle.
+<br><br>	
+	The Huayra BC is powered by a V12 Bi-Turbo engine developed by Mercedes AMG exclusively for Pagani. The engine unleashes more than 750 horsepower, and is approved CARB and EU6.
+<br><br>
+	The Huayra BC features a 7-speed AMT (Automated Manual Transmission) developed from scratch and represents a new benchmark in this transmission technology. 
+	",
+	"tags": ["#Hypercars", "rwd", "street", "sequential", "italy"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "740bhp",
+		"torque": "1100Nm",
+		"weight": "1218kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.64kg/hp"
+		},
+	"torqueCurve": [
+		["250","100"],
+		["500","600"],
+		["1000","900"],
+		["1500","1050"],
+		["2000","1100"],
+		["2500","1100"],
+		["3000","1100"],
+		["3500","1100"],
+		["4000","1100"],
+		["4500","1060"],
+		["5000","1020"],
+		["5500","952"],
+		["6000","879"],
+		["6500","826"],
+		["7000","751"],
+		["7500","679"],
+		["8000","593"]
+	],
+	"powerCurve": [
+		["250","4"],
+		["500","42"],
+		["1000","126"],
+		["1500","221"],
+		["2000","309"],
+		["2500","386"],
+		["3000","463"],
+		["3500","541"],
+		["4000","618"],
+		["4500","670"],
+		["5000","716"],
+		["5500","735"],
+		["6000","741"],
+		["6500","754"],
+		["7000","738"],
+		["7500","715"],
+		["8000","666"]
+	]
+
+	}

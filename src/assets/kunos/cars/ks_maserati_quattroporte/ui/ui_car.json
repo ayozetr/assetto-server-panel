@@ -1,0 +1,59 @@
+{
+
+	"name": "Maserati Quattroporte GTS",
+	"brand": "Maserati",
+	"description": "The Maserati Quattroporte is part of a story that dates back over 100 years. It's a story of endurance. Of embracing challenge. Of going the distance and winning. And doing it all in audacious Italian style. Automotive luxury means something different with the Quattroporte. With this car, it's a decidedly more focused and purposeful concept. It is, after all, a Maserati with a motor sport bloodline and a time-honoured grand touring heritage <br><br>The flagship Quattroporte engine is  fitted to the GTS version. This is a magnificent 3.8-litre twin-turbo V8, developing output of 530 hp at 6,500-6,800 rpm. Torque is equally impressive at 710 Nm, available between 2,250 and 3,500 rpm in overboost mode. The GTS reaches 100 km/h from a standing start in a breathtaking 4.7 seconds and power to a top speed of 310 km/h. Combined fuel consumption and emissions are 10.7 litres/100 km and 250 g/km.",
+	"tags": ["#Sportscars", "rwd", "turbo", "semiautomatic", "street",  "italy"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "530bhp",
+		"torque": "710Nm",
+		"weight": "1900kg",
+		"topspeed": "310km/h",
+		"acceleration": "4.7s 0-100",
+		"pwratio": "3.58kg/hp"
+	},
+	"torqueCurve": [
+		["500","200"],
+		["1000","350"],
+		["1500","674"],
+		["1750","690"],
+		["2000","710"],
+		["2500","710"],
+		["3000","710"],
+		["3500","710"],
+		["4000","695"],
+		["4500","676"],
+		["5000","657"],
+		["5500","638"],
+		["5750","619"],
+		["6000","600"],
+		["6500","581"],
+		["6800","555"],
+		["7000","519"],
+		["7500","473"]
+	],
+	"powerCurve": [
+		["500","14"],
+		["1000","49"],
+		["1500","142"],
+		["1750","170"],
+		["2000","199"],
+		["2500","249"],
+		["3000","299"],
+		["3500","349"],
+		["4000","390"],
+		["4500","427"],
+		["5000","461"],
+		["5500","493"],
+		["5750","500"],
+		["6000","506"],
+		["6500","530"],
+		["6800","530"],
+		["7000","510"],
+		["7500","498"]
+	]
+
+}

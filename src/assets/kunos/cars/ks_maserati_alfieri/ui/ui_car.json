@@ -1,0 +1,73 @@
+{
+	"name": "Maserati Alfieri",
+	"brand": "Maserati",
+	"description": "The Alfieri Concept Car, introduced at the 2014 Geneva Auto Show, is more than a concept. It's a statement. Proving once more that Maserati is a sports-car company to its very core, and paving the way for the continuation of Maserati's racing legacy.<br><br>
+
+	More than just a modernization of the A6 GCS, the Alfieri is a reduction in complexity, a more compact and aggressive model that takes a modern interpretation of the A6 GCS’s spirit and recreates it into something new. The result is not retro, but a retro-inspired car that says a lot about the design DNA of the Maserati of the future.
+
+	",
+	"tags": ["#Sportscars", "rwd", "semiautomatic", "street", "italy"], 
+	"class": "street",
+	"specs":
+	{
+		"bhp": "460bhp",
+		"torque": "520Nm",
+		"weight": "1496kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "3.25kg/hp"
+	},
+	"torqueCurve": [
+		["500","117"],
+		["1000","290"],
+		["1500","356"],
+		["2000","360"],
+		["2500","460"],
+		["3000","489"],
+		["3250","498"],
+		["3500","490"],
+		["3750","478"],
+		["4000","487"],
+		["4250","498"],
+		["4500","532"],
+		["4750","535"],
+		["5000","520"],
+		["5250","520"],
+		["5500","508"],
+		["5750","512"],
+		["6000","500"],
+		["6250","489"],
+		["6500","476"],
+		["6750","471"],
+		["7000","468"],
+		["7250","441"],
+		["7500","401"]
+	],
+	"powerCurve": [
+		["500","8"],
+		["1000","41"],
+		["1500","75"],
+		["2000","101"],
+		["2500","161"],
+		["3000","206"],
+		["3250","227"],
+		["3500","241"],
+		["3750","252"],
+		["4000","274"],
+		["4250","297"],
+		["4500","336"],
+		["4750","357"],
+		["5000","365"],
+		["5250","383"],
+		["5500","392"],
+		["5750","413"],
+		["6000","421"],
+		["6250","429"],
+		["6500","434"],
+		["6750","446"],
+		["7000","460"],
+		["7250","449"],
+		["7500","422"]
+	]
+
+}

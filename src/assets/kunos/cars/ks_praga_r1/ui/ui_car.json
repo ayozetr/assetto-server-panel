@@ -1,0 +1,68 @@
+{
+
+	"name": "Praga R1",
+	"brand": "Praga",
+	"description": "
+The Praga R1 is a full-carbon track car designed around a composite monocoque, inspired by endurance prototypes.
+<br><br>
+Teardrop-shaped R1 can generate downforce of up to 1,5x times its weight through its sophisticated aerodynamics. Enhanced traction and the overall capability of the car to go fast around the corners is what differentiate R1 from its competitors. The car can generate up to 3G of lateral force in corners.
+<br><br>
+Lightweight construction and suspension setup is optimised to enhance traction while minimising tyre and brake wear.
+Engine rebuild time of Praga R1 is 50 racing hours.
+The use of high quality parts from proven suppliers helps to reduce service costs.
+
+",
+	"tags": ["#lmp3", "rwd", "sequential", "race", "singleseater"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "210bhp",
+		"torque": "220Nm",
+		"weight": "585kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.78kg/hp"
+	},
+	 "torqueCurve": [
+		["0","0"],
+		["500","108"],
+		["1000","108"],
+		["1500","167"],
+		["2000","173"],
+		["2500","188"],
+		["3000","198"],
+		["3500","206"],
+		["4000","210"],
+		["4500","227"],
+		["5000","227"],
+		["5500","226"],
+		["6000","227"],
+		["6500","228"],
+		["7000","226"],
+		["7500","216"],
+		["8000","206"],
+		["8500","168"]
+    ],
+       "powerCurve": [
+		["0","0"],		
+		["500", "8"],
+		["1000","15"],
+		["1500","35"],
+		["2000","49"],
+		["2500","66"],
+		["3000","83"],
+		["3500","101"],
+		["4000","118"],
+		["4500","143"],
+		["5000","159"],
+		["5500","174"],
+		["6000","191"],
+		["6500","208"],
+		["7000","222"],
+		["7500","227"],
+		["8000","232"],
+		["8500","201"]
+	]
+
+}

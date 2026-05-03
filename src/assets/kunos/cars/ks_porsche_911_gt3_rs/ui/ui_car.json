@@ -1,0 +1,73 @@
+{
+	"name": "Porsche 911 GT3 RS",
+	"brand": "Porsche", 
+	"description": "
+With the 911 GT3 RS, Porsche is once again breaking down the barrier between sports cars and race cars. It is equipped with the maximum degree of motorsport technology that is currently possible in a street-legal 911. With a lap time of seven minutes and 20 seconds, the 911 GT3 RS even beats the historic record value of the Carrera GT super sports car of just under seven minutes and 29 seconds on the North Loop of the Nürburgring.
+<br><br>
+Motorsport expertise is the reason for this superior performance. The 911 GT3 RS is powered by a four-litre six-cylinder engine with 500 hp (368 kW) of power and 460 Newton metres of torque, combined with a specially developed PDK transmission. The engine, which has the largest displacement and most power of any naturally aspirated engine with direct fuel injection in the 911 family, accelerates the high-performance sports car from zero to 100 km/h in 3.3 seconds and to 200 km/h in 10.9 seconds.
+<br><br>
+The 911 GT3 RS is a masterpiece of intelligent lightweight design. For the first time, the roof is made of magnesium; carbon fibre is used for the engine and luggage compartment lids, and other lightweight components are made of alternative materials. In addition, the lightweight roof lowers the sports car's centre of gravity which improves its excellent lateral dynamics. The body comes from the 911 Turbo, and it signifies its status as nearly a race car driving machine with its RS-specific aerodynamic add-on parts. The front spoiler lip, which extends nearly to the road, and the large rear wing reinforce its dominant look. 
+<br><br>
+Another characteristic is the unique front wheel arch air vents that extend into the upper section of the wings – just as in purebred motorsport cars. They increase downforce at the front axle. 
+<br><br>
+The chassis of the 911 GT3 RS has been tuned for maximum driving dynamics and precision. Rear-axle steering and Porsche Torque Vectoring Plus with fully variable rear axle differential lock increase agility and dynamics, and the wider front and rear track widths enable a superior roll stability. In addition, the 911 GT3 RS comes with the widest tyres of any 911 model as standard. The results: even more agile turn-in characteristics and even higher cornering speeds. 
+",
+	"tags": ["#Supercars", "rwd", "semiautomatic", "street", "trackday", "supercar", "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "500hp",
+		"torque": "460Nm",
+		"weight": "1420kg",
+		"topspeed": "310km/h",
+		"acceleration": "3.1s 0-100",
+		"pwratio": "2.84kg/hp"
+	},
+	"torqueCurve": [
+		["500","150"],
+		["1000","240"],
+		["1500","278"],
+		["2000","319"],
+		["2500","331"],
+		["3000","340"],
+		["3500","344"],
+		["4000","352"],
+		["4500","401"],
+		["5000","418"],
+		["5500","443"],
+		["6000","458"],
+		["6250","460"],
+		["6500","459"],
+		["6750","456"],
+		["7000","459"],
+		["7500","450"],
+		["8000","439"],
+		["8250","432"],
+		["8500","408"],
+		["9000","379"]
+	],
+	"powerCurve": [
+		["500","11"],
+		["1000","34"],
+		["1500","59"],
+		["2000","90"],
+		["2500","116"],
+		["3000","143"],
+		["3500","169"],
+		["4000","198"],
+		["4500","253"],
+		["5000","293"],
+		["5500","342"],
+		["6000","386"],
+		["6250","404"],
+		["6500","419"],
+		["6750","432"],
+		["7000","451"],
+		["7500","474"],
+		["8000","493"],
+		["8250","500"],
+		["8500","487"],
+		["9000","479"]
+	]
+}

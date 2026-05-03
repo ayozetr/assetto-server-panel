@@ -1,0 +1,69 @@
+{
+	"name": "Ferrari FXX K",
+	"brand": "Ferrari", 
+	"description": "
+	The FXX K is the R&D program of Ferrari starring the first hybrid prototype of Maranello.<br><br>
+	In the name, the initials K recalls the \"KERS\" technology (kinetic energy recovery) for maximizing performance on the track. 
+	Free from homologations and regulations, the FXX K has been developed with no compromise and is equipped with technological innovations that guarantee an unbelievable driving experience.<br><br>
+	The FXX K features 1050hp (860hp by V12 heat engine, 190hp by electric engine) and a torque above 900Nm. Its 6262cc V12 engine has been optimized for performance and is managable through a 4 positions \"manettino\": Qualify, Long Run, Manual Boost, Fast Charge.",
+	"tags": ["#Hypercars R", "rwd", "race", "sequential", "italy"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "1050bhp",
+		"torque": "900+Nm",
+		"weight": "--kg",
+		"topspeed": "350+km/h",
+		"acceleration": "<3.0s 0-100",
+		"pwratio": "--kg/hp",
+		"range": 159
+	},
+	"torqueCurve": [
+		["500","428"],
+		["1000","400"],
+		["1500","582"],
+		["2000","681"],
+		["2500","750"],
+		["3000","792"],
+		["3500","820"],
+		["4000","828"],
+		["4500","843"],
+		["5000","863"],
+		["5500","896"],
+		["6000","939"],
+		["6500","966"],
+		["6750","968"],
+		["7000","972"],
+		["7500","942"],
+		["8000","908"],
+		["8500","853"],
+		["9000","807"],
+		["9250","790"],
+		["9500","796"]
+	],
+	"powerCurve": [
+		["500","30"],
+		["1000","56"],
+		["1500","123"],
+		["2000","191"],
+		["2500","263"],
+		["3000","334"],
+		["3500","403"],
+		["4000","465"],
+		["4500","533"],
+		["5000","606"],
+		["5500","692"],
+		["6000","791"],
+		["6500","882"],
+		["6750","918"],
+		["7000","955"],
+		["7500","992"],
+		["8000","1020"],
+		["8500","1018"],
+		["9000","1020"],
+		["9250","1026"],
+		["9500","1062"]
+
+	]
+
+}

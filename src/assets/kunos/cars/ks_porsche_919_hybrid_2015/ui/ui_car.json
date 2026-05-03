@@ -1,0 +1,29 @@
+{
+	"name": "Porsche 919 Hybrid 2015",
+	"brand": "Porsche",
+	"description": "
+	The WEC regulations lay down strict requirements relating to efficiency, safety and sustainability in motorsports. In short: vehicles that are designed for the future. These requirements have inspired Porsche's engineers to carry on what Porsche has been doing for over 60 years. Avoiding an either/or approach to isolated technologies, and instead examining every possible detail without losing sight of the overall picture.
+	<br><br>
+	In the LMP1 class, the principle of dominance through maximum performance will give way to the demand for efficiency. For the first time in the race’s history, all of the works teams in the top classification must compete with hybrid racing vehicles.
+	<br><br>
+	Porsche's choice of combustion engine was born out of an efficiency-optimized approach: a highly compact, turbocharged four-cylinder 2-liter engine with direct fuel injection. The combustion engine is supported by two energy recuperation systems. Years of experience in designing Sports Cars helped us to reduce the weight of individual components even further. The sports prototype is made mainly of carbon. In addition, the engine made of high-strength aluminium and the use of magnesium and various titanium alloys also helped to achieve the ideal system weight.
+	",
+	"tags": ["#LMP1", "awd", "race", "sequential", "gt", "lmp1", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "900hp",
+		"torque": "--Nm",
+		"weight": "875kg",
+		"topspeed": "--km/h",
+		"acceleration": "2.2s 0-100",
+		"pwratio": "0.97kg/hp"
+	},
+		"torqueCurve": [
+		["0","0"]
+	],
+	"powerCurve": [
+		["0","0"]
+	]
+}

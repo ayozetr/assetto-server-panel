@@ -1,0 +1,67 @@
+{
+
+	"name": "Porsche Macan Turbo",
+	"brand": "Porsche",
+	"description": "
+	The distinctly muscular front apron, with the side airblades of the conspicuously large cooling air intakes, is found nowhere else but on the Macan Turbo. It's a visual promise of thrilling performance. Bi-Xenon main headlights with dynamic cornering lights provide optimum illumination of the road – and therefore a high level of safety.
+	<br><br>
+	The Macan Turbo also stands out thanks to its front spoiler lip, the design of which is inspired by the 918 Spyder. The direction indicators and position lights have been integrated in such a way that they appear to hover inside the side air intakes. Below them are the LEDs of the fog lights. The sideblades are painted in the exterior color of the body. SportDesign sideskirts underline the powerful profile. Another typical feature of the Turbo is the 'Macan turbo' logo on the rear hatch.
+	<br><br>
+	Impressively, the 3.6-liter twin-turbo V6 engine delivers an enormous power output of 400 hp. The sprint from 0 to 100 kmh is completed in a mere 4.6 seconds. Top speed is 266 kmh. Those aren't simply bare numbers, but a compelling statement in terms of performance – and efficiency.
+	",
+	"tags": ["#SUV", "awd", "semiautomatic", "street", "turbo", "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "400hp",
+		"torque": "550Nm",
+		"weight": "1925kg",
+		"topspeed": "266km/h",
+		"acceleration": "4.8s 0-100",
+		"pwratio": "4.87kg/hp"
+	},
+	"torqueCurve": [
+		["500","307"],
+		["1000","307"],
+		["1250","350"],
+		["1500","444"],
+		["1700","550"],
+		["2000","550"],
+		["2500","550"],
+		["3000","550"],
+		["3500","550"],
+		["4000","550"],
+		["4500","550"],
+		["5000","525"],
+		["5500","490"],
+		["5750","480"],
+		["6000","475"],
+		["6250","450"],
+		["6500","420"],
+		["6700","400"],
+		["7000","360"]
+	],
+	"powerCurve": [
+		["500","22"],
+		["1000","43"],
+		["1250","61"],
+		["1500","94"],
+		["1700","131"],
+		["2000","154"],
+		["2500","193"],
+		["3000","232"],
+		["3500","270"],
+		["4000","309"],
+		["4500","348"],
+		["5000","369"],
+		["5500","378"],
+		["5750","388"],
+		["6000","400"],
+		["6250","395"],
+		["6500","383"],
+		["6700","376"],
+		["7000","354"]
+	]
+}
+

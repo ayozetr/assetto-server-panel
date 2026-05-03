@@ -1,0 +1,69 @@
+{
+
+	"name": "Porsche Cayenne Turbo S",
+	"brand": "Porsche",
+	"description": "
+As the sports car among sport utility vehicles (SUVs), the Cayenne Turbo S offers a lot of room for a lot of driving fun. With high performance and typical Porsche design DNA, it represents the top version of the sporty SUV model series. 
+<br><br>
+The Cayenne Turbo S is characterised by a high level of performance readiness, uninterrupted forward thrust and an ability to handle any driving situation. Its 4.8-liter V8 biturbo engine develops 570 hp (419 kW) and 800 Nm (590 ft lb) of torque. 
+<br><br>
+A chassis that is tuned for maximum driving dynamics and packs a wide range of control systems also makes the Cayenne Turbo S a genuine top athlete. It accelerates from zero to 100 km/h in 4.1 seconds, with a top speed of 284 km/h, and can turn a lap of the North Loop of the Nürburgring in 7:59.74 minutes. The Cayenne set a new record for SUVs here, and it also proves that every Porsche is a genuine sports car – even in this vehicle segment.
+<br><br>
+The Cayenne Turbo S also underscores its position as a top athlete in its chassis systems. Its standard Porsche Composite Ceramic Brakes (PCCB) include 420 mm front brake discs and ten-piston calipers. The rear brakes have 370 mm discs and four-piston calipers. The active roll stabilization system, Porsche Dynamic Chassis Control (PDCC) proactively reduces side tilt when driving through curves early on. Porsche Torque Vectoring Plus (PTV Plus) increases dynamic handling and stability by making specific brake interventions at the right or left rear wheel – this noticeably improves steering into curves and steering precision. The active hang-on all-wheel drive system Porsche Traction Management (PTM) permanently drives the rear wheels while offering fully variable power distribution to the front wheels. 
+<br><br>
+Some advantages of the interplay between all systems: excellent driving dynamics and traction as well as a high level of agility at any speed.
+",
+	"tags": ["#SUV", "awd", "street", "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "570hp",
+		"torque": "800Nm",
+		"weight": "2235kg",
+		"topspeed": "284km/h",
+		"acceleration": "4.1s 0-100",
+		"pwratio": "3.92kg/hp"
+	},
+	"torqueCurve": [
+		["500","144"],
+		["1000","360"],
+		["1500","513"],
+		["1921","731"],
+		["1960","752"],
+		["2500","788"],
+		["3000","795"],
+		["3500","798"],
+		["4000","788"],
+		["4500","800"],
+		["4590","795"],
+		["5000","765"],
+		["5635","706"],
+		["5750","696"],
+		["6000","668"],
+		["6120","666"],
+		["6600","609"],
+		["7000","564"]
+	],
+	"powerCurve": [
+		["500","10"],
+		["1000","51"],
+		["1500","108"],
+		["1921","197"],
+		["1960","207"],
+		["2500","277"],
+		["3000","335"],
+		["3500","392"],
+		["4000","443"],
+		["4500","506"],
+		["4590","513"],
+		["5000","537"],
+		["5635","558"],
+		["5750","562"],
+		["6000","563"],
+		["6120","572"],
+		["6600","564"],
+		["7000","554"]
+	]
+}
+

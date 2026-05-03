@@ -1,0 +1,26 @@
+{
+	"name": "Toyota TS040 Hybrid 2014",
+	"brand": "Toyota",
+	"description": "
+	Thanks to the 480hp exerted by electric motors on the four-wheel drive, in addition to the 520hp produced by its 3.7-liter petrol engine, the TS040 HYBRID expresses a maximum power of 1.000hp and represents the ultimate expression of Hybrid technology applied to the world racing.<br><br>
+	The transition to a hybrid four-wheel drive Toyota sees the return to a philosophy that since 2007 has been part of the development of hybrid technology applied to racing, when the Supra HV-R-wheel drive was the first hybrid to win an endurance competition, the 24 Hours of Tokachi.<br><br>
+	The new unit TOYOTA HYBRID Racing has been specifically developed according to the new technical regulations specified by the WEC, particularly frugal. It requires a 25% reduction in fuel consumption compared to 2013, with savings achieved through interventions on the engine, aerodynamic efficiency and driving dynamics.",
+	"tags": ["#LMP1", "awd", "race", "sequential", "gt", "lmp1", "japan"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "1000bhp",
+		"torque": "--Nm",
+		"weight": "--kg",
+		"topspeed": "320km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "--kg/hp"
+	},
+	"torqueCurve": [
+		["0","0"]
+	],
+	"powerCurve": [
+		["0","0"]
+	]
+
+}

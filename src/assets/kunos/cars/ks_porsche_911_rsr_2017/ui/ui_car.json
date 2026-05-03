@@ -1,0 +1,70 @@
+{
+	"name": "Porsche 911 RSR 2017",
+	"brand": "Porsche", 
+	"description": "The new 911 RSR makes full use of the breadth of the Le Mans 24 Hours GT regulations, and in addition to systematic lightweight design, features the ultra-modern, flat-six unit positioned in front of the rear axle. The four-litre, extremely light aggregate features direct fuel injection as well as a rigid valve drive and is characterised by outstanding efficiency. The new 911 RSR did its debut at the Daytona 24-hour race in January 2017.
+	<br><br>
+Shift paddles on the steering wheel actuate the sequential six-speed gearbox with a magnesium housing, which delivers power to the 31-centimentre-wide rear wheels. The changeover to the new engine generation is now complete. After the 911 GT3 R and the 911 GT3 Cup, the spearhead of Porsche GT racing cars is now also powered by the same cutting-edge six-cylinder boxer engine family.
+<br><br>
+In the 2017 season, the factory is expected to run the new 911 RSR at 19 outings which equates to more than 140 hours of racing. With two factory-entries, Porsche will tackle the FIA World Endurance Championship (WEC) including the 24 Hours of Le Mans as well as the American IMSA Weathertech Championship. 
+<br><br>
+With the look of the body wrapping, the 911 RSR is striking out in a new direction: For the first time, the GT racer bears the new factory design that has further developed the clear and dynamic design language of Porsche Motorsport. From a bird’s eye view, a hint of the Porsche emblem silhouette can be seen. The basic colours remain white, red and black.
+	",
+	"tags": ["#GTE-GT3", "rwd", "race", "sequential", "gt", "gt2", "germany"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "510hp",
+		"torque": "--Nm",
+		"weight": "1245kg",
+		"topspeed": "270+km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.49kg/hp"
+	},
+	"torqueCurve": [
+		["500","150"],
+		["1000","240"],
+		["1500","278"],
+		["2000","319"],
+		["2500","331"],
+		["3000","330"],
+		["3500","334"],
+		["4000","342"],
+		["4500","381"],
+		["5000","428"],
+		["5500","453"],
+		["6000","468"],
+		["6250","480"],
+		["6500","479"],
+		["6750","486"],
+		["7000","479"],
+		["7500","470"],
+		["8000","469"],
+		["8250","462"],
+		["8500","438"],
+		["9000","409"]
+	],
+	"powerCurve": [
+		["500","11"],
+		["1000","34"],
+		["1500","59"],
+		["2000","90"],
+		["2500","116"],
+		["3000","139"],
+		["3500","164"],
+		["4000","192"],
+		["4500","241"],
+		["5000","301"],
+		["5500","350"],
+		["6000","394"],
+		["6250","421"],
+		["6500","437"],
+		["6750","461"],
+		["7000","471"],
+		["7500","495"],
+		["8000","527"],
+		["8250","535"],
+		["8500","523"],
+		["9000","517"]
+	]
+
+}

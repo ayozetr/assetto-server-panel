@@ -6,10 +6,13 @@ node_modules/
 
 # Logs
 *.log
+*.txt
 logs/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 
 # Artefacts
 *.zip
@@ -34,5 +37,3 @@ Thumbs.db
 # AI context — local only
 CLAUDE.md
 TASKS.md
-*.db-shm
-*.db-wal

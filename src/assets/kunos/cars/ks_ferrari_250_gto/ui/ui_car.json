@@ -1,0 +1,64 @@
+{
+
+	"name": "Ferrari 250 GTO",
+	"brand": "Ferrari",
+	"description": "
+The 250 GTO model was the pinnacle of the development of the 250 GT series in competition form, whilst still remaining a road car. It made its public debut at the annual pre-season Ferrari press conference in January 1962, and was the only front-engined model on display, with its monoposto and sports racing counterparts all having a mid-engine configuration.
+<br><br>
+The 250 GTO was the ultimate expression of the Ferrari 250 GT car. It was equally at home on the road or track – perhaps the last dual-purpose road/race car produced – and has achieved legendary status amongst aficionados of the marque. With only a relatively small production run of thirty-six cars, and with many of the examples produced having a great racing pedigree, it has become one of the icons of Ferrari's production history, with a revered position in collectors' circles.
+	",
+	"tags": ["#Vintage Supercars", "rwd", "manual", "street", "supercar", "vintage", "italy"],  
+	"class": "street",
+	"specs":
+	{
+		"bhp": "300bhp",
+		"torque": "294Nm",
+		"weight": "880kg",
+		"topspeed": "280km/h",
+		"acceleration": "6.1s 0-100",
+		"pwratio": "2.93kg/hp"
+	},
+	"torqueCurve": [
+		["500","82"],
+		["1000","124"],
+		["1500","147"],
+		["2000","170"],
+		["2500","193"],
+		["3000","216"],
+		["3500","239"],
+		["4000","262"],
+		["4500","285"],
+		["5000","308"],
+		["5500","331"],
+		["6000","320"],
+		["6500","309"],
+		["7000","298"],
+		["7400","285"],
+		["8000","261"],
+		["8500","244"],
+		["8800","231"],
+		["9000","222"]
+	],
+	"powerCurve": [
+		["500","6"],
+		["1000","17"],
+		["1500","31"],
+		["2000","48"],
+		["2500","68"],
+		["3000","91"],
+		["3500","117"],
+		["4000","147"],
+		["4500","180"],
+		["5000","216"],
+		["5500","256"],
+		["6000","270"],
+		["6500","282"],
+		["7000","293"],
+		["7400","296"],
+		["8000","293"],
+		["8500","291"],
+		["8800","285"],
+		["9000","281"]
+	]
+
+}

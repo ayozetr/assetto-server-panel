@@ -1,0 +1,61 @@
+{
+	"name": "Alfa Romeo Giulia Quadrifoglio",
+	"brand": "Alfa Romeo",
+	"description": "The new Giulia Quadrifoglio represents more than the most powerful Alfa Romeo ever created for road use. It’s the convergence of engineering and emotion that can only belong to a brand as fabled as Alfa Romeo. Here's to a sports badge born more than a century ago, that still stands for something totally original today: a passion for motoring unlike any other. Visceral. Energetic. Technological. Crafted.
+<br><br>
+	The heart of Giulia Quadrifoglio is a gasoline-powered 2.9 V6 bi-turbo engine with 90° opposed cylinders. The engine delivers 510 hp and 600 Nm of torque between 2500 and 5000 RPM.
+	Made entirely of aluminum, it is extraordinarily powerful, yet lightweight. This new engine is developed with Ferrari expertise.
+<br><br>
+	The Giulia Quadrifoglio is more than a showcase for the best power–to–weight ratio in its class, it's a study in how to use that power. The perfect 50:50 weight distribution creates optimal balance and showcases the advantage of a rear–wheel–drive layout in a front-engine vehicle. By pairing rear–wheel drive with Giulia Quadrifoglio’s front–mounted, all–aluminum 6–cylinder engine, the Alfa Romeo engineering team was able to carefully distribute weight throughout the chassis.
+<br><br>	
+	The Giulia Quadrifoglio is equipped with an innovative system that ensures the optimal distribution of torque to the two rear shafts, thanks to an electronically controlled differential featuring two clutches. This results in greater traction and more secure handling, even at high speeds, on curves, and on any type of roads. 
+<br><br>
+	The Giulia Quadrifoglio is the only sedan in the world with an Active Aero splitter: a carbon appendix positioned under the front bumper. At speeds of over 100 km/h it opens thanks to two actuators controlled by the Alfa™ CDC (Chassis Domain Control), providing additional stability by increasing downforce, especially when taking high-speed curves.
+	",
+	"tags": ["#Sportscars", "rwd", "turbo", "manual",  "street",  "italy"], 
+	"class": "street",
+	"specs":
+	{
+		"bhp": "510bhp",
+		"torque": "600Nm",
+		"weight": "1595kg",
+		"topspeed": "307km/h",
+		"acceleration": "3.9s 0-100",
+		"pwratio": "3.13kg/hp"
+	},
+	"torqueCurve": [
+		["500","144"],
+		["1000","194"],
+		["1500","353"],
+		["2000","440"],
+		["2500","607"],
+		["3000","607"],
+		["3500","607"],
+		["4000","607"],
+		["4500","607"],
+		["5000","607"],
+		["5500","607"],
+		["6000","593"],
+		["6500","559"],
+		["7000","513"],
+		["7400","468"]
+	],
+	"powerCurve": [
+		["500","10"],
+		["1000","27"],
+		["1500","74"],
+		["2000","124"],
+		["2500","213"],
+		["3000","256"],
+		["3500","299"],
+		["4000","341"],
+		["4500","384"],
+		["5000","426"],
+		["5500","469"],
+		["6000","500"],
+		["6500","510"],
+		["7000","505"],
+		["7400","486"]
+	]
+
+}

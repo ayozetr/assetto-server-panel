@@ -1,0 +1,74 @@
+{
+	"name": "Porsche 911 Carrera S",
+	"brand": "Porsche", 
+	"description": "
+	The 911 has been the world's best-selling sports car for decades. In 2015, the new generation arrived to further extend this lead. With innovative turbo flat engines, an advanced chassis with an even greater spread between performance and comfort it is exceedingly well-equipped for this. Thanks to more than four decades of experience with turbo engines – in both motor racing and production sports cars – the new engines in the 911 Carrera S offer improved performance, even more emotional driving pleasure and higher efficiency.
+	<br><br>
+	420 hp (309 kW) of power at the rear are waiting to be unleashed and converted into sporty propulsion. The greater power of the 911 Carrera S results from turbochargers with modified compressors, a specific exhaust system and tuned engine management. The new engines are also characterized by significantly increased torque (60 Nm in each case) with maximum torque of 500 Nm delivered constantly from a low 1,700 rpm up to 5,000 rpm in both cases, thus ensuring excellent driving performance. At the same time with a maximum speed of 7,500 rpm the new engine generation clearly exceeds the top speeds of conventional turbo engines – underscored by the typical sonorous Porsche engine sound.
+	<br><br>
+	The new 911 also boasts impressive performance: The 911 Carrera S with Porsche-Doppelkupplung (PDK) and Sport Chrono Package performs its showcase discipline – the sprint from zero to 100 km/h – in just 3.9 seconds. This means that it is the first 911 in the Carrera family to undercut the magic four second mark. And the top speed has also increased further: the 911 Carrera S now reaches a mind-blowing 308 km/h.
+	<br><br>
+	All in all, the 911 Carrera S again sets the benchmark for driving dynamics of all-round sports cars, further increasing the spread between everyday comfort and circuit performance.
+	",
+	"tags": ["#Sportscars", "rwd", "semiautomatic", "street", "turbo", "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "420bhp",
+		"torque": "500Nm",
+		"weight": "1515kg",
+		"topspeed": "308km/h",
+		"acceleration": "3.9s 0-100",
+		"pwratio": "3.60kg/hp"
+	},
+	"torqueCurve": [
+		["500","307"],
+		["1000","307"],
+		["1250","350"],
+		["1500","444"],
+		["1700","500"],
+		["2000","500"],
+		["2500","500"],
+		["3000","500"],
+		["3500","500"],
+		["4000","500"],
+		["4500","500"],
+		["5000","500"],
+		["5500","493"],
+		["5750","486"],
+		["6000","477"],
+		["6500","454"],
+		["6750","434"],
+		["7000","413"],
+		["7250","388"],
+		["7350","378"],
+		["7500","362"],
+		["8000","360"]
+	],
+	"powerCurve": [
+		["500","22"],
+		["1000","43"],
+		["1250","61"],
+		["1500","94"],
+		["1700","119"],
+		["2000","140"],
+		["2500","176"],
+		["3000","211"],
+		["3500","246"],
+		["4000","281"],
+		["4500","316"],
+		["5000","351"],
+		["5500","381"],
+		["5750","392"],
+		["6000","402"],
+		["6500","414"],
+		["6750","411"],
+		["7000","406"],
+		["7250","395"],
+		["7350","390"],
+		["7500","381"],
+		["8000","404"]
+	]
+
+}

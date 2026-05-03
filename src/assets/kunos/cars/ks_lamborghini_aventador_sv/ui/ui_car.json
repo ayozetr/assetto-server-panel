@@ -1,0 +1,66 @@
+{
+
+	"name": "Lamborghini Aventador SV",
+	"brand": "Lamborghini", 
+	"description": "With increased power, lower weight, improved aerodynamics and innovative technologies the Lamborghini Aventador LP 750-4 Superveloce is the most pure incarnation of a Lamborghini to date: unmistakable Lamborghini super sports car DNA, dynamic superiority and exceptional driving precision.<br><br>
+	A focus on weight reduction while incorporating innovative technologies has resulted in the most sports-oriented, fastest and most emotional series production Lamborghini ever. The weight has been further reduced by 50 kg through enhanced lightweight engineering including significant use of carbon fiber. The naturally aspirated V12 engine's power is increased to 750 hp. This results in a power-to-weight-ratio of 2,03 kg/hp. The Superveloce accelerates from 0 to 100 km/h in 2.8 seconds and powers on to reach a top speed of more than 350 km/h.
+	",
+	"tags": ["#Hypercars", "awd", "street", "sequential", "italy"],  
+	"class": "street",
+	"specs":
+	{
+		"bhp": "750hp",
+		"torque": "690Nm",
+		"weight": "1525kg",
+		"topspeed": "350+km/h",
+		"acceleration": "2.8s 0-100",
+		"pwratio": "2.03kg/hp"
+	},
+	"torqueCurve": [
+		["500","171"],
+		["1000","274"],
+		["1500","298"],
+		["2000","323"],
+		["2500","398"],
+		["3000","473"],
+		["3500","548"],
+		["4000","602"],
+		["4500","682"],
+		["5000","686"],
+		["5500","690"],
+		["6000","681"],
+		["6500","672"],
+		["7000","663"],
+		["7500","654"],
+		["8000","645"],
+		["8400","636"],
+		["8500","627"],
+		["9000","618"]
+	],
+	"powerCurve": [
+		["500","12"],
+		["1000","38"],
+		["1500","63"],
+		["2000","91"],
+		["2500","140"],
+		["3000","199"],
+		["3500","269"],
+		["4000","338"],
+		["4500","431"],
+		["5000","482"],
+		["5500","533"],
+		["6000","574"],
+		["6500","613"],
+		["7000","652"],
+		["7500","689"],
+		["8000","725"],
+		["8400","750"],
+		["8500","748"],
+		["9000","781"]
+	]
+
+}
+
+
+
+

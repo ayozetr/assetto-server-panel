@@ -1,0 +1,61 @@
+{
+
+	"name": "Mazda 787B",
+	"brand": "Mazda",
+	"description": "
+	The Mazda 787 is a Group C sports prototype racing car that has taken part to World Sportscar Championship, All Japan Sports Prototype Championship and the 24 Hours of Le Mans from 1990 to 1991. It mounts a Wankel rotary-powered engine, Mazda's R26B<br><br> 
+	The greatest achievement of this car is the victory in the 24 Hours of Le Mans in 1991, last and only victory of the Japanese brand in the famous international event.",
+	"tags": ["#Proto C", "rwd", "rotary", "race", "prototype C", "vintage",  "japan"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "690bhp",
+		"torque": "608Nm",
+		"weight": "845kg",
+		"topspeed": "340+km/h",
+		"acceleration": "--s",
+		"pwratio": "1.22kg/hp"
+	},
+	"torqueCurve": [
+		["500","163"],
+		["1000","200"],
+		["1500","237"],
+		["2000","274"],
+		["2500","311"],
+		["3000","348"],
+		["3500","385"],
+		["4000","422"],
+		["4500","459"],
+		["5000","484"],
+		["5500","508"],
+		["6000","579"],
+		["6500","608"],
+		["7000","601"],
+		["7500","596"],
+		["8000","584"],
+		["8500","561"],
+		["9000","547"]
+	],
+	"powerCurve": [
+		["500","11"],
+		["1000","28"],
+		["1500","50"],
+		["2000","77"],
+		["2500","109"],
+		["3000","147"],
+		["3500","189"],
+		["4000","237"],
+		["4500","290"],
+		["5000","340"],
+		["5500","392"],
+		["6000","488"],
+		["6500","555"],
+		["7000","591"],
+		["7500","628"],
+		["8000","656"],
+		["8500","670"],
+		["9000","691"]
+	]
+
+}

@@ -1,0 +1,67 @@
+{
+	"name": "Porsche Cayman GT4 Clubsport",
+	"brand": "Porsche",
+	"description": "
+	Using the lightweight mid-engine sports car Cayman GT4 as its basis, Porsche Motorsport has developed a racing version solely for the track. Geared for performance, just like its drivers.
+	<br><br>
+	The Cayman GT4 Clubsport is powered by a 3.8 liter mid-mounted flat-six engine, with an output of 385 hp (283 kW) and a maximum torque of 420 Nm. It reaches a top speed of 295 km/h. 
+	<br><br>
+	The racing version features a Porsche double clutch transmission with shift paddles on the steering wheel and a mechanical rear-axle locking differential. The lightweight suspension strut front axle system is taken from its big 911 GT3 Cup brother, which is campaigned in Porsche's 20 one-make championships around the world. The impressive racing brake system is fitted with steel brake discs all round measuring 380-millimeters in diameter. 
+	<br><br>
+	Tipping the scales at just 2866 lbs. (1,300 kilograms), the Cayman GT4 Clubsport, delivered from the factory with a welded-in safety cage, a racing bucket seat as well as a six-point harness, is truly lightweight and provides the car with a unique agility and driving dynamics on the track.
+	",
+	"tags": ["#GT4", "rwd", "race", "semiautomatic", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "385bhp",
+		"torque": "420Nm",
+		"weight": "1300kg",
+		"topspeed": "295km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "3.37kg/hp"
+	},
+
+	"torqueCurve": [
+		["500","177"],
+		["1000","267"],
+		["1500","283"],
+		["2000","329"],
+		["2500","367"],
+		["3000","352"],
+		["3500","369"],
+		["4000","380"],
+		["4500","402"],
+		["4750","420"],
+		["5000","419"],
+		["5500","415"],
+		["6000","420"],
+		["6500","407"],
+		["7000","388"],
+		["7400","371"],
+		["8000","331"],
+		["8300","311"]
+	],
+	"powerCurve": [
+		["500","12"],
+		["1000","37"],
+		["1500","60"],
+		["2000","92"],
+		["2500","129"],
+		["3000","148"],
+		["3500","181"],
+		["4000","213"],
+		["4500","254"],
+		["4750","280"],
+		["5000","294"],
+		["5500","321"],
+		["6000","354"],
+		["6500","372"],
+		["7000","381"],
+		["7400","386"],
+		["8000","372"],
+		["8300","362"]
+	]
+
+}

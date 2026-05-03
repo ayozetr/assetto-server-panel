@@ -1,0 +1,69 @@
+{
+	"name": "Porsche 911 GT3 Cup 2017",
+	"brand": "Porsche", 
+	"description": "
+The rear of the world's most-produced GT racing car now houses a 4-litre, six-cylinder flat engine for even more drive. Thanks to thoroughbred motorsport technology, the compact engine with direct fuel injection delivers peak performance of 357 kW (485 hp).
+ <br><br>
+A range of innovative details also improve efficiency in addition to engine performance, ensuring even better durability of the naturally aspirated engine in racing mode and reduced maintenance costs.
+<br><br>
+Porsche manufactures the 911 GT3 Cup on the same production line as the 911 road car in its main plant in Stuttgart-Zuffenhausen. The basic race tuning is performed at the Weissach motorsport centre, where vehicles are also thoroughly tested by a professional race driver prior to delivery to the customer. Some 3031 units of the 911 GT3 Cup have been built in the 996, 997 and 991 model lines since 1998. This makes the brand cup racing car from Stuttgart the most-produced and most-sold GT racing car in the world.
+<br><br>
+The new 911 GT3 Cup will be used in the 2017 race season, initially exclusively in the Porsche Mobil 1 Supercup and in the Porsche Carrera Cup Deutschland, as well as in North America.
+",
+	"tags": ["#Porsche Cup", "rwd", "race", "sequential", "germany"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "485hp",
+		"torque": "--Nm",
+		"weight": "1220kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.51kg/hp"
+	},
+	"torqueCurve": [
+		["500","150"],
+		["1000","240"],
+		["1500","278"],
+		["2000","319"],
+		["2500","331"],
+		["3000","340"],
+		["3500","344"],
+		["4000","352"],
+		["4500","401"],
+		["5000","418"],
+		["5500","443"],
+		["6000","458"],
+		["6250","460"],
+		["6500","459"],
+		["6750","456"],
+		["7000","459"],
+		["7500","449"],
+		["8000","416"],
+		["8250","412"],
+		["8500","391"]
+	],
+	"powerCurve": [
+		["500","11"],
+		["1000","34"],
+		["1500","59"],
+		["2000","90"],
+		["2500","116"],
+		["3000","143"],
+		["3500","169"],
+		["4000","198"],
+		["4500","253"],
+		["5000","293"],
+		["5500","342"],
+		["6000","386"],
+		["6250","404"],
+		["6500","419"],
+		["6750","432"],
+		["7000","451"],
+		["7500","473"],
+		["8000","467"],
+		["8250","477"],
+		["8500","467"]
+	]
+
+}

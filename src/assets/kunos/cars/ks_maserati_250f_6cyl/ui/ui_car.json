@@ -1,0 +1,64 @@
+{
+	"name": "Maserati 250F 6 cylinder",
+	"brand": "Maserati", 
+	"description": "The Maserati 250F took part of Formula One racing between January 1954 and November 1960, when rules allowed 2.5 liter unsupercharged or 750 cc supercharged engines.<br><br>
+	Maserati went with the former, choosing a straight six aspirated engine configuration; in 1956 it mounted a V12 engine.<br><br> 
+	With a quite roomy cockpit, Maserati 250F featured a 4 gears transmission (plus reverse) and &quot;Continental fashion&quot; pedals arrangement: clutch, throttle and brake in this order.",
+	"tags": ["#Maserati250F", "rwd", "race", "manual", "gp", "singleseater", "vintage", "italy"], 
+	"class": "race",
+	"specs":
+	{
+		"bhp": "270bhp",
+		"torque": "--Nm",
+		"weight": "670kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.48kg/hp"
+	}	,
+	"torqueCurve": [
+		["500","89"],
+		["1000","121"],
+		["1500","136"],
+		["2000","151"],
+		["2500","166"],
+		["3000","181"],
+		["3500","196"],
+		["4000","211"],
+		["4500","226"],
+		["5000","232"],
+		["5500","238"],
+		["6000","240"],
+		["6500","234"],
+		["7000","228"],
+		["7500","225"],
+		["7700","222"],
+		["8000","187"],
+		["8500","152"],
+		["9500","146"],
+		["10000","131"]
+	],
+	"powerCurve": [
+		["500","6"],
+		["1000","17"],
+		["1500","29"],
+		["2000","42"],
+		["2500","58"],
+		["3000","76"],
+		["3500","96"],
+		["4000","119"],
+		["4500","143"],
+		["5000","163"],
+		["5500","184"],
+		["6000","202"],
+		["6500","214"],
+		["7000","224"],
+		["7500","237"],
+		["7700","240"],
+		["8000","210"],
+		["8500","181"],
+		["9500","195"],
+		["10000","184"]
+	]
+}
+
+

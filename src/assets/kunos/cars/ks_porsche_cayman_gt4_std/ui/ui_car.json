@@ -1,0 +1,64 @@
+{
+	"name": "Porsche Cayman GT4",
+	"brand": "Porsche",
+	"description": "
+The Cayman GT4 marks the first time Porsche has introduced a GT sports car based on the Cayman model range which has components of the 911 GT3. A lap time of 7 minutes and 40 seconds on the North Loop of the Nürburgring positions the Cayman GT4 as the new benchmark at the top of its market segment. 
+<br><br>
+The engine, chassis, brakes and aerodynamic design of the Cayman GT4 are configured for maximum driving dynamics. It is powered by a 3.8-litre flat-six engine with 385 hp (283 kW), which is derived from the 911 Carrera S engine. Its power is always transmitted by a six-speed manual gearbox with dynamic gearbox mounts. The Cayman GT4 accelerates from zero to 100 km/h in 4.4 seconds; its top speed is 295 km/h. The chassis – which features a 30 mm lower body position and a generously sized brake system – consists nearly entirely of components from the 911 GT3. 
+<br><br>
+As a mid-engine sports car and a prime example of driving dynamics in its class, it follows the conceptual tradition of such cars as the 904 Carrera GTS, 911 GT1, Carrera GT and 918 Spyder. Hence, the Cayman GT4 makes a clear statement that Porsche continues to promote radical two-door sports cars in the future – sports cars that are developed at the Motorsport department in Weissach.",
+	"tags": ["#Supercars", "rwd", "manual", "turbo", "trackday", "street", "germany"],  
+	"class": "street",
+
+	"specs":
+	{
+		"bhp": "385hp",
+		"torque": "420Nm",
+		"weight": "1340kg",
+		"topspeed": "295km/h",
+		"acceleration": "4.4s 0-100",
+		"pwratio": "3.48kg/hp"
+	},
+	"torqueCurve": [
+		["500","177"],
+		["1000","267"],
+		["1500","283"],
+		["2000","329"],
+		["2500","367"],
+		["3000","352"],
+		["3500","369"],
+		["4000","380"],
+		["4500","402"],
+		["4750","420"],
+		["5000","419"],
+		["5500","415"],
+		["6000","420"],
+		["6500","407"],
+		["7000","388"],
+		["7400","371"],
+		["8000","331"],
+		["8300","311"]
+	],
+	"powerCurve": [
+		["500","12"],
+		["1000","37"],
+		["1500","60"],
+		["2000","92"],
+		["2500","129"],
+		["3000","148"],
+		["3500","181"],
+		["4000","213"],
+		["4500","254"],
+		["4750","280"],
+		["5000","294"],
+		["5500","321"],
+		["6000","354"],
+		["6500","372"],
+		["7000","381"],
+		["7400","386"],
+		["8000","372"],
+		["8300","362"]
+	]
+
+}
+

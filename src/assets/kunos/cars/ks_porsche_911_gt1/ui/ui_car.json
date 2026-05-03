@@ -1,0 +1,60 @@
+{
+
+	"name": "Porsche 911 GT1-98",
+	"brand": "Porsche",
+	"description": "The 911 GT1 was developed for works and customer appearances in GT races during the mid-1990s, making its racing debut in 1996. The GT1 was the first ever 911 to have a water-cooled mid-mounted engine, which as well as balanced axle load distribution also offered aerodynamic benefits. Behind a Joest Team TWR Porsche WSC 95, the new GT race car immediately achieved a double victory in the GT1 category at Le Mans in 1996, along with second and third place in the overall ranking. 
+	<br><br>
+	In 1997, both 911 GT1s dropped out of Le Mans due to technical problems encountered just before the end of the race. A year later, a revised version of the 911 GT1 competed at Le Mans, which was the first time Porsche entered a sports car with a carbon fibre chassis. Thanks to its CFK monocoque, reworked front axle suspension and battery and generator weight savings, the 911 GT1 98 weighed around 50 kilograms less than its predecessor. The engine output was increased by a further 50 hp, thanks to its modified engine management system. Another new feature was the three-disc racing clutch made of carbon fibre. 	
+	<br><br>
+	As a fitting tribute to the 50th anniversary of the Porsche sports car brand, the 911 GT1 recorded a double victory for the Zuffenhausen-based manufacturer at the 24h of Le Mans in 1998.",
+	"tags": ["#Vintage GT", "rwd", "race", "sequential", "gt", "vintage", "germany"],  
+	"class": "race",
+
+	"specs":
+	{
+		"bhp": "600hp",
+		"torque": "--Nm",
+		"weight": "950kg",
+		"topspeed": "350km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "1.58kg/hp"
+	},
+	"torqueCurve": [
+		["500","144"],
+		["1000","140"],
+		["1500","150"],
+		["2000","212"],
+		["2500","276"],
+		["3000","391"],
+		["3500","476"],
+		["4000","745"],
+		["4500","757"],
+		["5000","754"],
+		["5500","722"],
+		["6000","674"],
+		["6500","642"],
+		["7000","596"],
+		["7200","584"],
+		["7500","524"],
+		["8000","469"]
+	],
+	"powerCurve": [
+		["500","10"],
+		["1000","20"],
+		["1500","32"],
+		["2000","60"],
+		["2500","97"],
+		["3000","165"],
+		["3500","234"],
+		["4000","419"],
+		["4500","478"],
+		["5000","530"],
+		["5500","558"],
+		["6000","568"],
+		["6500","586"],
+		["7000","586"],
+		["7200","591"],
+		["7500","552"],
+		["8000","527"]
+	]
+}

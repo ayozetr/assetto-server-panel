@@ -1,0 +1,75 @@
+{
+	"name": "Porsche 918 Spyder",
+	"brand": "Porsche", 
+	"description": "
+	The 918 Spyder embodies the essence of the Porsche idea: it combines pedigree motor racing technology with excellent everyday utility, and maximum performance with minimum consumption.
+	<br><br>
+	The 918 Spyder reveals its close links to motorsport in a variety of ways. It has been designed, developed and produced by Porsche engineers who build race cars, in cooperation with series production specialists. A great deal of insight gained from the development of Porsche race cars for the 24 hours race in Le Mans in 2014 was thus integrated into the 918 Spyder – and vice versa. Also, many parts of the super sports car come from manufacturers who have a proven record as suppliers for motorsport vehicles.
+	<br><br>
+	The main source of propulsion is the 4.6-litre, eight cylinder engine that produces 608 hp (447 kW) of power. The engine is derived directly from the power unit of the successful RS Spyder, which explains why it can deliver engine speeds of up to 9,150 rpm. The V8 engine is coupled to the hybrid module, which comprises a 115 kW electric motor and a decoupler that serves as the connection with the combustion engine. An additional electric motor with 95 kW drives the front axle. Because of its parallel hybrid configuration, the 918 Spyder can be powered at the rear axle either individually by the combustion engine or electric motors or via both drives jointly, thus giving it a total power of 887 hp (652 kW). The sprint from 0 to 100 km/h is performed within 2.6 seconds, and the top speed is reached at 345 km/h.
+	<br><br>
+	The car has an unladen weight of approximately 1,640 kg, an excellent low weight for a hybrid vehicle of this performance class. The drivetrain components and all components weighing over 50 kg are located as low and as centrally as possible within the vehicle. This results in a slightly rear end biased axle load distribution of 57 per cent on the rear axle and 43 per cent on the front axle, combined with an extremely low centre of gravity at approximately the height of the wheel hubs, which is ideal for driving dynamics. 
+	<br><br>
+	All of this serves to give the 918 Spyder a superior performance on the racetrack. As the first vehicle to boast global road homologation, the 918 Spyder has conquered the 20.6-kilometre lap around the Nürburgring Nordschleife in less than seven minutes. Achieving a time of exactly six minutes and 57 seconds, the super sportscar shaved an incredible 14 seconds off the previous record.
+	<br><br>
+	The 918 Spyder continues a long tradition of super sports cars at Porsche: as technology platforms, as the driving force behind both car emotion and car evolution and as the ultimate sports cars of their decades.
+	",
+	"tags": ["#Hypercars", "awd", "street", "semiautomatic", "germany"],  
+	"class": "street",
+	"specs":
+	{
+		"bhp": "887bhp",
+		"torque": "1275Nm",
+		"weight": "1640kg",
+		"topspeed": "345km/h",
+		"acceleration": "2.6s 0-100",
+		"pwratio": "1.84kg/hp"
+	},
+	"torqueCurve": [
+		["500","561"],
+		["1000","686"],
+		["1500","755"],
+		["2000","790"],
+		["2500","826"],
+		["3000","864"],
+		["3500","875"],
+		["4000","905"],
+		["4500","905"],
+		["5000","888"],
+		["5500","851"],
+		["6000","849"],
+		["6500","838"],
+		["6700","841"],
+		["7000","819"],
+		["7500","786"],
+		["8000","765"],
+		["8500","745"],
+		["8700","727"],
+		["9000","690"],
+		["9150","657"]
+	],
+	"powerCurve": [
+		["500","39"],
+		["1000","96"],
+		["1500","159"],
+		["2000","222"],
+		["2500","290"],
+		["3000","364"],
+		["3500","430"],
+		["4000","508"],
+		["4500","572"],
+		["5000","624"],
+		["5500","657"],
+		["6000","715"],
+		["6500","765"],
+		["6700","791"],
+		["7000","805"],
+		["7500","828"],
+		["8000","859"],
+		["8500","889"],
+		["8700","888"],
+		["9000","872"],
+		["9150","844"]
+	]
+
+}

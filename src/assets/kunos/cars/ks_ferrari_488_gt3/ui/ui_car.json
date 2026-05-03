@@ -1,0 +1,68 @@
+{
+	"name": "Ferrari 488 GT3",
+	"brand": "Ferrari", 
+	"description": "The Ferrari 488 GT3 is the the racing version of the latest 488 GTB, presented at the Ferrari Finali Mondiali, as replacement for the 458 Italia. <br><br>
+	This car features large side intakes to provide a better air flow to its twin-turbocharged 3.9-liter V8.",
+	"tags": ["#GTE-GT3", "rwd", "race", "sequential", "gt", "gt3", "italy"],  
+	"class": "race",
+	"specs":
+	{
+		"bhp": "500bhp",
+		"torque": "640Nm",
+		"weight": "1270kg",
+		"topspeed": "--km/h",
+		"acceleration": "--s 0-100",
+		"pwratio": "2.54kg/hp"
+	},
+	"torqueCurve": 
+	[
+		["500","317"],
+		["1000","328"],
+		["1500","519"],
+		["2000","441"],
+		["2500","504"],
+		["3000","581"],
+		["3500","610"],
+		["4000","623"],
+		["4500","635"],
+		["5000","634"],
+		["5500","640"],
+		["6000","607"],
+		["6500","559"],
+		["7000","471"],
+		["7250","450"],
+		["7500","405"],
+		["7750","377"],
+		["8000","373"],
+		["8250","370"]
+	],
+	"powerCurve": 
+	[
+		["500","22"],
+		["1000","46"],
+		["1500","109"],
+		["2000","124"],
+		["2500","177"],
+		["3000","245"],
+		["3500","300"],
+		["4000","350"],
+		["4500","401"],
+		["5000","445"],
+		["5500","495"],
+		["6000","511"],
+		["6500","511"],
+		["7000","463"],
+		["7250","458"],
+		["7500","427"],
+		["7750","411"],
+		["8000","419"],
+		["8250","428"]
+	]
+}
+
+
+
+
+
+
+

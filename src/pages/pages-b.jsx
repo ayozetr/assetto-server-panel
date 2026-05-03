@@ -3,7 +3,7 @@ const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB } = React;
 const I3 = window.AppIcons;
 
 // ── Car modal ─────────────────────────────────────────────────────────────────
-function CarModal({ car, count, onAdd, onRemove, onClose }) {
+function CarModal({ car, count, onAdd, onRemove, onClose, t }) {
   const [skinIdx, setSkinIdx] = useStateB(0);
 
   useEffectB(() => {
@@ -165,7 +165,7 @@ function CarModal({ car, count, onAdd, onRemove, onClose }) {
 }
 
 // ── Car card ───────────────────────────────────────────────────────────────────
-function CarCard({ car, count, onOpen }) {
+function CarCard({ car, count, onOpen, t }) {
   const skinsCount = car.skins?.length || 0;
   const [imgFailed, setImgFailed] = useStateB(false);
   const initial = (car.brand || car.name || '?').slice(0, 2).toUpperCase();
@@ -234,7 +234,7 @@ function CarCard({ car, count, onOpen }) {
 }
 
 // ── Track modal (multi-layout tracks) ─────────────────────────────────────────
-function TrackModal({ track, sessionCfg, setSessionCfg, onClose }) {
+function TrackModal({ track, sessionCfg, setSessionCfg, onClose, t }) {
   const isSelected    = sessionCfg.trackId === track.id;
   const hasLayouts    = track.layouts.length > 1;
   const [activeLayout, setActiveLayout] = useStateB(
@@ -383,7 +383,7 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose }) {
 }
 
 // ── Track card ────────────────────────────────────────────────────────────────
-function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal }) {
+function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal, t }) {
   const selected      = sessionCfg.trackId === track.id;
   const currentLayout = selected ? sessionCfg.layout : null;
   const hasLayouts    = track.layouts.length > 1;
@@ -648,8 +648,8 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
         <div className="card"><div className="empty">{t('common.not_found')}</div></div>
       ) : (
         <div className="track-grid">
-          {filtered.map(t => (
-            <TrackCard key={t.id} track={t} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack} t={t}/>
+          {filtered.map(trk => (
+            <TrackCard key={trk.id} track={trk} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack} t={t}/>
           ))}
         </div>
       )}

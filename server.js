@@ -638,6 +638,28 @@ function getCPU() {
   });
 }
 
+let cachedPublicIp = null;
+async function getPublicIp() {
+  if (process.env.PUBLIC_IP) return process.env.PUBLIC_IP;
+  if (cachedPublicIp) return cachedPublicIp;
+  try {
+    const res = await new Promise((resolve, reject) => {
+      const req = require('https').get('https://api.ipify.org', r => {
+        if (r.statusCode !== 200) { r.destroy(); return resolve(null); }
+        let d = '';
+        r.on('data', chunk => d += chunk);
+        r.on('end', () => resolve(d.trim()));
+      });
+      req.on('error', reject);
+      req.setTimeout(2000, () => { req.destroy(); resolve(null); });
+    });
+    if (res) cachedPublicIp = res;
+    return res || getNetworkIP();
+  } catch {
+    return getNetworkIP();
+  }
+}
+
 function getRAM() {
   const d = fs.readFileSync('/proc/meminfo', 'utf8');
   const g = k => { const m = d.match(new RegExp(k + ':\\s+(\\d+)')); return m ? parseInt(m[1]) : 0; };
@@ -711,7 +733,7 @@ function parseLine(raw, id) {
 
 async function apiMetrics(res) {
   try {
-    const [cpu, ram, acInfo] = await Promise.all([getCPU(), Promise.resolve(getRAM()), getACInfo()]);
+    const [cpu, ram, acInfo, publicIp] = await Promise.all([getCPU(), Promise.resolve(getRAM()), getACInfo(), getPublicIp()]);
     json(res, 200, {
       cpu, ram,
       running:   acInfo.running,
@@ -719,6 +741,8 @@ async function apiMetrics(res) {
       uptime:    getACUptime(),
       cpuName:   getCPUName(),
       osInfo:    getOSInfo(),
+      publicIp,
+      httpPort:  AC_HTTP_PORT,
     });
   } catch (e) { json(res, 500, { error: e.message }); }
 }

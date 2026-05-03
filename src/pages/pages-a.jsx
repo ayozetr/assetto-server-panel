@@ -11,6 +11,10 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const configDiffers  = server.status === 'running' && server.liveTrack && server.liveTrack !== sessionCfg.trackId;
   const configuredTrack = configDiffers ? (tracks.find(t => t.id === sessionCfg.trackId)?.name || sessionCfg.trackId) : null;
   const carsCount = sessionCfg.carIds.length;
+  const toast = window.AppShell ? window.AppShell.useToast() : { push: ()=>{} };
+
+  const joinUrl = server.publicIp ? `https://acstuff.club/s/q:race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';
+  const cmUrl = server.publicIp ? `acmanager://race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';
 
   const [activity, setActivity] = useState([]);
   useEffect(() => {
@@ -60,7 +64,29 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         </div>
       </div>
 
-      <div className="grid-2">
+      {server.status === 'running' && server.publicIp && (
+        <div className="card" style={{marginTop: 16, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 16, flexDirection: 'row'}}>
+          <div style={{display:'flex', alignItems:'center', gap:12}}>
+            <div style={{background:'var(--bg-3)', color:'var(--text)', width:38, height:38, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <I2.IconLink size={18} />
+            </div>
+            <div>
+              <div style={{fontWeight:600, fontSize:14}}>{t('dash.join')}</div>
+              <div className="mono muted" style={{fontSize:11.5}}>{server.publicIp}:{server.httpPort || 8081}</div>
+            </div>
+          </div>
+          <div className="row" style={{gap: 8}}>
+            <button className="btn" onClick={() => { navigator.clipboard.writeText(joinUrl); toast.push(t('common.success'), 'success'); }}>
+              <I2.IconCopy size={13}/> <span className="hide-mobile">{t('dash.copy_link')}</span>
+            </button>
+            <a href={cmUrl} className="btn btn-primary">
+              <I2.IconPlay size={13}/> <span className="hide-mobile">{t('dash.open_cm')}</span>
+            </a>
+          </div>
+        </div>
+      )}
+
+      <div className="grid-2" style={{marginTop: server.status === 'running' && server.publicIp ? 0 : 16}}>
         <div className="card">
           <div className="card-header">
             <I2.IconFlag size={14} style={{color:'var(--red)'}}/>

@@ -57,6 +57,7 @@ const IconEye    = (p) => <Icon {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 
 const IconEyeOff = (p) => <Icon {...p}><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></Icon>;
 const IconCopy   = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Icon>;
 const IconKey    = (p) => <Icon {...p}><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></Icon>;
+const IconLink   = (p) => <Icon {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></Icon>;
 
 window.AppIcons = {
   IconDashboard, IconCar, IconTrack, IconFlag, IconSettings, IconUsers, IconPlayers,
@@ -64,5 +65,5 @@ window.AppIcons = {
   IconCheck, IconX, IconPlus, IconEdit, IconTrash, IconLogout, IconDownload, IconShield,
   IconKick, IconClock, IconCloud, IconChevronDown, IconUser, IconLock,
   IconReload, IconPower, IconTimer, IconHistory, IconChip, IconFolder, IconOS, IconSteam,
-  IconEye, IconEyeOff, IconCopy, IconKey,
+  IconEye, IconEyeOff, IconCopy, IconKey, IconLink,
 };

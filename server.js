@@ -383,6 +383,12 @@ function formatName(id) {
     .trim();
 }
 
+// AC ui_*.json files often contain raw newlines/tabs inside string values (invalid JSON).
+// Replacing all control chars with spaces makes it valid everywhere (tokens + string values).
+function parseLooseJson(raw) {
+  return JSON.parse(raw.replace(/[\x00-\x1f]/g, ' '));
+}
+
 function parseTrackLength(raw) {
   const n = parseFloat(String(raw || '0').replace(/[^0-9.]/g, ''));
   if (!n) return 0;
@@ -955,8 +961,8 @@ async function apiCars(res) {
 
         // ui_car.json: AC content first, kunos assets as fallback
         let ui = {};
-        try { ui = JSON.parse(await fsp.readFile(path.join(acUiDir, 'ui_car.json'), 'utf8')); } catch {
-          try { ui = JSON.parse(await fsp.readFile(path.join(knUiDir, 'ui_car.json'), 'utf8')); } catch {}
+        try { ui = parseLooseJson(await fsp.readFile(path.join(acUiDir, 'ui_car.json'), 'utf8')); } catch {
+          try { ui = parseLooseJson(await fsp.readFile(path.join(knUiDir, 'ui_car.json'), 'utf8')); } catch {}
         }
 
         // skins: AC content first, kunos assets as fallback
@@ -1029,7 +1035,7 @@ async function apiTracks(res) {
 
       // Try direct ui_track.json (single-layout tracks)
       try {
-        mainJson = JSON.parse(await fsp.readFile(path.join(uiDir, 'ui_track.json'), 'utf8'));
+        mainJson = parseLooseJson(await fsp.readFile(path.join(uiDir, 'ui_track.json'), 'utf8'));
       } catch {}
 
       // Scan for layout sub-directories
@@ -1040,7 +1046,7 @@ async function apiTracks(res) {
           layouts = layoutDirs;
           if (!mainJson) {
             try {
-              mainJson = JSON.parse(
+              mainJson = parseLooseJson(
                 await fsp.readFile(path.join(uiDir, layoutDirs[0], 'ui_track.json'), 'utf8')
               );
             } catch {}
@@ -1053,12 +1059,12 @@ async function apiTracks(res) {
       // Kunos assets fallback: use kunos ui_track.json when AC info is missing/empty
       let kunosJson = null;
       if (KUNOS_TRACK_IDS.has(id)) {
-        try { kunosJson = JSON.parse(await fsp.readFile(path.join(knUiDir, 'ui_track.json'), 'utf8')); } catch {
+        try { kunosJson = parseLooseJson(await fsp.readFile(path.join(knUiDir, 'ui_track.json'), 'utf8')); } catch {
           // try first kunos layout subdir
           try {
             const knEntries = await fsp.readdir(knUiDir, { withFileTypes: true });
             const knFirst = knEntries.find(e => e.isDirectory());
-            if (knFirst) kunosJson = JSON.parse(await fsp.readFile(path.join(knUiDir, knFirst.name, 'ui_track.json'), 'utf8'));
+            if (knFirst) kunosJson = parseLooseJson(await fsp.readFile(path.join(knUiDir, knFirst.name, 'ui_track.json'), 'utf8'));
           } catch {}
         }
       }
@@ -1080,7 +1086,7 @@ async function apiTracks(res) {
         for (const layout of layouts) {
           if (!layout) continue;
           let lJson = {};
-          try { lJson = JSON.parse(await fsp.readFile(path.join(uiDir, layout, 'ui_track.json'), 'utf8')); } catch {}
+          try { lJson = parseLooseJson(await fsp.readFile(path.join(uiDir, layout, 'ui_track.json'), 'utf8')); } catch {}
           layoutDetails[layout] = {
             name:        lJson.name        || mainJson.name    || formatName(id),
             description: stripHtml(lJson.description || mainJson.description || '').slice(0, 400),

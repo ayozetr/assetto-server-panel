@@ -242,11 +242,20 @@ function AppInner(props) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ carId: p.id }),
-    }).catch(() => {});
-    setPlayers(ps => ps.filter(x => x.id !== p.id));
-    setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
-    toast.push(`${p.name} ${t('toast.kick')}`, 'success');
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) {
+          toast.push(`${t('common.error')}: ${d.error}`, 'error');
+        } else {
+          setPlayers(ps => ps.filter(x => x.id !== p.id));
+          setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
+          toast.push(`${p.name} ${t('toast.kick')}`, 'success');
+        }
+      })
+      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
   };
+
   const handleBan = (p) => {
     fetch('/api/players/ban', {
       method: 'POST',
@@ -254,10 +263,16 @@ function AppInner(props) {
       body: JSON.stringify({ guid: p.steam }),
     })
       .then(r => r.json())
-      .then(d => toast.push(d.error ? `${t('common.error')}: ${d.error}` : `${p.name} ${t('toast.ban')}`, d.error ? 'error' : 'success'))
+      .then(d => {
+        if (d.error) {
+          toast.push(`${t('common.error')}: ${d.error}`, 'error');
+        } else {
+          setPlayers(ps => ps.filter(x => x.id !== p.id));
+          setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
+          toast.push(`${p.name} ${t('toast.ban')}`, 'success');
+        }
+      })
       .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
-    setPlayers(ps => ps.filter(x => x.id !== p.id));
-    setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
   };
 
   const handleApplySession = () => {

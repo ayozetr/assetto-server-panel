@@ -30,6 +30,13 @@ let acChild = null; // tracked child process for the AC server
 const sessions = new Map(); // token → { username, role, expiresAt }
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, s] of sessions.entries()) {
+    if (now > s.expiresAt) sessions.delete(token);
+  }
+}, 60 * 60 * 1000).unref();
+
 function createSession(username, role) {
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, { username, role, expiresAt: Date.now() + SESSION_TTL });
@@ -163,11 +170,11 @@ function parseDateFromFilename(name) {
   return m ? `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : '';
 }
 
-function importResultFile(filename) {
+async function importResultFile(filename) {
   if (!db) return false;
   const filepath = path.join(AC_RESULTS, filename);
   try {
-    const raw  = fs.readFileSync(filepath, 'utf8');
+    const raw  = await fsp.readFile(filepath, 'utf8');
     const data = JSON.parse(raw);
     const date = parseDateFromFilename(filename);
     const track       = data.TrackName   || '';
@@ -270,18 +277,18 @@ function importResultFile(filename) {
   }
 }
 
-function importAllResults() {
+async function importAllResults() {
   if (!db) return;
   try {
-    const files = fs.readdirSync(AC_RESULTS).filter(f => f.endsWith('.json')).sort();
+    const files = (await fsp.readdir(AC_RESULTS)).filter(f => f.endsWith('.json')).sort();
     let imported = 0;
     for (const file of files) {
       const already = db.prepare('SELECT 1 FROM processed_files WHERE filename = ?').get(file);
-      if (!already && importResultFile(file)) imported++;
+      if (!already && await importResultFile(file)) imported++;
     }
     if (imported > 0) console.log(`  Imported ${imported} result file(s) into database`);
   } catch (e) {
-    console.error('  Cannot scan results dir:', e.message);
+    if (e.code !== 'ENOENT') console.error('  Cannot scan results dir:', e.message);
   }
 }
 
@@ -293,10 +300,10 @@ function startResultsWatcher() {
       if (!filename || !filename.endsWith('.json')) return;
       if (_pendingImports.has(filename)) return;
       _pendingImports.add(filename);
-      setTimeout(() => {
+      setTimeout(async () => {
         _pendingImports.delete(filename);
         const already = db.prepare('SELECT 1 FROM processed_files WHERE filename = ?').get(filename);
-        if (!already) importResultFile(filename);
+        if (!already) await importResultFile(filename);
       }, 2500);
     });
   } catch (e) {
@@ -982,7 +989,7 @@ async function apiTracks(res) {
             name:        lJson.name        || mainJson.name    || formatName(id),
             description: stripHtml(lJson.description || mainJson.description || '').slice(0, 400),
             length:      parseTrackLength(lJson.length  || mainJson.length),
-            pits:        parseInt(lJson.pitboxes || mainJson.pitboxes) || 0,
+            pits:        parseInt(lJson.pitboxes ?? mainJson.pitboxes) || 0,
             thumb:       `/api/content/tracks/${encodeURIComponent(id)}/layout/${encodeURIComponent(layout)}/thumb`,
           };
         }

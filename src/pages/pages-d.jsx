@@ -27,6 +27,12 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
 
   const allPlayers = uMt(() => Array.from(new Set(lapTimes.map(l => l.player))).sort(), [lapTimes]);
 
+  // Only show tracks/cars that have at least one lap time
+  const usedTrackIds   = uMt(() => new Set(lapTimes.map(l => l.track)), [lapTimes]);
+  const usedCarIds     = uMt(() => new Set(lapTimes.map(l => l.car)),   [lapTimes]);
+  const tracksWithData = uMt(() => tracks.filter(t => usedTrackIds.has(t.id)), [tracks, usedTrackIds]);
+  const carsWithData   = uMt(() => cars.filter(c => usedCarIds.has(c.id)),     [cars,   usedCarIds]);
+
   const filtered = uMt(() => lapTimes.filter(l => {
     if (trackId !== 'all' && l.track !== trackId) return false;
     if (carId   !== 'all' && l.car   !== carId)   return false;
@@ -92,11 +98,11 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
         <div className="row" style={{gap: 6, flexWrap:'wrap'}}>
           <select className="select" value={trackId} onChange={e=>setTrackId(e.target.value)} style={{width: 220}}>
             <option value="all">{t('times.all_tracks')}</option>
-            {tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {tracksWithData.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
           <select className="select" value={carId} onChange={e=>setCarId(e.target.value)} style={{width: 200}}>
             <option value="all">{t('times.all_cars')}</option>
-            {cars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {carsWithData.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <label className="row" style={{gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor:'pointer'}} onClick={()=>setValidOnly(v=>!v)}>
             <div className={`checkbox ${validOnly ? 'on' : ''}`}></div>

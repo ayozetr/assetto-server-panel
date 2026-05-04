@@ -469,6 +469,11 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   const [brand,     setBrand]     = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(true);
   const [modalCar,  setModalCar]  = useStateB(null);
+  const [page,      setPage]      = useStateB(1);
+  const [pageSize,  setPageSize]  = useStateB(30);
+
+  // Reset page on filter change
+  useEffectB(() => { setPage(1); }, [query, brand, showKunos, pageSize]);
 
   const kunosCount = useMemoB(() => cars.filter(c => c.isKunos).length, [cars]);
   const brands     = useMemoB(() => {
@@ -541,6 +546,12 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
               </button>
             ))}
           </div>
+          <div className="right row" style={{gap:6, alignItems:'center'}}>
+            <span style={{fontSize:11, color:'var(--text-faint)'}}>{t('common.per_page')}:</span>
+            {[15,30,50].map(n => (
+              <button key={n} className={`tag ${pageSize===n?'active':''}`} style={{padding:'2px 8px'}} onClick={()=>setPageSize(n)}>{n}</button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -553,18 +564,34 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
         </div>
       ) : filtered.length === 0 ? (
         <div className="card"><div className="empty">{t('common.not_found')}</div></div>
-      ) : (
-        <div className="car-grid">
-          {filtered.map(c => (
-            <CarCard
-              key={c.id}
-              car={c}
-              count={carCount(c.id)}
-              onOpen={() => setModalCar(c)}
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        const safePage   = Math.min(page, totalPages);
+        const slice      = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+        return (
+          <>
+            <div className="car-grid">
+              {slice.map(c => (
+                <CarCard
+                  key={c.id}
+                  car={c}
+                  count={carCount(c.id)}
+                  onOpen={() => setModalCar(c)}
+                />
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="pagination">
+                <button className="btn btn-sm" disabled={safePage === 1} onClick={() => setPage(1)}>«</button>
+                <button className="btn btn-sm" disabled={safePage === 1} onClick={() => setPage(p => p - 1)}>‹</button>
+                <span className="pagination-info">{t('times.page_of', { page: safePage, totalPages })}</span>
+                <button className="btn btn-sm" disabled={safePage === totalPages} onClick={() => setPage(p => p + 1)}>›</button>
+                <button className="btn btn-sm" disabled={safePage === totalPages} onClick={() => setPage(totalPages)}>»</button>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {modalCar && (
         <CarModal
@@ -587,6 +614,10 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   const [country,    setCountry]    = useStateB('all');
   const [showKunos,  setShowKunos]  = useStateB(true);
   const [modalTrack, setModalTrack] = useStateB(null);
+  const [page,       setPage]       = useStateB(1);
+  const [pageSize,   setPageSize]   = useStateB(30);
+
+  useEffectB(() => { setPage(1); }, [query, country, showKunos, pageSize]);
 
   const kunosCount = useMemoB(() => tracks.filter(t => t.isKunos).length, [tracks]);
   const countries  = useMemoB(() => {
@@ -634,6 +665,12 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
               </button>
             ))}
           </div>
+          <div className="right row" style={{gap:6, alignItems:'center'}}>
+            <span style={{fontSize:11, color:'var(--text-faint)'}}>{t('common.per_page')}:</span>
+            {[15,30,50].map(n => (
+              <button key={n} className={`tag ${pageSize===n?'active':''}`} style={{padding:'2px 8px'}} onClick={()=>setPageSize(n)}>{n}</button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -646,13 +683,29 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
         </div>
       ) : filtered.length === 0 ? (
         <div className="card"><div className="empty">{t('common.not_found')}</div></div>
-      ) : (
-        <div className="track-grid">
-          {filtered.map(trk => (
-            <TrackCard key={trk.id} track={trk} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack} t={t}/>
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        const safePage   = Math.min(page, totalPages);
+        const slice      = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+        return (
+          <>
+            <div className="track-grid">
+              {slice.map(trk => (
+                <TrackCard key={trk.id} track={trk} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} onOpenModal={setModalTrack} t={t}/>
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="pagination">
+                <button className="btn btn-sm" disabled={safePage === 1} onClick={() => setPage(1)}>«</button>
+                <button className="btn btn-sm" disabled={safePage === 1} onClick={() => setPage(p => p - 1)}>‹</button>
+                <span className="pagination-info">{t('times.page_of', { page: safePage, totalPages })}</span>
+                <button className="btn btn-sm" disabled={safePage === totalPages} onClick={() => setPage(p => p + 1)}>›</button>
+                <button className="btn btn-sm" disabled={safePage === totalPages} onClick={() => setPage(totalPages)}>»</button>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {modalTrack && (
         <TrackModal

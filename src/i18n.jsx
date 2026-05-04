@@ -21,6 +21,8 @@ const dict = {
     'sidebar.role.admin': 'Administrator',
     'sidebar.role.user': 'User',
     'sidebar.logout': 'Logout',
+    'sidebar.credit_by': 'Developed by',
+    'common.per_page': 'Per page',
     
     // Topbar
     'topbar.server': 'Server',
@@ -64,6 +66,7 @@ const dict = {
     'common.backend_down': 'Backend unavailable — check if the server is still running. Displayed data might be outdated.',
     'common.no_permissions': 'You do not have permissions for this action',
     'common.net_error': 'Network error',
+    'common.per_page': 'Per page',
 
     // App (Toasts)
     'toast.reload_config': 'Reloading config...',
@@ -399,6 +402,7 @@ const dict = {
     'sidebar.role.admin': 'Administrador',
     'sidebar.role.user': 'Usuario',
     'sidebar.logout': 'Cerrar sesión',
+    'sidebar.credit_by': 'Desarrollado por',
 
     // Topbar
     'topbar.server': 'Servidor',
@@ -442,6 +446,7 @@ const dict = {
     'common.backend_down': 'Backend no disponible — comprueba que el servidor sigue en ejecución. Los datos mostrados pueden estar desactualizados.',
     'common.no_permissions': 'No tienes permisos para esta acción',
     'common.net_error': 'Error de red',
+    'common.per_page': 'Por página',
 
     // App (Toasts)
     'toast.reload_config': 'Recargando configuración…',
@@ -777,6 +782,7 @@ const dict = {
     'sidebar.role.admin': 'Amministratore',
     'sidebar.role.user': 'Utente',
     'sidebar.logout': 'Disconnetti',
+    'sidebar.credit_by': 'Sviluppato da',
 
     // Topbar
     'topbar.server': 'Server',
@@ -820,6 +826,7 @@ const dict = {
     'common.backend_down': 'Backend non disponibile — verifica se il server è ancora in esecuzione.',
     'common.no_permissions': 'Non hai i permessi per questa azione',
     'common.net_error': 'Errore di rete',
+    'common.per_page': 'Per pagina',
 
     // App (Toasts)
     'toast.reload_config': 'Ricarico configurazione...',

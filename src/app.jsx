@@ -156,6 +156,8 @@ function App() {
             ramTotal:  d.ram.total,
             uptime:    d.uptime,
             liveTrack: d.liveTrack || null,
+            publicIp:  d.publicIp  || s.publicIp,
+            httpPort:  d.httpPort  || s.httpPort,
           }));
           if (d.osInfo) setOsInfo(d.osInfo);
         })

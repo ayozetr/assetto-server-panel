@@ -68,13 +68,26 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img src="src/assets/icon.png" className="brand-mark" alt="logo"/>
+        <img src="src/assets/icon.png" className="brand-mark" alt="logo" style={{alignSelf:'flex-start', marginTop: 2}}/>
         <div>
           <div className="brand-name">Assetto Server Panel</div>
           <div className="brand-sub" style={{display:'flex', alignItems:'center', gap: 4}}>
             <I.IconOS size={10}/>
             {osInfo ? `${osInfo.name} ${osInfo.version}` : t('sidebar.os')}
           </div>
+          <a
+            href="https://github.com/ayozetr"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display:'flex', alignItems:'center', gap: 4,
+              fontSize: 10, color: 'var(--text-faint)',
+              textDecoration: 'none', marginTop: 3,
+            }}
+          >
+            <I.IconGithub size={10}/>
+            {t('sidebar.credit_by')} <strong style={{color:'var(--text-muted)'}}>ayozetr</strong>
+          </a>
         </div>
       </div>
 

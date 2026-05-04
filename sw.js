@@ -1,0 +1,89 @@
+// Assetto Server Panel — Service Worker
+// Strategy: Network-first for API calls, Cache-first for static assets
+
+const CACHE_NAME  = 'ac-panel-v1';
+const API_PREFIX  = '/api/';
+
+// Static assets to pre-cache on install
+const PRECACHE = [
+  '/',
+  '/src/styles.css',
+  '/src/tweaks-panel.jsx',
+  '/src/icons.jsx',
+  '/src/data.jsx',
+  '/src/i18n.jsx',
+  '/src/shell.jsx',
+  '/src/pages/pages-a.jsx',
+  '/src/pages/pages-b.jsx',
+  '/src/pages/pages-c.jsx',
+  '/src/pages/pages-d.jsx',
+  '/src/pages/pages-e.jsx',
+  '/src/app.jsx',
+  '/src/assets/icon.png',
+  '/src/assets/icon-192.png',
+  '/src/assets/icon-512.png',
+  '/manifest.webmanifest',
+];
+
+// ── Install: pre-cache static shell ──────────────────────────────────────────
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
+  );
+  self.skipWaiting();
+});
+
+// ── Activate: remove old caches ───────────────────────────────────────────────
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+// ── Fetch: network-first for /api/, cache-first for static assets ─────────────
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Always go network-first for API calls (real-time data)
+  if (url.pathname.startsWith(API_PREFIX)) {
+    event.respondWith(
+      fetch(request).catch(() =>
+        new Response(JSON.stringify({ error: 'Offline' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for CDN scripts (React, Babel, fonts)
+  if (url.origin !== self.location.origin) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(request);
+        const networkFetch = fetch(request).then((res) => {
+          if (res.ok) cache.put(request, res.clone());
+          return res;
+        }).catch(() => cached);
+        return cached || networkFetch;
+      })
+    );
+    return;
+  }
+
+  // Cache-first for local static files
+  event.respondWith(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const networkRes = await fetch(request);
+      if (networkRes.ok) cache.put(request, networkRes.clone());
+      return networkRes;
+    })
+  );
+});

@@ -1,0 +1,27 @@
+{
+  "name": "Assetto Server Panel",
+  "short_name": "AC Panel",
+  "description": "Panel de administración para servidores de Assetto Corsa",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#dc2626",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "es",
+  "categories": ["utilities"],
+  "icons": [
+    {
+      "src": "src/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "src/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

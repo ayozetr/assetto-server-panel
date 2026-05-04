@@ -39,8 +39,8 @@ function UploadLimitCard({ isAdmin }) {
         <div className="card-title">{t('config.upload_title')}</div>
       </div>
       <div className="card-body col" style={{gap: 14}}>
-        <div style={{display:'flex', alignItems:'flex-end', gap:12}}>
-          <div className="field" style={{flex:1}}>
+        <div style={{display:'flex', alignItems:'flex-end', gap:10}}>
+          <div style={{display:'flex', flexDirection:'column', gap:5, flex:1}}>
             <label className="field-label">{t('config.upload_limit')}</label>
             <input
               className="input mono"
@@ -51,16 +51,16 @@ function UploadLimitCard({ isAdmin }) {
               onChange={e => setMaxMb(Number(e.target.value))}
               disabled={!isAdmin || !loaded}
             />
-            <span className="field-hint">{t('config.upload_limit_hint')}</span>
           </div>
           {isAdmin && (
-            <button className="btn btn-primary btn-sm" style={{flexShrink:0, marginBottom:1}} onClick={save} disabled={saving || !loaded}>
+            <button className="btn btn-primary btn-sm" style={{flexShrink:0}} onClick={save} disabled={saving || !loaded}>
               {saving
                 ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
                 : <><I4.IconCheck size={12}/> {t('common.apply')}</>}
             </button>
           )}
         </div>
+        <span className="field-hint">{t('config.upload_limit_hint')}</span>
         <div style={{
           padding: '8px 12px', borderRadius: 'var(--radius)',
           background: 'var(--bg-3)', fontSize: 12, color: 'var(--text-muted)',

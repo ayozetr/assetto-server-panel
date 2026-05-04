@@ -355,19 +355,21 @@ function PageMods({ isAdmin }) {
               <div className="card-title">{t('mods.formats_title')}</div>
             </div>
             <div className="card-body col" style={{gap: 10}}>
-              {FORMAT_INFO.map(f => (
-                <div key={f.ext} style={{display: 'flex', alignItems: 'center', gap: 10}}>
-                  <span style={{
-                    padding: '2px 8px', borderRadius: 4,
+              <div style={{display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center'}}>
+                {FORMAT_INFO.map(f => (
+                  <span key={f.ext} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '3px 10px', borderRadius: 4,
                     background: f.color + '22', color: f.color,
-                    fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
-                    minWidth: 36, textAlign: 'center',
-                  }}>{f.label}</span>
-                  <I5.IconCheck size={13} style={{color: '#22c55e', flexShrink: 0}}/>
-                </div>
-              ))}
+                    fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
+                  }}>
+                    <I5.IconCheck size={11} style={{color: '#22c55e'}}/>
+                    {f.label}
+                  </span>
+                ))}
+              </div>
               <div style={{
-                marginTop: 6, padding: '8px 10px', borderRadius: 'var(--radius)',
+                marginTop: 2, padding: '8px 10px', borderRadius: 'var(--radius)',
                 background: 'var(--bg-3)', fontSize: 11.5, color: 'var(--text-muted)',
               }}>
                 🔒 {t('mods.security_note')}

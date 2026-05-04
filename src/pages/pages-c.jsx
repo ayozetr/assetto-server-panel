@@ -53,7 +53,7 @@ function UploadLimitCard({ isAdmin }) {
             />
           </div>
           {isAdmin && (
-            <button className="btn btn-primary btn-sm" style={{flexShrink:0}} onClick={save} disabled={saving || !loaded}>
+            <button className="btn btn-primary btn-sm" style={{flexShrink:0, marginBottom:4}} onClick={save} disabled={saving || !loaded}>
               {saving
                 ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
                 : <><I4.IconCheck size={12}/> {t('common.apply')}</>}

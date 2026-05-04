@@ -39,8 +39,8 @@ function UploadLimitCard({ isAdmin }) {
         <div className="card-title">{t('config.upload_title')}</div>
       </div>
       <div className="card-body col" style={{gap: 14}}>
-        <div className="grid-2">
-          <div className="field">
+        <div style={{display:'flex', alignItems:'center', gap:12}}>
+          <div className="field" style={{flex:1}}>
             <label className="field-label">{t('config.upload_limit')}</label>
             <input
               className="input mono"
@@ -53,15 +53,13 @@ function UploadLimitCard({ isAdmin }) {
             />
             <span className="field-hint">{t('config.upload_limit_hint')}</span>
           </div>
-          <div style={{display: 'flex', alignItems: 'flex-end', paddingBottom: 2}}>
-            {isAdmin && (
-              <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !loaded}>
-                {saving
-                  ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
-                  : <><I4.IconCheck size={12}/> {t('common.save')}</>}
-              </button>
-            )}
-          </div>
+          {isAdmin && (
+            <button className="btn btn-primary btn-sm" style={{marginTop:18, flexShrink:0}} onClick={save} disabled={saving || !loaded}>
+              {saving
+                ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
+                : <><I4.IconCheck size={12}/> {t('common.apply')}</>}
+            </button>
+          )}
         </div>
         <div style={{
           padding: '8px 12px', borderRadius: 'var(--radius)',
@@ -290,7 +288,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.abs')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.abs_sub')}</div>
                 </div>
-                <select className="select" style={{width: 80}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
+                <select className="select" style={{width: 110}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
                   <option value={0}>{t('config.opt_no')}</option>
                   <option value={1}>{t('config.opt_factory')}</option>
                   <option value={2}>{t('config.opt_free')}</option>
@@ -301,7 +299,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.tc')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.tc_sub')}</div>
                 </div>
-                <select className="select" style={{width: 80}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
+                <select className="select" style={{width: 110}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
                   <option value={0}>{t('config.opt_no')}</option>
                   <option value={1}>{t('config.opt_factory')}</option>
                   <option value={2}>{t('config.opt_free')}</option>

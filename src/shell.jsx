@@ -52,42 +52,28 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
 
     { id: 'config', label: t('nav.config'), icon: I.IconSettings, group: 'admin', adminOnly: true },
     { id: 'users', label: t('nav.users'), icon: I.IconUsers, group: 'admin', adminOnly: true },
-    { id: 'profile', label: t('nav.profile'), icon: I.IconKey, group: 'account' },
+    // profile is accessible only via the key icon in the footer, not listed in the nav
   ];
   const groups = {
     general: t('group.general'),
     content: t('group.content'),
     admin: t('group.admin'),
-    account: t('group.account'),
   };
   const grouped = Object.keys(groups).map(g => ({
     title: groups[g],
     items: items.filter(i => i.group === g),
-  }));
+  })).filter(g => g.items.length > 0);
 
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img src="src/assets/icon.png" className="brand-mark" alt="logo" style={{alignSelf:'flex-start', marginTop: 2}}/>
+        <img src="src/assets/icon.png" className="brand-mark" alt="logo"/>
         <div>
           <div className="brand-name">Assetto Server Panel</div>
           <div className="brand-sub" style={{display:'flex', alignItems:'center', gap: 4}}>
             <I.IconOS size={10}/>
             {osInfo ? `${osInfo.name} ${osInfo.version}` : t('sidebar.os')}
           </div>
-          <a
-            href="https://github.com/ayozetr"
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display:'flex', alignItems:'center', gap: 4,
-              fontSize: 10, color: 'var(--text-faint)',
-              textDecoration: 'none', marginTop: 3,
-            }}
-          >
-            <I.IconGithub size={10}/>
-            {t('sidebar.credit_by')} <strong style={{color:'var(--text-muted)'}}>ayozetr</strong>
-          </a>
         </div>
       </div>
 
@@ -117,6 +103,21 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
           })}
         </React.Fragment>
       ))}
+
+      <a
+        href="https://github.com/ayozetr"
+        target="_blank"
+        rel="noreferrer"
+        style={{
+          display:'flex', alignItems:'center', gap: 5,
+          fontSize: 10.5, color: 'var(--text-faint)',
+          textDecoration: 'none',
+          padding: '8px 10px 4px',
+        }}
+      >
+        <I.IconGithub size={11}/>
+        {t('sidebar.credit_by')} <strong style={{color:'var(--text-muted)', fontWeight:600}}>ayozetr</strong>
+      </a>
 
       <div className="sidebar-footer">
         <div className="user-avatar">{user.name.slice(0,1).toUpperCase()}</div>

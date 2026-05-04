@@ -76,7 +76,24 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
             </div>
           </div>
           <div className="row" style={{gap: 8}}>
-            <button className="btn" onClick={() => { navigator.clipboard.writeText(joinUrl); toast.push(t('common.success'), 'success'); }}>
+            <button className="btn" onClick={() => {
+                const text = joinUrl;
+                if (navigator.clipboard && window.isSecureContext) {
+                  navigator.clipboard.writeText(text).then(() => toast.push(t('common.success'), 'success')).catch(() => {
+                    const el = document.createElement('textarea');
+                    el.value = text; el.style.position = 'fixed'; el.style.opacity = '0';
+                    document.body.appendChild(el); el.focus(); el.select();
+                    document.execCommand('copy'); document.body.removeChild(el);
+                    toast.push(t('common.success'), 'success');
+                  });
+                } else {
+                  const el = document.createElement('textarea');
+                  el.value = text; el.style.position = 'fixed'; el.style.opacity = '0';
+                  document.body.appendChild(el); el.focus(); el.select();
+                  document.execCommand('copy'); document.body.removeChild(el);
+                  toast.push(t('common.success'), 'success');
+                }
+              }}>
               <I2.IconCopy size={13}/> <span className="hide-mobile">{t('dash.copy_link')}</span>
             </button>
             <a href={cmUrl} className="btn btn-primary">

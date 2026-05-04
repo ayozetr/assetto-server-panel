@@ -54,6 +54,7 @@ const dict = {
 
     // Common / Global
     'common.save': 'Save',
+    'common.apply': 'Apply',
     'common.saving': 'Saving...',
     'common.cancel': 'Cancel',
     'common.delete': 'Delete',
@@ -434,6 +435,7 @@ const dict = {
 
     // Common / Global
     'common.save': 'Guardar',
+    'common.apply': 'Aplicar',
     'common.saving': 'Guardando…',
     'common.cancel': 'Cancelar',
     'common.delete': 'Eliminar',
@@ -814,6 +816,7 @@ const dict = {
 
     // Common / Global
     'common.save': 'Salva',
+    'common.apply': 'Applica',
     'common.saving': 'Salvataggio...',
     'common.cancel': 'Annulla',
     'common.delete': 'Elimina',

@@ -104,35 +104,36 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
         </React.Fragment>
       ))}
 
-      <a
-        href="https://github.com/ayozetr"
-        target="_blank"
-        rel="noreferrer"
-        style={{
-          marginTop: 'auto',
-          display:'flex', alignItems:'center', gap: 5,
-          fontSize: 10.5, color: 'var(--text-faint)',
-          textDecoration: 'none',
-          padding: '4px 10px 10px',
-          borderTop: '1px solid var(--border)',
-        }}
-      >
-        <I.IconGithub size={11}/>
-        {t('sidebar.credit_by')} <strong style={{color:'var(--text-muted)', fontWeight:600}}>ayozetr</strong>
-      </a>
+      <div style={{marginTop: 'auto'}}>
+        <a
+          href="https://github.com/ayozetr"
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            display:'flex', alignItems:'center', gap: 5,
+            fontSize: 10.5, color: 'var(--text-faint)',
+            textDecoration: 'none',
+            padding: '6px 10px 8px',
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          <I.IconGithub size={11}/>
+          {t('sidebar.credit_by')} <strong style={{color:'var(--text-muted)', fontWeight:600}}>ayozetr</strong>
+        </a>
 
-      <div className="sidebar-footer">
-        <div className="user-avatar">{user.name.slice(0,1).toUpperCase()}</div>
-        <div className="user-info">
-          <div className="user-name">{user.name}</div>
-          <div className="user-role">{user.role === 'admin' ? t('sidebar.role.admin') : t('sidebar.role.user')}</div>
+        <div className="sidebar-footer" style={{marginTop: 0}}>
+          <div className="user-avatar">{user.name.slice(0,1).toUpperCase()}</div>
+          <div className="user-info">
+            <div className="user-name">{user.name}</div>
+            <div className="user-role">{user.role === 'admin' ? t('sidebar.role.admin') : t('sidebar.role.user')}</div>
+          </div>
+          <button className="icon-btn" onClick={() => setPage('profile')} title={t('nav.profile')}>
+            <I.IconKey size={15}/>
+          </button>
+          <button className="icon-btn" onClick={onLogout} title={t('sidebar.logout')}>
+            <I.IconLogout size={15}/>
+          </button>
         </div>
-        <button className="icon-btn" onClick={() => setPage('profile')} title={t('nav.profile')}>
-          <I.IconKey size={15}/>
-        </button>
-        <button className="icon-btn" onClick={onLogout} title={t('sidebar.logout')}>
-          <I.IconLogout size={15}/>
-        </button>
       </div>
     </aside>
   );

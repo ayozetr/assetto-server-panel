@@ -2,6 +2,80 @@
 const { useState: useStateC, useEffect: useEffectC } = React;
 const I4 = window.AppIcons;
 
+// ── Upload limit card (independent from server_cfg.ini) ───────────────────────
+function UploadLimitCard({ isAdmin }) {
+  const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k) => k;
+  const toast = window.AppShell.useToast();
+  const [maxMb,   setMaxMb]   = useStateC(500);
+  const [saving,  setSaving]  = useStateC(false);
+  const [loaded,  setLoaded]  = useStateC(false);
+
+  useEffectC(() => {
+    fetch('/api/panel/settings')
+      .then(r => r.json())
+      .then(d => { if (d.uploadMaxMb) setMaxMb(d.uploadMaxMb); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch('/api/panel/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadMaxMb: maxMb }),
+      });
+      const d = await r.json();
+      if (d.ok) toast.push(t('config.upload_saved'), 'success');
+      else toast.push(d.error || t('common.error'), 'error');
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="card" style={{gridColumn: '1 / -1'}}>
+      <div className="card-header">
+        <I4.IconUpload size={14} style={{color: 'var(--red)'}}/>
+        <div className="card-title">{t('config.upload_title')}</div>
+      </div>
+      <div className="card-body col" style={{gap: 14}}>
+        <div className="grid-2">
+          <div className="field">
+            <label className="field-label">{t('config.upload_limit')}</label>
+            <input
+              className="input mono"
+              type="number"
+              min="1"
+              max="10240"
+              value={maxMb}
+              onChange={e => setMaxMb(Number(e.target.value))}
+              disabled={!isAdmin || !loaded}
+            />
+            <span className="field-hint">{t('config.upload_limit_hint')}</span>
+          </div>
+          <div style={{display: 'flex', alignItems: 'flex-end', paddingBottom: 2}}>
+            {isAdmin && (
+              <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !loaded}>
+                {saving
+                  ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
+                  : <><I4.IconCheck size={12}/> {t('common.save')}</>}
+              </button>
+            )}
+          </div>
+        </div>
+        <div style={{
+          padding: '8px 12px', borderRadius: 'var(--radius)',
+          background: 'var(--bg-3)', fontSize: 12, color: 'var(--text-muted)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <I4.IconShield size={13}/>
+          {t('config.upload_security_note')}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WhitelistEditor({ isAdmin }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell.useToast();
@@ -286,6 +360,8 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
           </div>
         </div>
       </div>
+
+      <UploadLimitCard isAdmin={isAdmin}/>
 
       {isAdmin && (
         <div className="row" style={{marginTop: 20, justifyContent: 'flex-end', gap: 8, position:'sticky', bottom: 16, background:'var(--bg-2)', padding:'10px 0'}}>

@@ -8,6 +8,13 @@ const os            = require('os');
 const crypto        = require('crypto');
 const { spawn }     = require('child_process');
 
+// ── Mod extraction libraries (loaded lazily to avoid startup errors if missing) ─
+let StreamZip, Unrar, sevenZ, sevenBin;
+try { StreamZip = require('node-stream-zip'); } catch {}
+try { Unrar    = require('node-unrar-js');   } catch {}
+try { sevenZ   = require('node-7z');         } catch {}
+try { sevenBin = require('7zip-bin');        } catch {}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 const HOST         = process.env.HOST              || '0.0.0.0';
 const PORT         = parseInt(process.env.PORT     || '3000', 10);
@@ -146,7 +153,14 @@ try {
       role          TEXT DEFAULT 'user',
       created_at    TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS panel_settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
+  // Seed default settings
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
@@ -1459,6 +1473,291 @@ function apiPanelUserDelete(res, username) {
   json(res, 200, { ok: true });
 }
 
+// ── Panel settings (upload_max_mb, etc.) ──────────────────────────────────────
+function apiPanelSettingsGet(res) {
+  if (!db) return json(res, 200, { uploadMaxMb: 500 });
+  const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+  json(res, 200, { uploadMaxMb: parseInt(row?.value || '500', 10) });
+}
+
+async function apiPanelSettingsPut(req, res) {
+  if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+  try {
+    const body = await readBody(req);
+    const mb   = parseInt(body.uploadMaxMb, 10);
+    if (!mb || mb < 1 || mb > 10240) return json(res, 400, { error: 'Valor inválido (1–10240 MB)' });
+    db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('upload_max_mb', ?)`).run(String(mb));
+    json(res, 200, { ok: true, uploadMaxMb: mb });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// ── Multipart parser (native, no dependencies) ────────────────────────────────
+function parseMultipart(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const ct = req.headers['content-type'] || '';
+    const bmatch = ct.match(/boundary=([^\s;]+)/);
+    if (!bmatch) return reject(new Error('Missing multipart boundary'));
+    const boundary = '--' + bmatch[1];
+    const chunks   = [];
+    let total      = 0;
+
+    req.on('data', chunk => {
+      total += chunk.length;
+      if (total > maxBytes) { req.destroy(); return reject(Object.assign(new Error('File too large'), { code: 'ELIMIT' })); }
+      chunks.push(chunk);
+    });
+    req.on('error', reject);
+    req.on('end', () => {
+      try {
+        const body   = Buffer.concat(chunks);
+        const bBytes = Buffer.from('\r\n' + boundary);
+        const result = {};
+
+        // Split body into parts by boundary
+        let start = body.indexOf(boundary);
+        while (start !== -1) {
+          start += boundary.length;
+          if (body[start] === 0x2d && body[start + 1] === 0x2d) break; // '--' = final boundary
+          if (body[start] === 0x0d) start += 2; // skip CRLF after boundary
+
+          const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), start);
+          if (headerEnd === -1) break;
+          const headerStr = body.slice(start, headerEnd).toString('utf8');
+          const dataStart = headerEnd + 4;
+          const dataEnd   = body.indexOf(bBytes, dataStart);
+          const data      = body.slice(dataStart, dataEnd === -1 ? undefined : dataEnd);
+
+          const nameMatch = headerStr.match(/name="([^"]+)"/);
+          const fileMatch = headerStr.match(/filename="([^"]+)"/);
+          if (nameMatch) {
+            const fieldName = nameMatch[1];
+            if (fileMatch) {
+              result[fieldName] = { filename: fileMatch[1], data };
+            } else {
+              result[fieldName] = data.toString('utf8');
+            }
+          }
+          start = dataEnd;
+        }
+        resolve(result);
+      } catch (e) { reject(e); }
+    });
+  });
+}
+
+// ── Archive extractor — returns flat list of { name, getData } ────────────────
+const ALLOWED_MOD_EXTS = new Set([
+  '.kn5','.acd','.ini','.json','.csv','.txt','.xml','.lua',
+  '.png','.jpg','.jpeg','.webp','.dds','.bmp',
+  '.wav','.ogg','.mp3','.bank',
+  '.bin','.lut','.rto','.sfx','.ksanim','.ksemitter',
+  '.hdr','.pfm','.tga','.raw','.ksg','.kn5',
+]);
+
+function isSafeEntry(entryName, destRoot) {
+  // Anti Zip-Slip: resolved path must start with destRoot
+  const resolved = path.resolve(destRoot, entryName.replace(/[\\/]+/g, path.sep));
+  return resolved.startsWith(destRoot + path.sep) || resolved === destRoot;
+}
+
+async function extractZip(buffer) {
+  if (!StreamZip) throw new Error('node-stream-zip not available');
+  const zip     = new StreamZip.async({ buffer });
+  const entries = await zip.entries();
+  const list    = [];
+  for (const [name, entry] of Object.entries(entries)) {
+    list.push({
+      name,
+      isDirectory: entry.isDirectory,
+      getData: async () => entry.isDirectory ? null : zip.entryData(name),
+    });
+  }
+  return { entries: list, close: () => zip.close() };
+}
+
+async function extract7z(buffer) {
+  if (!sevenZ || !sevenBin) throw new Error('node-7z / 7zip-bin not available');
+  const tmpIn  = path.join(os.tmpdir(), `ac-mod-${Date.now()}.7z`);
+  const tmpOut = path.join(os.tmpdir(), `ac-mod-${Date.now()}`);
+  await fsp.writeFile(tmpIn, buffer);
+  await fsp.mkdir(tmpOut, { recursive: true });
+  await new Promise((resolve, reject) => {
+    const stream = sevenZ.extractFull(tmpIn, tmpOut, { $bin: sevenBin.path7za });
+    stream.on('end', resolve);
+    stream.on('error', reject);
+  });
+  // Walk tmpOut and collect entries
+  const list = [];
+  const walk = async (dir, rel) => {
+    const items = await fsp.readdir(dir, { withFileTypes: true });
+    for (const item of items) {
+      const itemRel = rel ? rel + '/' + item.name : item.name;
+      if (item.isDirectory()) {
+        list.push({ name: itemRel + '/', isDirectory: true, getData: async () => null });
+        await walk(path.join(dir, item.name), itemRel);
+      } else {
+        const fullPath = path.join(dir, item.name);
+        list.push({ name: itemRel, isDirectory: false, getData: async () => fsp.readFile(fullPath) });
+      }
+    }
+  };
+  await walk(tmpOut, '');
+  return {
+    entries: list,
+    close: async () => {
+      await fsp.rm(tmpIn,  { force: true });
+      await fsp.rm(tmpOut, { recursive: true, force: true });
+    },
+  };
+}
+
+async function extractRar(buffer) {
+  if (!Unrar) throw new Error('node-unrar-js not available');
+  // node-unrar-js v2 API
+  const extractor = await Unrar.createExtractorFromData({ data: buffer });
+  const { files } = extractor.extract();
+  const list = [];
+  for (const file of files) {
+    const isDir = file.fileHeader.flags.directory;
+    const data  = isDir ? null : Buffer.from(file.extraction);
+    list.push({
+      name:        file.fileHeader.name,
+      isDirectory: isDir,
+      getData:     async () => data,
+    });
+  }
+  return { entries: list, close: () => {} };
+}
+
+async function extractArchive(buffer, ext) {
+  if (ext === '.zip') return extractZip(buffer);
+  if (ext === '.7z')  return extract7z(buffer);
+  if (ext === '.rar') return extractRar(buffer);
+  throw new Error(`Unsupported format: ${ext}`);
+}
+
+// ── Mod upload endpoint ───────────────────────────────────────────────────────
+async function apiModUpload(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+
+  // 1. Read current limit from DB
+  let maxMb = 500;
+  if (db) {
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+    if (row) maxMb = parseInt(row.value, 10) || 500;
+  }
+  const maxBytes = maxMb * 1024 * 1024;
+
+  let archive = null;
+  try {
+    // 2. Parse multipart
+    let parts;
+    try {
+      parts = await parseMultipart(req, maxBytes);
+    } catch (e) {
+      if (e.code === 'ELIMIT') return json(res, 413, { error: `Archivo demasiado grande (máx. ${maxMb} MB)` });
+      return json(res, 400, { error: `Error en la subida: ${e.message}` });
+    }
+    const filePart = parts.file;
+    if (!filePart?.data) return json(res, 400, { error: 'No se recibió ningún archivo (campo: file)' });
+
+    // 3. Validate extension
+    const ext = path.extname(filePart.filename).toLowerCase();
+    if (!['.zip', '.rar', '.7z'].includes(ext))
+      return json(res, 400, { error: `Formato no soportado: ${ext}. Usa .zip, .rar o .7z` });
+
+    // 4. Extract archive index
+    archive = await extractArchive(filePart.data, ext);
+    const entries = archive.entries;
+
+    // 5. Anti Zip-Slip check (against a dummy root to detect path traversal)
+    const dummyRoot = path.join(os.tmpdir(), 'ac-slip-check');
+    for (const e of entries) {
+      if (!isSafeEntry(e.name, dummyRoot))
+        return json(res, 400, { error: `Zip-Slip detectado en entrada: ${e.name}` });
+    }
+
+    // 6. Collect names for whitelist detection
+    const names     = entries.map(e => e.name.replace(/\\/g, '/').toLowerCase());
+    const allFiles  = names.filter(n => !n.endsWith('/'));
+    const allDirs   = names.filter(n => n.endsWith('/'));
+
+    const hasKn5    = allFiles.some(n => n.endsWith('.kn5'));
+    const hasData   = allDirs.some(n => /\/data\/$/.test(n) || /^data\/$/.test(n)) ||
+                      allFiles.some(n => /\/data\.acd$/.test(n) || /^data\.acd$/.test(n));
+    const hasModels = allFiles.some(n => /(^|\/)(models\.ini)$/.test(n));
+    const hasAi     = allDirs.some(n => /(\/|^)ai\/$/.test(n));
+
+    let modType = null;
+    if (hasKn5 && hasData)    modType = 'car';
+    else if (hasModels && hasAi) modType = 'track';
+
+    if (!modType)
+      return json(res, 422, { error: 'No se encontró un mod válido. Un coche necesita .kn5 + data/; un circuito necesita models.ini + ai/' });
+
+    // 7. Identify root folder of the mod (first-level directory)
+    const roots = new Set();
+    for (const n of names) {
+      const parts2 = n.split('/');
+      if (parts2[0]) roots.add(parts2[0]);
+    }
+    if (roots.size !== 1)
+      return json(res, 422, { error: `El archivo debe contener exactamente una carpeta raíz. Se encontraron: ${[...roots].join(', ')}` });
+    const modRoot = [...roots][0];
+    const modId   = modRoot;
+
+    // 8. Determine destination
+    const destBase = modType === 'car' ? AC_CARS_DIR : AC_TRACKS_DIR;
+    const destDir  = path.join(destBase, modId);
+
+    // Safety: destDir must be inside destBase
+    if (!destDir.startsWith(destBase + path.sep))
+      return json(res, 400, { error: 'Ruta de destino inválida' });
+
+    await fsp.mkdir(destDir, { recursive: true });
+
+    // 9. Surgical extraction — only entries under modRoot with allowed extensions
+    let filesExtracted = 0;
+    for (const entry of entries) {
+      const normalName = entry.name.replace(/\\/g, '/');
+      if (!normalName.startsWith(modRoot + '/')) continue; // outside root
+      if (entry.isDirectory) {
+        const relDir = normalName.slice(modRoot.length + 1);
+        if (relDir) await fsp.mkdir(path.join(destDir, relDir), { recursive: true });
+        continue;
+      }
+      // Whitelist extension check
+      const fileExt = path.extname(normalName).toLowerCase();
+      if (!ALLOWED_MOD_EXTS.has(fileExt)) continue; // silently skip disallowed files
+
+      const relPath  = normalName.slice(modRoot.length + 1);
+      const destFile = path.join(destDir, relPath);
+
+      // Final Anti Zip-Slip for actual dest
+      if (!destFile.startsWith(destDir + path.sep)) continue;
+
+      const data = await entry.getData();
+      if (!data) continue;
+      await fsp.mkdir(path.dirname(destFile), { recursive: true });
+      await fsp.writeFile(destFile, data);
+      filesExtracted++;
+    }
+
+    json(res, 200, {
+      ok: true,
+      modType,
+      modId,
+      destination: destDir,
+      filesExtracted,
+    });
+  } catch (e) {
+    console.error('Mod upload error:', e.message);
+    json(res, 500, { error: e.message });
+  } finally {
+    if (archive?.close) await archive.close().catch(() => {});
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
   const urlPath = req.url.split('?')[0];
@@ -1479,6 +1778,13 @@ function handler(req, res) {
     // Panel users CRUD
     if (urlPath === '/api/panel/users' && req.method === 'GET')  return apiPanelUsers(res);
     if (urlPath === '/api/panel/users' && req.method === 'POST') return apiPanelUserCreate(req, res);
+
+    // Panel settings
+    if (urlPath === '/api/panel/settings' && req.method === 'GET') return apiPanelSettingsGet(res);
+    if (urlPath === '/api/panel/settings' && req.method === 'PUT') return apiPanelSettingsPut(req, res);
+
+    // Mod upload
+    if (urlPath === '/api/mods/upload' && req.method === 'POST') return apiModUpload(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(res, decodeURIComponent(panelUserM[1]));

@@ -8,6 +8,7 @@ const PAGES = {
   logs:      { title: 'Logs',      component: 'PageLogs' },
   cars:      { title: 'Coches',    component: 'PageCars' },
   tracks:    { title: 'Tramos',    component: 'PageTracks' },
+  mods:      { title: 'Mods',      component: 'PageMods' },
   session:   { title: 'Sesión',    component: 'PageSession' },
   config:    { title: 'Configuración', component: 'PageConfig' },
   users:     { title: 'Usuarios',  component: 'PageUsers' },
@@ -204,6 +205,7 @@ function AppInner(props) {
   const { PageCars, PageTracks, PageSession }    = window.AppPagesB;
   const { PageConfig, PageUsers, PageProfile }   = window.AppPagesC;
   const { PageTimes }                            = window.AppPagesD;
+  const { PageMods }                             = window.AppPagesE;
   const toast = useToast();
 
   const {
@@ -306,6 +308,7 @@ function AppInner(props) {
   else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes}/>;
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;
+  else if (page === 'mods')      content = <PageMods isAdmin={isAdmin}/>;
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;

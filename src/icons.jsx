@@ -59,6 +59,9 @@ const IconCopy   = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" 
 const IconKey    = (p) => <Icon {...p}><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></Icon>;
 const IconLink   = (p) => <Icon {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></Icon>;
 
+const IconUpload  = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></Icon>;
+const IconPackage = (p) => <Icon {...p}><path d="m16.5 9.4-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></Icon>;
+
 window.AppIcons = {
   IconDashboard, IconCar, IconTrack, IconFlag, IconSettings, IconUsers, IconPlayers,
   IconTerminal, IconSearch, IconBell, IconAlertTriangle, IconSun, IconMoon, IconPlay, IconStop, IconRefresh,
@@ -66,4 +69,5 @@ window.AppIcons = {
   IconKick, IconClock, IconCloud, IconChevronDown, IconUser, IconLock,
   IconReload, IconPower, IconTimer, IconHistory, IconChip, IconFolder, IconOS, IconSteam,
   IconEye, IconEyeOff, IconCopy, IconKey, IconLink,
+  IconUpload, IconPackage,
 };

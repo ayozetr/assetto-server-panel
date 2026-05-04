@@ -209,7 +209,7 @@ function PageMods({ isAdmin }) {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             style={{
-              border: `2px dashed ${dragging ? 'var(--red)' : 'var(--border)'}`,
+              border: `2px dashed ${dragging ? 'var(--red)' : 'color-mix(in srgb, var(--red) 35%, var(--border))'}`,
               borderRadius: 'var(--radius-lg)',
               padding: '40px 24px',
               textAlign: 'center',
@@ -220,6 +220,12 @@ function PageMods({ isAdmin }) {
               transition: 'border-color 150ms, background 150ms',
               position: 'relative',
               overflow: 'hidden',
+              flex: 1,
+              minHeight: 260,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             {/* Animated shimmer when dragging */}

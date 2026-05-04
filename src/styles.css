@@ -270,6 +270,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
   transition: border-color 120ms ease, box-shadow 120ms ease;
   width: 100%;
 }
+.select { padding-right: 28px; }
 .input:focus, .select:focus, .textarea:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(220,38,38,0.12);

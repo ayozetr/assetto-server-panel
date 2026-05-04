@@ -33,7 +33,7 @@ function UploadLimitCard({ isAdmin }) {
   };
 
   return (
-    <div className="card" style={{gridColumn: '1 / -1'}}>
+    <div className="card">
       <div className="card-header">
         <I4.IconUpload size={14} style={{color: 'var(--red)'}}/>
         <div className="card-title">{t('config.upload_title')}</div>
@@ -359,9 +359,9 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             </div>
           </div>
         </div>
-      </div>
 
-      <UploadLimitCard isAdmin={isAdmin}/>
+        <UploadLimitCard isAdmin={isAdmin}/>
+      </div>
 
       {isAdmin && (
         <div className="row" style={{marginTop: 20, justifyContent: 'flex-end', gap: 8, position:'sticky', bottom: 16, background:'var(--bg-2)', padding:'10px 0'}}>

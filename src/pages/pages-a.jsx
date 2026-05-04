@@ -279,7 +279,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                         <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
                         {p.steam && (
                           <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
-                            style={{display:'flex', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
+                            style={{display:'flex', alignItems:'center', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
                             title="Steam">
                             <I2P.IconSteam size={11}/>
                           </a>
@@ -367,7 +367,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                     <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
                     {p.steam && (
                       <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
-                        style={{display:'flex', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
+                        style={{display:'flex', alignItems:'center', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
                         title="Steam">
                         <I2P.IconSteam size={11}/>
                       </a>

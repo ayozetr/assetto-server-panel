@@ -39,7 +39,7 @@ function UploadLimitCard({ isAdmin }) {
         <div className="card-title">{t('config.upload_title')}</div>
       </div>
       <div className="card-body col" style={{gap: 14}}>
-        <div style={{display:'flex', alignItems:'center', gap:12}}>
+        <div style={{display:'flex', alignItems:'flex-end', gap:12}}>
           <div className="field" style={{flex:1}}>
             <label className="field-label">{t('config.upload_limit')}</label>
             <input
@@ -54,7 +54,7 @@ function UploadLimitCard({ isAdmin }) {
             <span className="field-hint">{t('config.upload_limit_hint')}</span>
           </div>
           {isAdmin && (
-            <button className="btn btn-primary btn-sm" style={{marginTop:18, flexShrink:0}} onClick={save} disabled={saving || !loaded}>
+            <button className="btn btn-primary btn-sm" style={{flexShrink:0, marginBottom:1}} onClick={save} disabled={saving || !loaded}>
               {saving
                 ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
                 : <><I4.IconCheck size={12}/> {t('common.apply')}</>}

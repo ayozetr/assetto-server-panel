@@ -363,9 +363,6 @@ function PageMods({ isAdmin }) {
                     fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
                     minWidth: 36, textAlign: 'center',
                   }}>{f.label}</span>
-                  <div style={{flex: 1}}>
-                    <div style={{fontSize: 12, color: 'var(--text-muted)'}}>{f.engine}</div>
-                  </div>
                   <I5.IconCheck size={13} style={{color: '#22c55e', flexShrink: 0}}/>
                 </div>
               ))}

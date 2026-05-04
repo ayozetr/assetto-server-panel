@@ -109,10 +109,12 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
         target="_blank"
         rel="noreferrer"
         style={{
+          marginTop: 'auto',
           display:'flex', alignItems:'center', gap: 5,
           fontSize: 10.5, color: 'var(--text-faint)',
           textDecoration: 'none',
-          padding: '8px 10px 4px',
+          padding: '4px 10px 10px',
+          borderTop: '1px solid var(--border)',
         }}
       >
         <I.IconGithub size={11}/>

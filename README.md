@@ -98,19 +98,22 @@ server.js  ─── Node.js http module, no framework
 src/
   tweaks-panel.jsx  →  window globals: useTweaks, TweaksPanel …
   icons.jsx         →  window.AppIcons
-  i18n.jsx          →  window.AppI18n  (t(), setLang(), en/es/it dictionaries)
   data.jsx          →  window.AppUtils (fmtMs, nationFlag)
+  i18n.jsx          →  window.AppI18n  (t(), setLang(), en/es/it dictionaries)
   shell.jsx         →  window.AppShell (Sidebar, Topbar, Login, ToastProvider, useToast)
   pages/
     pages-a.jsx     →  window.AppPagesA  (Dashboard, Players, Logs)
-    pages-b.jsx     →  window.AppPagesB  (Cars, Tracks, Session, Mods)
+    pages-b.jsx     →  window.AppPagesB  (Cars, Tracks, Session)
     pages-c.jsx     →  window.AppPagesC  (Config, Users, Profile)
     pages-d.jsx     →  window.AppPagesD  (Times)
+    pages-e.jsx     →  window.AppPagesE  (Mods)
   styles.css        →  CSS custom properties · light/dark themes
   app.jsx           →  App root — global state, routing, ReactDOM.createRoot
   assets/
     icon.png        →  App logo (sidebar brand + login screen)
-    kunos/          →  Bundled WebP previews for Kunos stock cars and tracks
+    kunos/
+      cars/         →  Bundled WebP previews for Kunos stock cars
+      tracks/       →  Bundled WebP previews for Kunos stock tracks
 ```
 
 **No build step.** JSX is transpiled in the browser by Babel Standalone. Each file attaches its exports to `window.*` for use by subsequent scripts. Load order is defined in `index.html`.
@@ -278,12 +281,15 @@ assetto-dashboard/
 ├── src/
 │   ├── pages/
 │   │   ├── pages-a.jsx        # Dashboard · Players · Logs
-│   │   ├── pages-b.jsx        # Cars · Tracks · Session · Mods
+│   │   ├── pages-b.jsx        # Cars · Tracks · Session
 │   │   ├── pages-c.jsx        # Configuration · Users · My account
-│   │   └── pages-d.jsx        # Lap Times
+│   │   ├── pages-d.jsx        # Lap Times
+│   │   └── pages-e.jsx        # Mods uploader
 │   ├── assets/
 │   │   ├── icon.png           # App logo
-│   │   └── kunos/             # Bundled WebP previews for Kunos stock content
+│   │   └── kunos/
+│   │       ├── cars/          # Bundled WebP previews for Kunos stock cars
+│   │       └── tracks/        # Bundled WebP previews for Kunos stock tracks
 │   ├── app.jsx                # Root component — routing, global state
 │   ├── data.jsx               # AppUtils helpers (fmtMs, nationFlag)
 │   ├── i18n.jsx               # i18n engine — en/es/it dictionaries, window.AppI18n
@@ -367,12 +373,11 @@ All `POST`/`PUT` endpoints require `Content-Type: application/json` (except `/ap
 
 ## Default Credentials
 
-Passwords are hashed with PBKDF2-SHA-512 (100 000 iterations) and stored in SQLite. Both accounts are seeded on first run with the same default password.
+Passwords are hashed with PBKDF2-SHA-512 (100 000 iterations) and stored in SQLite. The default account is seeded on first run.
 
 | Username | Default password | Role |
 |----------|-----------------|------|
 | `admin` | `Admin1234!` | Administrator |
-| `mattia` | `Admin1234!` | Administrator |
 
 Administrators have access to server control, the Configuration page, the Users page, and the Mods uploader.
 

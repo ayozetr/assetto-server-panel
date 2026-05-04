@@ -31,14 +31,15 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 ### Player management
 - **Live player table** — name, car, lap count, best/last time, ping, country flag
 - **Kick & Ban** — kick via AC HTTP API; ban writes the Steam GUID to `blacklist.txt`
-- **Player history** — all past players from the SQLite DB, with session count, total laps, best lap time, and last seen; searchable by name
+- **Player history** — all past players from the SQLite DB, with session count, total laps, best lap time, and last seen; searchable by name; paginated
 
 ### Lap times
-- **Full records database** — all laps from AC result JSON files, stored in SQLite and deduplicated
-- **Filters** — by track, car, validity; shows best lap per (player, track) in the records view
+- **Full records database** — all laps from AC result JSON files, stored in SQLite and deduplicated; new result files are imported automatically via a filesystem watcher
+- **Filters** — by track, car, validity, and date range (from/to); shows best lap per (player, track) in the records view
 - **Sector splits** — S1, S2, S3 displayed with delta to track leader
 - **Player comparison** — select up to 4 drivers for a side-by-side comparison across tracks
 - **CSV export** — download the current filtered view as a `.csv` file
+- **Pagination** — configurable rows per page across Times, Players history, Cars, and Tracks
 
 ### Car & track catalogue
 - **Car browser** — full grid from `/content/cars/`, with skin thumbnails, specs (BHP, torque, weight, top speed), brand logos, and Kunos toggle
@@ -46,6 +47,14 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 - **Track browser** — grid from `/content/tracks/` with country flag, circuit length, pit count
 - **Track detail modal** — per-layout thumbnails, length, description, layout selector
 - **Session integration** — click any car or track to add it to the next session directly
+- **Kunos asset fallback** — bundled WebP previews for all Kunos stock cars and tracks; shown automatically when the AC content directory has no thumbnails
+
+### Mod upload
+- **Drag-and-drop uploader** — admin-only page to upload and install car or track mods directly from the browser
+- **Supported formats** — `.zip`, `.rar`, `.7z`; configurable size limit (default 500 MB, max 10 240 MB)
+- **Automatic mod detection** — identifies whether the archive contains a car (`.kn5` + `data/`) or a track (`models.ini` + `ai/`)
+- **Surgical extraction** — only the mod root folder is extracted into the AC content directory; extra files, scripts, and nested archives are discarded
+- **Security** — anti Zip-Slip path traversal protection; executable files are blocked; only game-relevant extensions are allowed
 
 ### Session & server configuration
 - **Session configurator** — track, layout, mode (Practice / Quali / Race), laps/duration, time of day, weather, temperature, damage, driving aids; writes to `server_cfg.ini` with confirmation modal
@@ -62,6 +71,8 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 
 ### UI/UX
 - **Light / dark theme** — persisted in `localStorage`
+- **Internationalisation (i18n)** — full English, Spanish, and Italian translations; language selector in the Configuration page; persisted in `localStorage` (`ac-lang`)
+- **Direct join link** — Dashboard shows a Content Manager–compatible join URL (`acmanager://`) with copy-to-clipboard and Open in CM buttons; public IP resolved automatically via `api.ipify.org` or overridden with `PUBLIC_IP` in `.env`
 - **Loading spinners** — shown in Cars, Tracks, and Lap Times while the initial fetch is in flight
 - **Page not found fallback** — graceful message for unknown routes
 - **Live tweaks panel** — floating panel for accent colour, border radius, and density; changes apply instantly
@@ -79,7 +90,7 @@ server.js  ─── Node.js http module, no framework
   │
   ├── Serves static files from project root
   ├── All /api/* routes handled inline
-  ├── SQLite (better-sqlite3): laps, players, processed_files, panel_users
+  ├── SQLite (better-sqlite3): laps, players, processed_files, panel_users, panel_settings
   └── Sessions: in-memory Map, token → { role, expiresAt }
 ```
 
@@ -87,15 +98,19 @@ server.js  ─── Node.js http module, no framework
 src/
   tweaks-panel.jsx  →  window globals: useTweaks, TweaksPanel …
   icons.jsx         →  window.AppIcons
-  data.jsx          →  window.AppData  (fallback mock data)
+  i18n.jsx          →  window.AppI18n  (t(), setLang(), en/es/it dictionaries)
+  data.jsx          →  window.AppUtils (fmtMs, nationFlag)
   shell.jsx         →  window.AppShell (Sidebar, Topbar, Login, ToastProvider, useToast)
   pages/
     pages-a.jsx     →  window.AppPagesA  (Dashboard, Players, Logs)
-    pages-b.jsx     →  window.AppPagesB  (Cars, Tracks, Session)
+    pages-b.jsx     →  window.AppPagesB  (Cars, Tracks, Session, Mods)
     pages-c.jsx     →  window.AppPagesC  (Config, Users, Profile)
     pages-d.jsx     →  window.AppPagesD  (Times)
   styles.css        →  CSS custom properties · light/dark themes
   app.jsx           →  App root — global state, routing, ReactDOM.createRoot
+  assets/
+    icon.png        →  App logo (sidebar brand + login screen)
+    kunos/          →  Bundled WebP previews for Kunos stock cars and tracks
 ```
 
 **No build step.** JSX is transpiled in the browser by Babel Standalone. Each file attaches its exports to `window.*` for use by subsequent scripts. Load order is defined in `index.html`.
@@ -103,6 +118,8 @@ src/
 **State** lives in the `App` component and is passed down as props. No external state library.
 
 **AC server detection** uses an HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO` rather than `pgrep`, which avoids false positives from the dashboard's own shell environment.
+
+**Results watcher** — on startup, all unprocessed result JSON files are imported into SQLite. A `fs.watch` listener on the results directory then imports any new files automatically within ~2.5 s of them appearing.
 
 ---
 
@@ -140,6 +157,8 @@ npm install -g npm@11.13.0
 ```bash
 npm install
 ```
+
+Dependencies include `better-sqlite3` (database), `dotenv` (config), `node-stream-zip` (ZIP extraction), `node-unrar-js` (RAR extraction), `node-7z` + `7zip-bin` (7z extraction).
 
 ### 4 · Configure environment
 
@@ -187,7 +206,10 @@ All configuration lives in `.env` (never committed to git).
 | `AC_BLACKLIST_FILE` | `<AC_SERVER_DIR>/blacklist.txt` | Path to the ban list file. |
 | `AC_WHITELIST_FILE` | `<AC_CFG_DIR>/whitelist.txt` | Path to the whitelist file. |
 | `DB_PATH` | `<project>/assetto.db` | SQLite database path. |
+| `PUBLIC_IP` | _(empty)_ | Optional. Public IP shown in the Dashboard join link. If unset, resolved automatically via `api.ipify.org`. |
 | `ADMIN_TOKEN` | _(empty)_ | Optional static token for headless/script access to server control endpoints. Session cookies are the preferred mechanism for browser access. |
+
+The upload size limit is not an env variable — it is stored in the `panel_settings` SQLite table and editable from the Configuration page (default: 500 MB).
 
 ---
 
@@ -256,15 +278,22 @@ assetto-dashboard/
 ├── src/
 │   ├── pages/
 │   │   ├── pages-a.jsx        # Dashboard · Players · Logs
-│   │   ├── pages-b.jsx        # Cars · Tracks · Session
+│   │   ├── pages-b.jsx        # Cars · Tracks · Session · Mods
 │   │   ├── pages-c.jsx        # Configuration · Users · My account
 │   │   └── pages-d.jsx        # Lap Times
+│   ├── assets/
+│   │   ├── icon.png           # App logo
+│   │   └── kunos/             # Bundled WebP previews for Kunos stock content
 │   ├── app.jsx                # Root component — routing, global state
-│   ├── data.jsx               # Fallback mock data (used when backend is unavailable)
+│   ├── data.jsx               # AppUtils helpers (fmtMs, nationFlag)
+│   ├── i18n.jsx               # i18n engine — en/es/it dictionaries, window.AppI18n
 │   ├── icons.jsx              # SVG icon library (window.AppIcons)
 │   ├── shell.jsx              # Sidebar · Topbar · Login · Toast system
 │   ├── styles.css             # CSS custom properties · light/dark themes
 │   └── tweaks-panel.jsx       # Floating customisation panel
+├── tools/
+│   ├── extract_kunos_assets.py  # Extracts car/track assets from an AC installation
+│   └── compress_to_webp.py      # Converts extracted images to WebP
 ├── index.html                 # SPA entry point
 ├── server.js                  # Node.js HTTP server + all API endpoints
 ├── assetto.db                 # SQLite database (created on first run, gitignored)
@@ -280,16 +309,17 @@ assetto-dashboard/
 
 | Page | Sidebar label | Role | Description |
 |------|--------------|------|-------------|
-| Dashboard | Dashboard | All | Live CPU/RAM gauges, server status pill, uptime, connected players, current session summary, recent activity feed from server log |
-| Players | Jugadores | All | Live player table with flag, car, laps, best/last time, ping; kick and ban actions; history tab with search |
-| Lap Times | Tiempos | All | Records table filtered by track, car, validity; sector splits; delta to leader; player comparison view; CSV export |
+| Dashboard | Dashboard | All | Live CPU/RAM gauges, server status pill, uptime, connected players, current session summary, recent activity feed from server log, direct join link with Content Manager protocol support |
+| Players | Players | All | Live player table with flag, car, laps, best/last time, ping; kick and ban actions; history tab with search and pagination |
+| Lap Times | Times | All | Records table filtered by track, car, validity, and date range; sector splits; delta to leader; player comparison view; CSV export; paginated |
 | Logs | Logs | All | Live log tail (polls every 3 s) with level filters, pause/resume, clear, and export to `.txt` |
-| Cars | Coches | All | Full car catalogue with skin thumbnails, specs, brand logos; add/remove to session; Kunos toggle |
-| Tracks | Tramos | All | Circuit catalogue with country flag, length, pit count; multi-layout modal with per-layout thumbnails |
-| Session | Sesión | All | Session parameters (track, layout, mode, conditions, aids); writes `server_cfg.ini` after confirmation |
-| Configuration | Configuración | **Admin** | Network ports, max clients, passwords, whitelist toggle + Steam ID editor, race rules, assists |
-| Users | Usuarios | **Admin** | Panel user CRUD: create, edit role, change password, delete; persisted in SQLite |
-| My account | Mi cuenta | All | Change own password; secure password generator with length slider, special characters toggle, live preview, copy and use |
+| Cars | Cars | All | Full car catalogue with skin thumbnails, specs, brand logos; add/remove to session; Kunos toggle; paginated |
+| Tracks | Tracks | All | Circuit catalogue with country flag, length, pit count; multi-layout modal with per-layout thumbnails; paginated |
+| Session | Session | All | Session parameters (track, layout, mode, conditions, aids); writes `server_cfg.ini` after confirmation |
+| Mods | Mods | **Admin** | Drag-and-drop uploader for car/track mods (.zip/.rar/.7z); automatic mod detection and surgical extraction; session upload history |
+| Configuration | Settings | **Admin** | Network ports, max clients, passwords, whitelist toggle + Steam ID editor, race rules, assists; mod upload size limit; language selector |
+| Users | Users | **Admin** | Panel user CRUD: create, edit role, change password, delete; persisted in SQLite |
+| My account | My Account | All | Change own password; secure password generator with length slider, special characters toggle, live preview, copy and use |
 
 ---
 
@@ -300,7 +330,7 @@ assetto-dashboard/
 | `POST` | `/api/auth/login` | Authenticate; sets `sid` httpOnly cookie (24 h TTL). Rate-limited: 5 attempts/15 min per IP. |
 | `POST` | `/api/auth/logout` | Invalidate session and clear cookie. |
 | `POST` | `/api/auth/change-password` | Change own password (requires current password). |
-| `GET` | `/api/metrics` | CPU %, RAM MB, AC running status, uptime, CPU model, OS info. |
+| `GET` | `/api/metrics` | CPU %, RAM MB, AC running status, uptime, CPU model, OS info, public IP, live track. |
 | `GET` | `/api/logs?n=150` | Last N parsed log lines `{ id, time, lvl, tag, msg }`. Max 500. |
 | `GET` | `/api/config` | Parsed `server_cfg.ini` as JSON. |
 | `PUT` | `/api/config` | Write JSON back to `server_cfg.ini` (backs up to `.bak`). |
@@ -318,15 +348,20 @@ assetto-dashboard/
 | `POST` | `/api/panel/users` | Create panel user. |
 | `PUT` | `/api/panel/users/:username` | Update role or password. |
 | `DELETE` | `/api/panel/users/:username` | Delete panel user. |
+| `GET` | `/api/panel/settings` | Read panel settings (e.g. `upload_max_mb`). |
+| `PUT` | `/api/panel/settings` | Update panel settings. |
+| `POST` | `/api/mods/upload` | Upload and install a car or track mod (.zip/.rar/.7z). Admin only. Multipart stream; reads `Content-Length` for size check. |
 | `POST` | `/api/server/start` | Spawn `acServer` process. |
 | `POST` | `/api/server/stop` | Kill `acServer` process. |
 | `POST` | `/api/server/restart` | Stop then start. |
 | `POST` | `/api/server/reload` | Send SIGHUP to `acServer` (reload without restart). |
 | `GET` | `/api/content/cars/:id/thumb` | Serve car preview image. |
 | `GET` | `/api/content/cars/:id/skins/:skin/preview` | Serve skin preview image. |
+| `GET` | `/api/content/cars/:id/kunos-skin/:skin/preview` | Serve bundled Kunos skin preview (WebP fallback). |
 | `GET` | `/api/content/tracks/:id/thumb` | Serve track preview image. |
+| `GET` | `/api/content/tracks/:id/layout/:layout/thumb` | Serve per-layout track preview image. |
 
-All `POST`/`PUT` endpoints require `Content-Type: application/json`. Server control endpoints require an admin session cookie or a valid `ADMIN_TOKEN` header.
+All `POST`/`PUT` endpoints require `Content-Type: application/json` (except `/api/mods/upload` which is a raw binary stream). Server control and mod upload endpoints require an admin session cookie or a valid `ADMIN_TOKEN` header.
 
 ---
 
@@ -339,7 +374,7 @@ Passwords are hashed with PBKDF2-SHA-512 (100 000 iterations) and stored in SQLi
 | `admin` | `Admin1234!` | Administrator |
 | `mattia` | `Admin1234!` | Administrator |
 
-Administrators have access to server control, the Configuration page, and the Users page.
+Administrators have access to server control, the Configuration page, the Users page, and the Mods uploader.
 
 > **Change the default password immediately after first login** — use the key icon in the sidebar footer or navigate to **My account**.
 
@@ -367,6 +402,10 @@ AC result files must be JSON files matching the format `{ TrackName, Laps: [{ La
 ### Server always shows "Stopped"
 
 The panel detects the AC server via an HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO`. Verify `AC_HTTP_PORT` matches the `HTTP_PORT` value in your `server_cfg.ini`.
+
+### Mod upload fails with "No valid mod found"
+
+The archive must contain a car (a `.kn5` file and a `data/` folder at the mod root) or a track (`models.ini` and an `ai/` folder). Nested archives (zip inside zip) are not supported.
 
 ### JSX files return 404
 

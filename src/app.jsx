@@ -92,6 +92,13 @@ function App() {
     else localStorage.removeItem('ac-user');
   }, [user]);
 
+  // Validate server-side session on mount; force re-login if cookie is stale
+  uE(() => {
+    if (user) {
+      fetch('/api/auth/me').then(r => { if (r.status === 401) setUser(null); }).catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load all data from backend on mount
   uE(() => {
     fetch('/api/config')
@@ -300,7 +307,11 @@ function AppInner(props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
     })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(r => {
+        if (r.status === 401) { setUser(null); throw new Error('session_expired'); }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(d => {
         if (d.error) throw new Error(d.error);
         if (config.maxClients > 0) {
@@ -309,7 +320,10 @@ function AppInner(props) {
         }
         toast.push(t('toast.config_saved'), 'success');
       })
-      .catch(e => { toast.push(`${t('common.error')}: ${e.message}`, 'error'); throw e; });
+      .catch(e => {
+        if (e.message !== 'session_expired') toast.push(`${t('common.error')}: ${e.message}`, 'error');
+        throw e;
+      });
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;

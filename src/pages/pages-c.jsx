@@ -279,34 +279,28 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <label className="field-label">{t('config.tyres')}</label>
                 <input className="input mono" type="number" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
+              <div className="field">
+                <label className="field-label">{t('config.abs')}</label>
+                <span className="field-hint" style={{marginBottom: 4}}>{t('config.abs_sub')}</span>
+                <select className="select" style={{width: '100%'}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
+                  <option value={0}>{t('config.opt_no')}</option>
+                  <option value={1}>{t('config.opt_factory')}</option>
+                  <option value={2}>{t('config.opt_free')}</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label">{t('config.tc')}</label>
+                <span className="field-hint" style={{marginBottom: 4}}>{t('config.tc_sub')}</span>
+                <select className="select" style={{width: '100%'}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
+                  <option value={0}>{t('config.opt_no')}</option>
+                  <option value={1}>{t('config.opt_factory')}</option>
+                  <option value={2}>{t('config.opt_free')}</option>
+                </select>
+              </div>
             </div>
             <div className="col" style={{gap: 12}}>
               <div className="row-between">
-                <div>
-                  <div style={{fontSize: 13, fontWeight: 500}}>{t('config.abs')}</div>
-                  <div className="muted" style={{fontSize: 11.5}}>{t('config.abs_sub')}</div>
-                </div>
-                <select className="select" style={{minWidth: 100, flexShrink: 0}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
-                  <option value={0}>{t('config.opt_no')}</option>
-                  <option value={1}>{t('config.opt_factory')}</option>
-                  <option value={2}>{t('config.opt_free')}</option>
-                </select>
-              </div>
-              <div className="row-between">
-                <div>
-                  <div style={{fontSize: 13, fontWeight: 500}}>{t('config.tc')}</div>
-                  <div className="muted" style={{fontSize: 11.5}}>{t('config.tc_sub')}</div>
-                </div>
-                <select className="select" style={{minWidth: 100, flexShrink: 0}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
-                  <option value={0}>{t('config.opt_no')}</option>
-                  <option value={1}>{t('config.opt_factory')}</option>
-                  <option value={2}>{t('config.opt_free')}</option>
-                </select>
-              </div>
-              <div className="row-between">
-                <div>
-                  <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autoclutch')}</div>
-                </div>
+                <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autoclutch')}</div>
                 <div className={`switch ${config.autoclutch ? 'on' : ''}`} onClick={()=>isAdmin && set('autoclutch', !config.autoclutch)}></div>
               </div>
               <div className="row-between">

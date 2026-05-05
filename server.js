@@ -42,20 +42,21 @@ async function loadKunosIds() {
   try { for (const id of await fsp.readdir(path.join(KUNOS_ASSETS_DIR, 'tracks'))) KUNOS_TRACK_IDS.add(id); } catch {}
 }
 
-// ── Session store ─────────────────────────────────────────────────────────────
-const sessions = new Map(); // token → { username, role, expiresAt }
+// ── Session store (SQLite-backed, survives server restarts) ───────────────────
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, s] of sessions.entries()) {
-    if (now > s.expiresAt) sessions.delete(token);
-  }
-}, 60 * 60 * 1000).unref();
+const _sessionsMemory = new Map(); // fallback when DB not ready
 
 function createSession(username, role) {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { username, role, expiresAt: Date.now() + SESSION_TTL });
+  const expiresAt = Date.now() + SESSION_TTL;
+  if (db) {
+    try {
+      db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+      db.prepare('INSERT OR REPLACE INTO sessions (token, username, role, expires_at) VALUES (?, ?, ?, ?)').run(token, username, role, expiresAt);
+    } catch { _sessionsMemory.set(token, { username, role, expiresAt }); }
+  } else {
+    _sessionsMemory.set(token, { username, role, expiresAt });
+  }
   return token;
 }
 
@@ -64,10 +65,20 @@ function getSession(req) {
   const match = raw.split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
   if (!match) return null;
   const token = match.slice(4);
-  const s = sessions.get(token);
+  if (db) {
+    try {
+      return db.prepare('SELECT username, role FROM sessions WHERE token = ? AND expires_at > ?').get(token, Date.now()) || null;
+    } catch {}
+  }
+  const s = _sessionsMemory.get(token);
   if (!s) return null;
-  if (Date.now() > s.expiresAt) { sessions.delete(token); return null; }
+  if (Date.now() > s.expiresAt) { _sessionsMemory.delete(token); return null; }
   return s;
+}
+
+function deleteSession(token) {
+  if (db) { try { db.prepare('DELETE FROM sessions WHERE token = ?').run(token); } catch {} }
+  _sessionsMemory.delete(token);
 }
 
 function sessionCookieHeader(token) {
@@ -160,6 +171,13 @@ try {
     CREATE TABLE IF NOT EXISTS panel_settings (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token      TEXT PRIMARY KEY,
+      username   TEXT NOT NULL,
+      role       TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
     );
   `);
   // Seed default settings
@@ -1422,9 +1440,15 @@ async function apiAuthLogin(req, res) {
 
 function apiAuthLogout(req, res) {
   const raw = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
-  if (raw) sessions.delete(raw.slice(4));
+  if (raw) deleteSession(raw.slice(4));
   res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
   json(res, 200, { ok: true });
+}
+
+function apiAuthMe(req, res) {
+  const sess = getSession(req);
+  if (!sess) return json(res, 401, { error: 'Not authenticated' });
+  json(res, 200, { username: sess.username, role: sess.role });
 }
 
 async function apiAuthChangePassword(req, res) {
@@ -1805,6 +1829,7 @@ function handler(req, res) {
     }
 
     // Auth
+    if (urlPath === '/api/auth/me'              && req.method === 'GET')  return apiAuthMe(req, res);
     if (urlPath === '/api/auth/login'           && req.method === 'POST') return apiAuthLogin(req, res);
     if (urlPath === '/api/auth/logout'          && req.method === 'POST') return apiAuthLogout(req, res);
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);

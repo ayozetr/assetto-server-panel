@@ -1,7 +1,7 @@
 // Assetto Server Panel — Service Worker
 // Strategy: Network-first for API calls, Cache-first for static assets
 
-const CACHE_NAME  = 'ac-panel-v1';
+const CACHE_NAME  = 'ac-panel-v2';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install
@@ -76,14 +76,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for local static files
+  // Stale-while-revalidate for local static files (serves cache, updates in background)
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(request);
-      if (cached) return cached;
-      const networkRes = await fetch(request);
-      if (networkRes.ok) cache.put(request, networkRes.clone());
-      return networkRes;
+      const networkFetch = fetch(request).then((res) => {
+        if (res.ok) cache.put(request, res.clone());
+        return res;
+      }).catch(() => cached);
+      return cached || networkFetch;
     })
   );
 });

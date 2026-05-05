@@ -98,15 +98,12 @@ function App() {
       .then(r => r.json())
       .then(d => {
         setConfig(c => ({ ...c, ...d }));
-        // Sync current session track from server config
-        if (d.track) {
-          setSessionCfg(s => ({
-            ...s,
-            trackId: d.track,
-            layout:  d.trackConfig || '',
-            carIds:  d.cars?.length ? d.cars : s.carIds,
-          }));
-        }
+        setSessionCfg(s => ({
+          ...s,
+          ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
+          ...(d.maxClients ? { slots: d.maxClients } : {}),
+        }));
+        if (d.maxClients) setServer(s => ({ ...s, slots: d.maxClients }));
       })
       .catch(() => {});
 
@@ -149,7 +146,7 @@ function App() {
           setBackendDown(false);
           setServer(s => ({
             ...s,
-            status:    d.running ? (s.status === 'starting' || s.status === 'stopping' ? s.status : 'running') : 'stopped',
+            status:    d.running ? 'running' : (s.status === 'starting' ? s.status : 'stopped'),
             cpu:       d.cpu,
             cpuName:   d.cpuName || s.cpuName,
             ram:       d.ram.used,
@@ -287,10 +284,14 @@ function AppInner(props) {
         trackId: sessionCfg.trackId,
         layout:  sessionCfg.layout || '',
         cars:    sessionCfg.carIds,
+        slots:   sessionCfg.slots,
       }),
     })
       .then(r => r.json())
-      .then(d => toast.push(d.error ? `${t('common.error')}: ${d.error}` : t('toast.session_apply'), d.error ? 'error' : 'success'))
+      .then(d => {
+        if (!d.error) setServer(s => ({ ...s, slots: sessionCfg.slots }));
+        toast.push(d.error ? `${t('common.error')}: ${d.error}` : t('toast.session_apply'), d.error ? 'error' : 'success');
+      })
       .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
   };
   const handleSaveConfig = () =>

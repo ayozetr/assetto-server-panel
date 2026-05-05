@@ -1288,6 +1288,10 @@ async function apiSessionApply(req, res) {
     if (body.layout  !== undefined) s['CONFIG_TRACK'] = body.layout || '';
     if (Array.isArray(body.cars) && body.cars.length)
       s['CARS'] = [...new Set(body.cars)].join(';');
+    if (body.slots !== undefined) {
+      const v = clampInt(body.slots, 1, 200);
+      if (v) s['MAX_CLIENTS'] = String(v);
+    }
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
     json(res, 200, { ok: true });
@@ -1296,10 +1300,20 @@ async function apiSessionApply(req, res) {
 
 // ── Server control ────────────────────────────────────────────────────────────
 function spawnAC() {
+  let logFd = null;
   try {
-    acChild = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio: 'ignore', detached: false });
-    acChild.on('exit', () => { acChild = null; });
+    fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true });
+    logFd = fs.openSync(AC_LOG_FILE, 'a');
+  } catch {}
+  try {
+    const stdio = logFd !== null ? ['ignore', logFd, logFd] : 'ignore';
+    acChild = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio, detached: false });
+    acChild.on('exit', () => {
+      if (logFd !== null) { try { fs.closeSync(logFd); } catch {} logFd = null; }
+      acChild = null;
+    });
   } catch (e) {
+    if (logFd !== null) { try { fs.closeSync(logFd); } catch {} }
     console.error('acServer spawn failed:', e.message);
     acChild = null;
   }

@@ -75,13 +75,15 @@ function sessionCookieHeader(token) {
 }
 
 function checkAdminAuth(req) {
-  // Valid admin session cookie takes priority
   const sess = getSession(req);
   if (sess?.role === 'admin') return true;
-  // ADMIN_TOKEN header fallback (for headless/script access)
-  if (!ADMIN_TOKEN) return true; // no token configured → open (original behaviour)
+  if (!ADMIN_TOKEN) return false;
   const h = req.headers['x-admin-token'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '';
   return h === ADMIN_TOKEN;
+}
+
+function checkAnyAuth(req) {
+  return !!getSession(req);
 }
 
 // ── MIME ──────────────────────────────────────────────────────────────────────
@@ -834,6 +836,7 @@ function validPort(v) { const n = parseInt(v); return n >= 1024 && n <= 65535 ? 
 function clampInt(v, lo, hi) { const n = parseInt(v); return isNaN(n) ? null : Math.max(lo, Math.min(hi, n)); }
 
 async function apiConfigUpdate(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
@@ -1224,6 +1227,7 @@ function apiTrackLayoutThumb(trackId, layout, res) {
 
 // ── Player kick / ban ─────────────────────────────────────────────────────────
 async function apiPlayerKick(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body  = await readBody(req);
     const carId = body.carId;
@@ -1244,6 +1248,7 @@ async function apiPlayerKick(req, res) {
 }
 
 async function apiPlayerBan(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     const guid = body.guid;
@@ -1268,6 +1273,7 @@ function apiWhitelistGet(res) {
 }
 
 async function apiWhitelistPut(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     if (!Array.isArray(body.ids)) return json(res, 400, { error: 'ids array required' });
@@ -1279,6 +1285,7 @@ async function apiWhitelistPut(req, res) {
 
 // ── Session apply ─────────────────────────────────────────────────────────────
 async function apiSessionApply(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
@@ -1438,7 +1445,8 @@ async function apiAuthChangePassword(req, res) {
 }
 
 // ── Panel users CRUD ─────────────────────────────────────────────────────────
-function apiPanelUsers(res) {
+function apiPanelUsers(req, res) {
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 200, []);
   const rows = db.prepare('SELECT username, role, created_at FROM panel_users ORDER BY created_at').all();
   json(res, 200, rows.map(r => ({
@@ -1450,6 +1458,7 @@ function apiPanelUsers(res) {
 }
 
 async function apiPanelUserCreate(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     const { username, password, role } = body;
@@ -1466,6 +1475,7 @@ async function apiPanelUserCreate(req, res) {
 }
 
 async function apiPanelUserUpdate(req, res, username) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     if (!db) return json(res, 500, { error: 'base de datos no disponible' });
@@ -1482,7 +1492,8 @@ async function apiPanelUserUpdate(req, res, username) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
-function apiPanelUserDelete(res, username) {
+function apiPanelUserDelete(req, res, username) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 500, { error: 'base de datos no disponible' });
   db.prepare('DELETE FROM panel_users WHERE username = ?').run(username);
   json(res, 200, { ok: true });
@@ -1496,6 +1507,7 @@ function apiPanelSettingsGet(res) {
 }
 
 async function apiPanelSettingsPut(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 500, { error: 'base de datos no disponible' });
   try {
     const body = await readBody(req);
@@ -1791,7 +1803,7 @@ function handler(req, res) {
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
 
     // Panel users CRUD
-    if (urlPath === '/api/panel/users' && req.method === 'GET')  return apiPanelUsers(res);
+    if (urlPath === '/api/panel/users' && req.method === 'GET')  return apiPanelUsers(req, res);
     if (urlPath === '/api/panel/users' && req.method === 'POST') return apiPanelUserCreate(req, res);
 
     // Panel settings
@@ -1802,7 +1814,7 @@ function handler(req, res) {
     if (urlPath === '/api/mods/upload' && req.method === 'POST') return apiModUpload(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
-    if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(res, decodeURIComponent(panelUserM[1]));
+    if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));
 
     // Server control (auth-protected)
     if (urlPath === '/api/server/start'   && req.method === 'POST') return apiServerStart(req, res);

@@ -50,7 +50,7 @@ const dict = {
     'login.err_pass': 'Enter password',
     'login.err_cred': 'Invalid credentials',
     'login.err_conn': 'Connection error',
-    'login.hint': 'Users: admin · mattia · password: Admin1234!',
+    'login.hint': 'Users: admin · mattia',
 
     // Common / Global
     'common.save': 'Save',
@@ -158,6 +158,7 @@ const dict = {
     'config.public_sub': 'Appear in the official Kunos server list',
     'config.access': 'Access',
     'config.pass': 'Server password',
+    'config.pass_empty': '(no password)',
     'config.pass_hint': 'Empty = open server',
     'config.admin_pass': 'Admin password',
     'config.whitelist': 'Whitelist active',
@@ -431,7 +432,7 @@ const dict = {
     'login.err_pass': 'Introduce una contraseña',
     'login.err_cred': 'Credenciales incorrectas',
     'login.err_conn': 'Error de conexión con el servidor',
-    'login.hint': 'Usuarios: admin · mattia · contraseña: Admin1234!',
+    'login.hint': 'Usuarios: admin · mattia',
 
     // Common / Global
     'common.save': 'Guardar',
@@ -539,6 +540,7 @@ const dict = {
     'config.public_sub': 'Aparecer en el listado oficial de Kunos',
     'config.access': 'Acceso',
     'config.pass': 'Contraseña del servidor',
+    'config.pass_empty': '(sin contraseña)',
     'config.pass_hint': 'Vacío = servidor abierto',
     'config.admin_pass': 'Contraseña admin',
     'config.whitelist': 'Whitelist activa',
@@ -812,7 +814,7 @@ const dict = {
     'login.err_pass': 'Inserisci una password',
     'login.err_cred': 'Credenziali non valide',
     'login.err_conn': 'Errore di connessione',
-    'login.hint': 'Utenti: admin · mattia · password: Admin1234!',
+    'login.hint': 'Utenti: admin · mattia',
 
     // Common / Global
     'common.save': 'Salva',
@@ -920,6 +922,7 @@ const dict = {
     'config.public_sub': 'Appari nella lista server Kunos',
     'config.access': 'Accesso',
     'config.pass': 'Password del server',
+    'config.pass_empty': '(nessuna password)',
     'config.pass_hint': 'Vuoto = server aperto',
     'config.admin_pass': 'Password admin',
     'config.whitelist': 'Whitelist attiva',

@@ -197,7 +197,7 @@ function PageMods({ isAdmin }) {
         <p className="page-sub">{t('mods.sub')}</p>
       </div>
 
-      <div className="grid-2" style={{gridTemplateColumns: '1.2fr 1fr', alignItems: 'start', gap: 20}}>
+      <div className="grid-2" style={{gridTemplateColumns: '1.2fr 1fr', alignItems: 'stretch', gap: 20}}>
 
         {/* ── Left col: uploader ── */}
         <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
@@ -221,7 +221,7 @@ function PageMods({ isAdmin }) {
               position: 'relative',
               overflow: 'hidden',
               flex: 1,
-              minHeight: 260,
+              minHeight: 220,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',

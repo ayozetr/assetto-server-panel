@@ -220,11 +220,9 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <input className="input mono" type="number" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
             </div>
-            <div className="grid-2">
-              <div className="field">
-                <label className="field-label">{t('config.max_clients')}</label>
-                <input className="input mono" type="number" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!isAdmin}/>
-              </div>
+            <div className="field">
+              <label className="field-label">{t('config.max_clients')}</label>
+              <input className="input mono" type="number" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!isAdmin}/>
             </div>
             <div className="row-between">
               <div>
@@ -243,7 +241,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
           <div className="card-body col" style={{gap: 14}}>
             <div className="field">
               <label className="field-label">{t('config.pass')}</label>
-              <input className="input" type="password" value={config.password} onChange={e=>set('password', e.target.value)} placeholder="(sin contraseña)" disabled={!isAdmin}/>
+              <input className="input" type="password" value={config.password} onChange={e=>set('password', e.target.value)} placeholder={t('config.pass_empty')} disabled={!isAdmin}/>
               <span className="field-hint">{t('config.pass_hint')}</span>
             </div>
             <div className="field">
@@ -277,7 +275,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <label className="field-label">{t('config.damage')}</label>
                 <input className="input mono" type="number" min="0" max="200" value={config.damage ?? 100} onChange={e=>set('damage', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
-              <div className="field">
+              <div className="field" style={{gridColumn: 'span 2'}}>
                 <label className="field-label">{t('config.tyres')}</label>
                 <input className="input mono" type="number" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
@@ -343,12 +341,12 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 </div>
                 <div className={`switch ${config.autoRestart ? 'on' : ''}`} onClick={()=>isAdmin && set('autoRestart', !config.autoRestart)}></div>
               </div>
-              <div className="row-between">
+              <div className="row-between" style={{gridColumn: 'span 2'}}>
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.lang')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.lang_sub')}</div>
                 </div>
-                <select className="select" style={{width: 100}} value={window.AppI18n ? window.AppI18n.lang : 'en'} onChange={e=>window.AppI18n && window.AppI18n.setLang(e.target.value)}>
+                <select className="select" style={{width: 110}} value={window.AppI18n ? window.AppI18n.lang : 'en'} onChange={e=>window.AppI18n && window.AppI18n.setLang(e.target.value)}>
                   <option value="en">English</option>
                   <option value="es">Español</option>
                   <option value="it">Italiano</option>

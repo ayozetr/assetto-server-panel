@@ -340,7 +340,15 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.lang')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.lang_sub')}</div>
                 </div>
-                <select className="select" style={{width: 110}} value={window.AppI18n ? window.AppI18n.lang : 'en'} onChange={e=>window.AppI18n && window.AppI18n.setLang(e.target.value)}>
+                <select className="select" style={{width: 110}} value={window.AppI18n ? window.AppI18n.lang : 'en'} onChange={e => {
+                  const l = e.target.value;
+                  if (window.AppI18n) window.AppI18n.setLang(l);
+                  fetch('/api/panel/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lang: l }),
+                  }).catch(() => {});
+                }}>
                   <option value="en">English</option>
                   <option value="es">Español</option>
                   <option value="it">Italiano</option>

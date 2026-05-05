@@ -182,6 +182,7 @@ try {
   `);
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('lang', 'en')`).run();
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
@@ -1532,9 +1533,13 @@ function apiPanelUserDelete(req, res, username) {
 
 // ── Panel settings (upload_max_mb, etc.) ──────────────────────────────────────
 function apiPanelSettingsGet(res) {
-  if (!db) return json(res, 200, { uploadMaxMb: 500 });
-  const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
-  json(res, 200, { uploadMaxMb: parseInt(row?.value || '500', 10) });
+  if (!db) return json(res, 200, { uploadMaxMb: 500, lang: 'en' });
+  const mbRow   = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+  const langRow = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
+  json(res, 200, {
+    uploadMaxMb: parseInt(mbRow?.value || '500', 10),
+    lang: langRow?.value || 'en',
+  });
 }
 
 async function apiPanelSettingsPut(req, res) {
@@ -1542,10 +1547,16 @@ async function apiPanelSettingsPut(req, res) {
   if (!db) return json(res, 500, { error: 'base de datos no disponible' });
   try {
     const body = await readBody(req);
-    const mb   = parseInt(body.uploadMaxMb, 10);
-    if (!mb || mb < 1 || mb > 10240) return json(res, 400, { error: 'Valor inválido (1–10240 MB)' });
-    db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('upload_max_mb', ?)`).run(String(mb));
-    json(res, 200, { ok: true, uploadMaxMb: mb });
+    if (body.uploadMaxMb !== undefined) {
+      const mb = parseInt(body.uploadMaxMb, 10);
+      if (!mb || mb < 1 || mb > 10240) return json(res, 400, { error: 'Valor inválido (1–10240 MB)' });
+      db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('upload_max_mb', ?)`).run(String(mb));
+    }
+    if (body.lang !== undefined) {
+      if (!['en', 'es', 'it'].includes(body.lang)) return json(res, 400, { error: 'Idioma no soportado' });
+      db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('lang', ?)`).run(body.lang);
+    }
+    json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 

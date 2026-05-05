@@ -1,5 +1,5 @@
 // Pages: Cars, Tracks, Session
-const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB } = React;
+const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB, useRef: useRefB } = React;
 const I3 = window.AppIcons;
 
 // ── Car modal ─────────────────────────────────────────────────────────────────
@@ -472,6 +472,15 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   const [page,      setPage]      = useStateB(1);
   const [pageSize,  setPageSize]  = useStateB(30);
 
+  // Default Kunos toggle off when mods are present (runs once after data loads)
+  const _kunosCarInit = useRefB(false);
+  useEffectB(() => {
+    if (!_kunosCarInit.current && cars.length > 0) {
+      _kunosCarInit.current = true;
+      if (cars.some(c => !c.isKunos)) setShowKunos(false);
+    }
+  }, [cars]);
+
   // Reset page on filter change
   useEffectB(() => { setPage(1); }, [query, brand, showKunos, pageSize]);
 
@@ -616,6 +625,15 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   const [modalTrack, setModalTrack] = useStateB(null);
   const [page,       setPage]       = useStateB(1);
   const [pageSize,   setPageSize]   = useStateB(30);
+
+  // Default Kunos toggle off when mods are present (runs once after data loads)
+  const _kunosTrackInit = useRefB(false);
+  useEffectB(() => {
+    if (!_kunosTrackInit.current && tracks.length > 0) {
+      _kunosTrackInit.current = true;
+      if (tracks.some(t => !t.isKunos)) setShowKunos(false);
+    }
+  }, [tracks]);
 
   useEffectB(() => { setPage(1); }, [query, country, showKunos, pageSize]);
 

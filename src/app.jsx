@@ -141,6 +141,11 @@ function App() {
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setUsers(d); })
       .catch(() => {});
+
+    fetch('/api/panel/settings')
+      .then(r => r.json())
+      .then(d => { if (d.lang && window.AppI18n) window.AppI18n.setLang(d.lang); })
+      .catch(() => {});
   }, []);
 
   // Poll /api/metrics every 4s

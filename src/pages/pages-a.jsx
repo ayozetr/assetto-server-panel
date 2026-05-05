@@ -18,10 +18,12 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
 
   const [activity, setActivity] = useState([]);
   useEffect(() => {
-    fetch('/api/logs?n=80')
+    fetch('/api/logs?n=100')
       .then(r => r.json())
       .then(d => {
-        const notable = (d.lines || []).filter(l => l.lvl !== 'info' || /connected|joined|lap|session|server/i.test(l.msg));
+        const notable = (d.lines || []).filter(l =>
+          l.tag !== 'CFG' && (l.lvl !== 'info' || /connected|joined|lap completed|best lap/i.test(l.msg))
+        );
         setActivity(notable.slice(-8).reverse().slice(0, 5));
       })
       .catch(() => {});
@@ -150,11 +152,11 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.time}:00</div>
                   </div>
                   <div>
-                    <div className="field-label">Weather</div>
+                    <div className="field-label">{t('dash.weather')}</div>
                     <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.weather}</div>
                   </div>
                   <div>
-                    <div className="field-label">Damage</div>
+                    <div className="field-label">{t('dash.damage')}</div>
                     <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.damage}%</div>
                   </div>
                 </div>
@@ -194,7 +196,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         <div className="card">
           <div className="card-header">
             <I2.IconClock size={14} style={{color:'var(--red)'}}/>
-            <div className="card-title">Activity</div>
+            <div className="card-title">{t('dash.activity')}</div>
           </div>
           {activity.length === 0 ? (
             <div className="empty" style={{padding: '28px 20px'}}>{t('common.not_found')}</div>
@@ -269,10 +271,10 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
             <tr>
               <th>{t('pl.col.driver')}</th>
               <th>{t('pl.col.car')}</th>
-              <th style={{width: 80}}>Sessions</th>
-              <th style={{width: 80}}>Laps</th>
-              <th style={{width: 110}}>Best Lap</th>
-              <th style={{width: 100}}>Time</th>
+              <th style={{width: 80}}>{t('pl.col.sessions')}</th>
+              <th style={{width: 80}}>{t('pl.col.laps')}</th>
+              <th style={{width: 110}}>{t('pl.col.best_lap')}</th>
+              <th style={{width: 100}}>{t('pl.col.time')}</th>
               <th style={{width: 160}}>{t('pl.hist_col.date')}</th>
               {isAdmin && <th style={{width: 80}}></th>}
             </tr>
@@ -364,9 +366,9 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
               <th style={{width: 40}}>#</th>
               <th>{t('pl.col.driver')}</th>
               <th>{t('pl.col.car')}</th>
-              <th style={{width: 80}}>Laps</th>
-              <th style={{width: 110}}>Best</th>
-              <th style={{width: 110}}>Last</th>
+              <th style={{width: 80}}>{t('pl.col.laps')}</th>
+              <th style={{width: 110}}>{t('pl.col.best')}</th>
+              <th style={{width: 110}}>{t('pl.col.last')}</th>
               <th style={{width: 70}}>{t('pl.col.ping')}</th>
               {isAdmin && <th style={{width: 140}}></th>}
             </tr>
@@ -461,13 +463,13 @@ function PageLogs({ server }) {
         <div className="segmented">
           {['all', 'info', 'ok', 'warn', 'error'].map(f => (
             <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'All' : f.toUpperCase()}
+              {f === 'all' ? t('log.all') : f.toUpperCase()}
             </button>
           ))}
         </div>
         <div className="right row" style={{gap: 6}}>
           <button className="btn btn-sm" onClick={() => setPaused(p => !p)}>
-            {paused ? <><I2.IconPlay size={11}/> Play</> : <><I2.IconStop size={11}/> Pause</>}
+            {paused ? <><I2.IconPlay size={11}/> {t('log.play')}</> : <><I2.IconStop size={11}/> {t('log.pause')}</>}
           </button>
           <button className="btn btn-sm" onClick={() => {
             if (window.confirm(t('log.clear_confirm'))) {
@@ -483,7 +485,7 @@ function PageLogs({ server }) {
             a.download = `ac-logs-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
             a.click();
           }}>
-            <I2.IconDownload size={11}/> Export
+            <I2.IconDownload size={11}/> {t('log.export')}
           </button>
         </div>
       </div>

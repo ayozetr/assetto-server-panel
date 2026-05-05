@@ -286,7 +286,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.abs')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.abs_sub')}</div>
                 </div>
-                <select className="select" style={{width: 110}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
+                <select className="select" style={{minWidth: 100, flexShrink: 0}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
                   <option value={0}>{t('config.opt_no')}</option>
                   <option value={1}>{t('config.opt_factory')}</option>
                   <option value={2}>{t('config.opt_free')}</option>
@@ -297,7 +297,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.tc')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.tc_sub')}</div>
                 </div>
-                <select className="select" style={{width: 110}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
+                <select className="select" style={{minWidth: 100, flexShrink: 0}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
                   <option value={0}>{t('config.opt_no')}</option>
                   <option value={1}>{t('config.opt_factory')}</option>
                   <option value={2}>{t('config.opt_free')}</option>

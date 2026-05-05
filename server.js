@@ -614,6 +614,10 @@ function parseINI(text) {
 // Patch an INI file in-place: replaces changed values but keeps all comment and
 // blank lines exactly as they were. New keys (not in the original) are inserted
 // immediately after their section header.
+function sanitizeIniVal(v) {
+  return String(v).replace(/[\r\n\0]/g, ' ');
+}
+
 function patchINI(raw, obj) {
   const lines = raw.split('\n');
   let section = '__default__';
@@ -629,22 +633,22 @@ function patchINI(raw, obj) {
       const k = line.slice(0, eq).trim();
       if (obj[section] && k in obj[section]) {
         updated.add(`${section}|${k}`);
-        return `${k}=${obj[section][k]}`;
+        return `${k}=${sanitizeIniVal(obj[section][k])}`;
       }
     }
     return rawLine;
   });
 
-  // Append any keys that did not exist in the original file
   for (const [sec, keys] of Object.entries(obj)) {
     if (sec === '__default__') continue;
     for (const [k, v] of Object.entries(keys)) {
       if (updated.has(`${sec}|${k}`)) continue;
+      const val = sanitizeIniVal(v);
       const secIdx = patched.findIndex(l => l.trim() === `[${sec}]`);
       if (secIdx >= 0) {
-        patched.splice(secIdx + 1, 0, `${k}=${v}`);
+        patched.splice(secIdx + 1, 0, `${k}=${val}`);
       } else {
-        patched.push('', `[${sec}]`, `${k}=${v}`);
+        patched.push('', `[${sec}]`, `${k}=${val}`);
       }
     }
   }
@@ -794,9 +798,12 @@ async function apiMetrics(res) {
 
 function apiLogs(req, res) {
   const n = Math.min(500, parseInt(new URL(req.url, 'http://x').searchParams.get('n') || '150'));
-  fs.readFile(AC_LOG_FILE, 'utf8', (err, data) => {
-    if (err) return json(res, 200, { lines: [] });
-    const lines = data.trim().split('\n').filter(Boolean).slice(-n).map(parseLine);
+  const child = spawn('tail', ['-n', String(n), AC_LOG_FILE], { stdio: ['ignore', 'pipe', 'ignore'] });
+  let data = '';
+  child.stdout.on('data', chunk => { data += chunk; });
+  child.on('error', () => json(res, 200, { lines: [] }));
+  child.on('close', () => {
+    const lines = data.trim().split('\n').filter(Boolean).map((l, i) => parseLine(l, i));
     json(res, 200, { lines });
   });
 }

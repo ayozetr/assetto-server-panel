@@ -280,7 +280,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <input className="input mono" type="number" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
             </div>
-            <div className="grid-2">
+            <div className="col" style={{gap: 12}}>
               <div className="row-between">
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.abs')}</div>

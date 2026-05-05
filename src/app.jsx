@@ -300,9 +300,16 @@ function AppInner(props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
     })
-      .then(r => r.json())
-      .then(() => toast.push(t('toast.config_saved'), 'success'))
-      .catch(() => { toast.push(t('common.error'), 'error'); throw new Error('save failed'); });
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(d => {
+        if (d.error) throw new Error(d.error);
+        if (config.maxClients > 0) {
+          setServer(s => ({ ...s, slots: config.maxClients }));
+          setSessionCfg(s => ({ ...s, slots: config.maxClients }));
+        }
+        toast.push(t('toast.config_saved'), 'success');
+      })
+      .catch(e => { toast.push(`${t('common.error')}: ${e.message}`, 'error'); throw e; });
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;

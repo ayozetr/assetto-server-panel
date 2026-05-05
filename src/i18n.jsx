@@ -22,8 +22,7 @@ const dict = {
     'sidebar.role.user': 'User',
     'sidebar.logout': 'Logout',
     'sidebar.credit_by': 'Developed by',
-    'common.per_page': 'Per page',
-    
+
     // Topbar
     'topbar.server': 'Server',
     'topbar.running': 'Running',
@@ -67,6 +66,10 @@ const dict = {
     'common.backend_down': 'Backend unavailable — check if the server is still running. Displayed data might be outdated.',
     'common.no_permissions': 'You do not have permissions for this action',
     'common.net_error': 'Network error',
+    'common.close': 'Close',
+    'common.remove': 'Remove',
+    'common.yes': 'Yes',
+    'common.no': 'No',
     'common.per_page': 'Per page',
 
     // App (Toasts)
@@ -462,6 +465,10 @@ const dict = {
     'common.backend_down': 'Backend no disponible — comprueba que el servidor sigue en ejecución. Los datos mostrados pueden estar desactualizados.',
     'common.no_permissions': 'No tienes permisos para esta acción',
     'common.net_error': 'Error de red',
+    'common.close': 'Cerrar',
+    'common.remove': 'Quitar',
+    'common.yes': 'Sí',
+    'common.no': 'No',
     'common.per_page': 'Por página',
 
     // App (Toasts)
@@ -857,6 +864,10 @@ const dict = {
     'common.backend_down': 'Backend non disponibile — verifica se il server è ancora in esecuzione.',
     'common.no_permissions': 'Non hai i permessi per questa azione',
     'common.net_error': 'Errore di rete',
+    'common.close': 'Chiudi',
+    'common.remove': 'Rimuovi',
+    'common.yes': 'Sì',
+    'common.no': 'No',
     'common.per_page': 'Per pagina',
 
     // App (Toasts)

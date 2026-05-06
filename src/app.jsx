@@ -212,11 +212,11 @@ function App() {
 function AppInner(props) {
   const { Sidebar, Topbar, useToast } = window.AppShell;
   const I = window.AppIcons;
-  const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesA;
-  const { PageCars, PageTracks, PageSession }    = window.AppPagesB;
-  const { PageConfig, PageUsers, PageProfile }   = window.AppPagesC;
-  const { PageTimes }                            = window.AppPagesD;
-  const { PageMods }                             = window.AppPagesE;
+  const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesMonitoring;
+  const { PageCars, PageTracks, PageSession }    = window.AppPagesContent;
+  const { PageConfig, PageUsers, PageProfile }   = window.AppPagesSettings;
+  const { PageTimes }                            = window.AppPagesLaptimes;
+  const { PageMods }                             = window.AppPagesMods;
   const toast = useToast();
 
   const {

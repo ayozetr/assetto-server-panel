@@ -511,4 +511,4 @@ function PageLogs({ server }) {
   );
 }
 
-window.AppPagesA = { PageDashboard, PagePlayers, PageLogs };
+window.AppPagesMonitoring = { PageDashboard, PagePlayers, PageLogs };

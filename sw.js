@@ -1,7 +1,7 @@
 // Assetto Server Panel — Service Worker
 // Strategy: Network-first for API calls, Cache-first for static assets
 
-const CACHE_NAME  = 'ac-panel-v4';
+const CACHE_NAME  = 'ac-panel-v5';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install
@@ -10,14 +10,14 @@ const PRECACHE = [
   '/src/styles.css',
   '/src/tweaks-panel.jsx',
   '/src/icons.jsx',
-  '/src/data.jsx',
+  '/src/utils.jsx',
   '/src/i18n.jsx',
   '/src/shell.jsx',
-  '/src/pages/pages-a.jsx',
-  '/src/pages/pages-b.jsx',
-  '/src/pages/pages-c.jsx',
-  '/src/pages/pages-d.jsx',
-  '/src/pages/pages-e.jsx',
+  '/src/pages/monitoring.jsx',
+  '/src/pages/content.jsx',
+  '/src/pages/settings.jsx',
+  '/src/pages/laptimes.jsx',
+  '/src/pages/mods.jsx',
   '/src/app.jsx',
   '/src/assets/icon.png',
   '/src/assets/icon-192.png',

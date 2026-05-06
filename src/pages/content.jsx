@@ -940,4 +940,4 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
   );
 }
 
-window.AppPagesB = { PageCars, PageTracks, PageSession };
+window.AppPagesContent = { PageCars, PageTracks, PageSession };

@@ -329,4 +329,4 @@ function ComparisonTable({ players, tracks, laps, trackId, t }) {
   );
 }
 
-window.AppPagesD = { PageTimes };
+window.AppPagesLaptimes = { PageTimes };

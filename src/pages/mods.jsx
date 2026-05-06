@@ -469,4 +469,4 @@ function PageMods({ isAdmin, refreshContent }) {
   );
 }
 
-window.AppPagesE = { PageMods };
+window.AppPagesMods = { PageMods };

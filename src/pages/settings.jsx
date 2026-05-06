@@ -786,4 +786,4 @@ function PageProfile({ user }) {
   );
 }
 
-window.AppPagesC = { PageConfig, PageUsers, PageProfile, ConfirmModal };
+window.AppPagesSettings = { PageConfig, PageUsers, PageProfile, ConfirmModal };

@@ -66,6 +66,7 @@ Open `http://<server-ip>:3000` in your browser.
 
 | Document | Description |
 |----------|-------------|
+| [AC server setup (SteamCMD)](docs/ac-server-setup.md) | Install and configure an AC dedicated server from scratch |
 | [Installation & configuration](docs/installation.md) | Requirements, setup steps and environment variables |
 | [Production deployment](docs/deployment.md) | Systemd service, Cloudflare Tunnel, firewall |
 | [Authentication & users](docs/authentication.md) | Session system, roles and user management |

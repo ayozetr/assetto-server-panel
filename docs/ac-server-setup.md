@@ -17,6 +17,11 @@ Step-by-step instructions to install and configure an Assetto Corsa dedicated se
 
 SteamCMD is a command-line version of Steam used to download dedicated server files.
 
+> **Official documentation:** [https://developer.valvesoftware.com/wiki/SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD)
+> The Valve wiki covers installation on all platforms (Linux, Windows, macOS), all available commands, login options, and advanced usage. Refer to it for anything not covered here.
+
+Quick install on Ubuntu/Debian:
+
 ```bash
 # Install dependencies
 sudo apt-get update

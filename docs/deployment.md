@@ -23,6 +23,7 @@ ExecStart=/home/<your-user>/.nvm/versions/node/v20.20.2/bin/node server.js
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=/path/to/assetto-dashboard/.env
+TimeoutStopSec=15    # matches the server's 10 s force-exit guard
 
 [Install]
 WantedBy=multi-user.target

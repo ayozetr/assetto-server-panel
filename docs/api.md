@@ -2,51 +2,63 @@
 
 All endpoints are served by `server.js` under the same origin as the frontend (`http://<server-ip>:3000`).
 
-Protected endpoints require a valid session token sent as a `Bearer` header:
+## Authentication
 
-```
-Authorization: Bearer <token>
-```
+All API endpoints except `/api/health` and the four `/api/auth/*` routes require a valid session. The session token is stored in an `HttpOnly` cookie (`sid`) set by the server on login. The browser sends it automatically with every request.
 
-Tokens are obtained from `POST /api/auth/login`.
+Requests that lack a valid session receive `401 Unauthorized`.
 
 ---
 
-## Authentication
+## Auth endpoints
+
+### `GET /api/health`
+Liveness probe. No auth required.
+
+**Response:** `{ "ok": true, "uptime": 3600 }`
+
+---
 
 ### `POST /api/auth/login`
 Authenticate with username and password.
 
 **Body:** `{ "username": "Admin", "password": "..." }`
 
-**Response:** `{ "ok": true, "token": "...", "user": { "name": "Admin", "role": "admin" } }`
+**Response:**
+```json
+{
+  "ok": true,
+  "user": { "name": "Admin", "role": "admin", "mustChangePassword": false }
+}
+```
+
+Sets an `HttpOnly` session cookie (`sid`).
 
 Rate-limited: 5 failed attempts per IP locks the endpoint for 15 minutes.
 
 ---
 
 ### `POST /api/auth/logout`
-Invalidate the current session token.
-
-**Auth required:** yes
+Invalidate the current session and clear the cookie.
 
 ---
 
 ### `GET /api/auth/me`
 Return the currently authenticated user.
 
-**Auth required:** yes
-
-**Response:** `{ "name": "Admin", "role": "admin" }`
+**Response:** `{ "username": "Admin", "role": "admin", "mustChangePassword": false }`
 
 ---
 
 ### `POST /api/auth/change-password`
 Change the authenticated user's own password.
 
-**Auth required:** yes
+**Body:**
+```json
+{ "username": "Admin", "currentPassword": "...", "newPassword": "..." }
+```
 
-**Body:** `{ "current": "...", "password": "..." }`
+Resets `mustChangePassword` to `false` on success.
 
 ---
 
@@ -61,12 +73,13 @@ Live server metrics.
 ```json
 {
   "cpu": 12.4,
-  "ram": 1840,
+  "ram": { "used": 1840, "total": 8192 },
   "uptime": 3600,
-  "acRunning": true,
-  "cpuModel": "Intel Core i7-...",
+  "running": true,
+  "cpuName": "Intel Core i7-...",
   "publicIp": "1.2.3.4",
-  "liveTrack": "loros"
+  "liveTrack": "loros",
+  "httpPort": 8081
 }
 ```
 
@@ -102,7 +115,7 @@ data: { "id": 42, "time": "...", "lvl": "OK", "tag": "...", "msg": "..." }
 ### `GET /api/config`
 Read `server_cfg.ini` as a JSON object.
 
-**Auth required:** yes (admin)
+**Auth required:** yes
 
 ---
 
@@ -111,14 +124,14 @@ Write a JSON object back to `server_cfg.ini`. A `.bak` backup is created before 
 
 **Auth required:** yes (admin)
 
-**Body:** JSON object with any subset of config keys.
+**Body:** JSON object with any subset of config keys. Port values must be integers in range 1–65535.
 
 ---
 
 ### `GET /api/whitelist`
 Read `whitelist.txt` as a list of Steam IDs.
 
-**Auth required:** yes (admin)
+**Auth required:** yes
 
 **Response:** `{ "ids": ["76561198000000001", ...] }`
 
@@ -154,7 +167,7 @@ Kick a player via the AC HTTP API.
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "guid": "76561198..." }`
+**Body:** `{ "carId": 0 }` — the car slot index from the live player list.
 
 ---
 
@@ -163,7 +176,7 @@ Add a Steam GUID to `blacklist.txt`.
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "guid": "76561198..." }`
+**Body:** `{ "guid": "76561198...", "name": "PlayerName" }`
 
 ---
 
@@ -191,16 +204,16 @@ All lap times from imported result files (max 5000).
 ---
 
 ### `POST /api/session/apply`
-Write track and car selection to `server_cfg.ini`.
+Write track and car selection to `server_cfg.ini`. Auto-restarts the AC server if it is running (unless `restart: false`).
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "track": "loros", "cars": ["av_citroen_saxo_ph1a_gra"] }`
+**Body:** `{ "trackId": "loros", "layout": "", "cars": ["av_citroen_saxo_ph1a_gra"], "slots": 10, "restart": true }`
 
 ---
 
 ### `GET /api/content/cars/:id/thumb`
-Serve the car's badge/preview image.
+Serve the car's badge/preview image. Falls back to the bundled Kunos asset.
 
 ---
 
@@ -226,7 +239,7 @@ Direct multipart upload. Suitable for LAN access.
 
 **Auth required:** yes
 
-**Body:** `multipart/form-data` with a `file` field.
+**Body:** `multipart/form-data` with a `file` field containing a `.zip`, `.rar`, or `.7z` archive.
 
 ---
 
@@ -285,7 +298,7 @@ Update one or more panel settings.
 ### `GET /api/panel/users`
 List all panel users.
 
-**Auth required:** yes (admin)
+**Auth required:** yes
 
 ---
 
@@ -296,6 +309,8 @@ Create a new panel user.
 
 **Body:** `{ "username": "Sample User", "password": "...", "role": "user" }`
 
+Username must be 1–64 characters: letters, numbers, `_` and `-` only.
+
 ---
 
 ### `PUT /api/panel/users/:username`
@@ -303,14 +318,39 @@ Update a user's role or password.
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "role": "admin" }` or `{ "password": "..." }`
+**Body:** `{ "role": "admin" }` or `{ "password": "..." }` (or both)
 
 ---
 
 ### `DELETE /api/panel/users/:username`
-Delete a panel user. Cannot delete yourself.
+Delete a panel user.
 
 **Auth required:** yes (admin)
+
+---
+
+## Audit log
+
+### `GET /api/audit`
+Return the last 200 audit log entries in reverse chronological order.
+
+**Auth required:** yes (admin)
+
+**Response:**
+```json
+[
+  {
+    "id": 42,
+    "actor": "Admin",
+    "action": "player.ban",
+    "target": "76561198000000001",
+    "detail": "PlayerName",
+    "logged_at": "2026-05-06 14:23:00"
+  }
+]
+```
+
+Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`.
 
 ---
 
@@ -328,4 +368,4 @@ Kill the running `acServer` process.
 Stop then start.
 
 ### `POST /api/server/reload`
-Send SIGHUP to `acServer` (reload config without full restart).
+Alias for restart. `acServer` does not support live config reload via signal.

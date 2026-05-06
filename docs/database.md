@@ -14,11 +14,12 @@ Panel login accounts.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `username` | TEXT PK | Login username |
-| `password_hash` | TEXT | PBKDF2-SHA-512 hash |
-| `salt` | TEXT | Random 32-byte hex salt |
+| `username` | TEXT PK | Login username (1–64 chars: letters, numbers, `_`, `-`) |
+| `password_hash` | TEXT | bcrypt hash |
+| `salt` | TEXT | Random salt |
 | `role` | TEXT | `admin` or `user` |
 | `created_at` | TEXT | Creation timestamp |
+| `must_change_password` | INTEGER | `1` = user must change password on next login |
 
 ---
 
@@ -117,3 +118,22 @@ Log of every mod upload attempt.
 | `error` | TEXT | Error message if the upload failed |
 | `uploaded_by` | TEXT | Username of the uploader |
 | `uploaded_at` | TEXT | Upload timestamp |
+
+---
+
+### `audit_log`
+
+Immutable record of every admin action.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `actor` | TEXT | Username who performed the action |
+| `action` | TEXT | Action key (see below) |
+| `target` | TEXT | Subject of the action (e.g. Steam GUID, username, mod name) |
+| `detail` | TEXT | Extra context (e.g. player display name) |
+| `logged_at` | TEXT | Timestamp of the action |
+
+Recorded action keys: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`.
+
+Readable via `GET /api/audit` (admin only — returns last 200 entries).

@@ -5,12 +5,24 @@
 The panel uses a session-based authentication system backed by SQLite.
 
 1. The user submits their username and password.
-2. The server looks up the user in the `panel_users` table and verifies the password using PBKDF2-SHA-512 (100,000 iterations).
-3. If valid, a session token is generated, stored in the `sessions` table with a 7-day expiry, and returned to the browser.
-4. The browser stores the token in `localStorage` and sends it as a `Bearer` header on every API request.
-5. On logout, the token is deleted from the database immediately.
+2. The server looks up the user in the `panel_users` table and verifies the password using bcrypt.
+3. If valid, a session token is generated, stored in the `sessions` table with a 7-day expiry, and set as an `HttpOnly` cookie named `sid` (`SameSite=Strict`).
+4. The browser sends the cookie automatically with every API request.
+5. On logout, the token is deleted from the database immediately and the cookie is cleared.
 
 **Rate limiting:** 5 failed login attempts per IP address locks the endpoint for 15 minutes.
+
+---
+
+## First-login password change
+
+The default admin account is seeded with `must_change_password = true`. Until the password is changed:
+
+- The login response and `/api/auth/me` include `"mustChangePassword": true`.
+- The frontend redirects to the **My account** page and shows a warning banner.
+- All other navigation is blocked until the password is updated.
+
+Changing the password via `/api/auth/change-password` resets the flag.
 
 ---
 
@@ -29,7 +41,7 @@ The panel uses a session-based authentication system backed by SQLite.
 |----------|----------|------|
 | `Admin` | `Admin1234!` | admin |
 
-> Change this password immediately after first login.
+> The panel forces a password change on first login — you cannot use any other page until the default password is replaced.
 
 ---
 
@@ -37,7 +49,7 @@ The panel uses a session-based authentication system backed by SQLite.
 
 Admins can manage panel users from the **Users** page:
 
-- **Create** a new user with a username, password and role
+- **Create** a new user with a username, password and role — username must be 1–64 characters: letters, numbers, `_` and `-` only
 - **Change role** between `admin` and `user`
 - **Reset password** for any user
 - **Delete** a user (cannot delete yourself)

@@ -47,7 +47,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
 
     { id: 'cars', label: t('nav.cars'), icon: I.IconCar, group: 'content' },
     { id: 'tracks', label: t('nav.tracks'), icon: I.IconTrack, group: 'content' },
-    { id: 'mods', label: t('nav.mods'), icon: I.IconUpload, group: 'content', adminOnly: true },
+    { id: 'mods', label: t('nav.mods'), icon: I.IconUpload, group: 'content' },
     { id: 'session', label: t('nav.session'), icon: I.IconFlag, group: 'content' },
 
     { id: 'config', label: t('nav.config'), icon: I.IconSettings, group: 'admin', adminOnly: true },

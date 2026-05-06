@@ -1914,7 +1914,7 @@ async function extractArchive(buffer, ext) {
 
 // ── Mod upload endpoint ───────────────────────────────────────────────────────
 async function apiModUpload(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
 
   // 1. Read current limit from DB
   let maxMb = 500;

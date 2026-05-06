@@ -6,14 +6,19 @@ const I4 = window.AppIcons;
 function UploadLimitCard({ isAdmin }) {
   const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k) => k;
   const toast = window.AppShell.useToast();
-  const [maxMb,   setMaxMb]   = useStateC(500);
-  const [saving,  setSaving]  = useStateC(false);
-  const [loaded,  setLoaded]  = useStateC(false);
+  const [maxMb,         setMaxMb]         = useStateC(500);
+  const [chunkedUpload, setChunkedUpload] = useStateC(false);
+  const [saving,        setSaving]        = useStateC(false);
+  const [loaded,        setLoaded]        = useStateC(false);
 
   useEffectC(() => {
     fetch('/api/panel/settings')
       .then(r => r.json())
-      .then(d => { if (d.uploadMaxMb) setMaxMb(d.uploadMaxMb); setLoaded(true); })
+      .then(d => {
+        if (d.uploadMaxMb) setMaxMb(d.uploadMaxMb);
+        setChunkedUpload(!!d.chunkedUpload);
+        setLoaded(true);
+      })
       .catch(() => setLoaded(true));
   }, []);
 
@@ -23,7 +28,7 @@ function UploadLimitCard({ isAdmin }) {
       const r = await fetch('/api/panel/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploadMaxMb: maxMb }),
+        body: JSON.stringify({ uploadMaxMb: maxMb, chunkedUpload }),
       });
       const d = await r.json();
       if (d.ok) toast.push(t('config.upload_saved'), 'success');
@@ -59,6 +64,17 @@ function UploadLimitCard({ isAdmin }) {
                 : <><I4.IconCheck size={12}/> {t('common.apply')}</>}
             </button>
           )}
+        </div>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+          <div style={{display:'flex', flexDirection:'column', gap:3}}>
+            <span className="field-label">{t('config.chunked_upload')}</span>
+            <span className="field-hint">{t('config.chunked_upload_hint')}</span>
+          </div>
+          <div
+            className={`switch ${chunkedUpload ? 'on' : ''}`}
+            style={{flexShrink:0}}
+            onClick={() => isAdmin && loaded && setChunkedUpload(v => !v)}
+          />
         </div>
         <span className="field-hint">{t('config.upload_limit_hint')}</span>
         <div style={{

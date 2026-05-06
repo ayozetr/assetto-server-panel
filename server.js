@@ -210,6 +210,7 @@ try {
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('lang', 'en')`).run();
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('chunked_upload', '0')`).run();
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
@@ -1740,12 +1741,14 @@ function apiPanelUserDelete(req, res, username) {
 
 // ── Panel settings (upload_max_mb, etc.) ──────────────────────────────────────
 function apiPanelSettingsGet(res) {
-  if (!db) return json(res, 200, { uploadMaxMb: 500, lang: 'en' });
-  const mbRow   = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
-  const langRow = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
+  if (!db) return json(res, 200, { uploadMaxMb: 500, chunkedUpload: false, lang: 'en' });
+  const mbRow      = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+  const langRow    = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
+  const chunkedRow = db.prepare(`SELECT value FROM panel_settings WHERE key = 'chunked_upload'`).get();
   json(res, 200, {
-    uploadMaxMb: parseInt(mbRow?.value || '500', 10),
-    lang: langRow?.value || 'en',
+    uploadMaxMb:   parseInt(mbRow?.value || '500', 10),
+    lang:          langRow?.value || 'en',
+    chunkedUpload: chunkedRow?.value === '1',
   });
 }
 
@@ -1762,6 +1765,9 @@ async function apiPanelSettingsPut(req, res) {
     if (body.lang !== undefined) {
       if (!['en', 'es', 'it'].includes(body.lang)) return json(res, 400, { error: 'Idioma no soportado' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('lang', ?)`).run(body.lang);
+    }
+    if (body.chunkedUpload !== undefined) {
+      db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('chunked_upload', ?)`).run(body.chunkedUpload ? '1' : '0');
     }
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
@@ -1912,51 +1918,26 @@ async function extractArchive(buffer, ext) {
   throw new Error(`Unsupported format: ${ext}`);
 }
 
-// ── Mod upload endpoint ───────────────────────────────────────────────────────
-async function apiModUpload(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-
-  // 1. Read current limit from DB
-  let maxMb = 500;
-  if (db) {
-    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
-    if (row) maxMb = parseInt(row.value, 10) || 500;
-  }
-  const maxBytes = maxMb * 1024 * 1024;
+// ── Mod processing (shared by single and chunked upload) ─────────────────────
+async function processModBuffer(buffer, filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (!['.zip', '.rar', '.7z'].includes(ext))
+    throw Object.assign(new Error(`Formato no soportado: ${ext}. Usa .zip, .rar o .7z`), { status: 400 });
 
   let archive = null;
   try {
-    // 2. Parse multipart
-    let parts;
-    try {
-      parts = await parseMultipart(req, maxBytes);
-    } catch (e) {
-      if (e.code === 'ELIMIT') return json(res, 413, { error: `Archivo demasiado grande (máx. ${maxMb} MB)` });
-      return json(res, 400, { error: `Error en la subida: ${e.message}` });
-    }
-    const filePart = parts.file;
-    if (!filePart?.data) return json(res, 400, { error: 'No se recibió ningún archivo (campo: file)' });
-
-    // 3. Validate extension
-    const ext = path.extname(filePart.filename).toLowerCase();
-    if (!['.zip', '.rar', '.7z'].includes(ext))
-      return json(res, 400, { error: `Formato no soportado: ${ext}. Usa .zip, .rar o .7z` });
-
-    // 4. Extract archive index
-    archive = await extractArchive(filePart.data, ext);
+    archive = await extractArchive(buffer, ext);
     const entries = archive.entries;
 
-    // 5. Anti Zip-Slip check (against a dummy root to detect path traversal)
     const dummyRoot = path.join(os.tmpdir(), 'ac-slip-check');
     for (const e of entries) {
       if (!isSafeEntry(e.name, dummyRoot))
-        return json(res, 400, { error: `Zip-Slip detectado en entrada: ${e.name}` });
+        throw Object.assign(new Error(`Zip-Slip detectado en entrada: ${e.name}`), { status: 400 });
     }
 
-    // 6. Collect names for whitelist detection
-    const names     = entries.map(e => e.name.replace(/\\/g, '/').toLowerCase());
-    const allFiles  = names.filter(n => !n.endsWith('/'));
-    const allDirs   = names.filter(n => n.endsWith('/'));
+    const names    = entries.map(e => e.name.replace(/\\/g, '/').toLowerCase());
+    const allFiles = names.filter(n => !n.endsWith('/'));
+    const allDirs  = names.filter(n => n.endsWith('/'));
 
     const hasKn5    = allFiles.some(n => n.endsWith('.kn5'));
     const hasData   = allDirs.some(n => /\/data\/$/.test(n) || /^data\/$/.test(n)) ||
@@ -1966,54 +1947,39 @@ async function apiModUpload(req, res) {
                       allFiles.some(n => /(\/|^)ai\//.test(n));
 
     let modType = null;
-    if (hasKn5 && hasData)       modType = 'car';
-    else if (hasKn5 && hasModels) modType = 'track';
-    else if (hasModels && hasAi)  modType = 'track';
+    if (hasKn5 && hasData)        modType = 'car';
+    else if (hasKn5 && hasModels)  modType = 'track';
+    else if (hasModels && hasAi)   modType = 'track';
 
     if (!modType)
-      return json(res, 422, { error: 'No se encontró un mod válido. Un coche necesita .kn5 + data/; un circuito necesita models.ini + ai/' });
+      throw Object.assign(new Error('No se encontró un mod válido. Un coche necesita .kn5 + data/; un circuito necesita models.ini + ai/'), { status: 422 });
 
-    // 7. Identify root folder of the mod (first-level directory)
     const roots = new Set();
-    for (const n of names) {
-      const parts2 = n.split('/');
-      if (parts2[0]) roots.add(parts2[0]);
-    }
+    for (const n of names) { const p = n.split('/'); if (p[0]) roots.add(p[0]); }
     if (roots.size !== 1)
-      return json(res, 422, { error: `El archivo debe contener exactamente una carpeta raíz. Se encontraron: ${[...roots].join(', ')}` });
-    const modRoot = [...roots][0];
-    const modId   = modRoot;
+      throw Object.assign(new Error(`El archivo debe contener exactamente una carpeta raíz. Se encontraron: ${[...roots].join(', ')}`), { status: 422 });
 
-    // 8. Determine destination
+    const modRoot  = [...roots][0];
     const destBase = modType === 'car' ? AC_CARS_DIR : AC_TRACKS_DIR;
-    const destDir  = path.join(destBase, modId);
-
-    // Safety: destDir must be inside destBase
+    const destDir  = path.join(destBase, modRoot);
     if (!destDir.startsWith(destBase + path.sep))
-      return json(res, 400, { error: 'Ruta de destino inválida' });
+      throw Object.assign(new Error('Ruta de destino inválida'), { status: 400 });
 
     await fsp.mkdir(destDir, { recursive: true });
 
-    // 9. Surgical extraction — only entries under modRoot with allowed extensions
     let filesExtracted = 0;
     for (const entry of entries) {
       const normalName = entry.name.replace(/\\/g, '/');
-      if (!normalName.startsWith(modRoot + '/')) continue; // outside root
+      if (!normalName.startsWith(modRoot + '/')) continue;
       if (entry.isDirectory) {
         const relDir = normalName.slice(modRoot.length + 1);
         if (relDir) await fsp.mkdir(path.join(destDir, relDir), { recursive: true });
         continue;
       }
-      // Whitelist extension check
       const fileExt = path.extname(normalName).toLowerCase();
-      if (!ALLOWED_MOD_EXTS.has(fileExt)) continue; // silently skip disallowed files
-
-      const relPath  = normalName.slice(modRoot.length + 1);
-      const destFile = path.join(destDir, relPath);
-
-      // Final Anti Zip-Slip for actual dest
+      if (!ALLOWED_MOD_EXTS.has(fileExt)) continue;
+      const destFile = path.join(destDir, normalName.slice(modRoot.length + 1));
       if (!destFile.startsWith(destDir + path.sep)) continue;
-
       const data = await entry.getData();
       if (!data) continue;
       await fsp.mkdir(path.dirname(destFile), { recursive: true });
@@ -2021,18 +1987,96 @@ async function apiModUpload(req, res) {
       filesExtracted++;
     }
 
-    json(res, 200, {
-      ok: true,
-      modType,
-      modId,
-      destination: destDir,
-      filesExtracted,
-    });
-  } catch (e) {
-    console.error('Mod upload error:', e.message);
-    json(res, 500, { error: e.message });
+    return { modType, modId: modRoot, destination: destDir, filesExtracted };
   } finally {
     if (archive?.close) await archive.close().catch(() => {});
+  }
+}
+
+// ── Chunked upload ─────────────────────────────────────────────────────────────
+const CHUNK_TMP_DIR = path.join(os.tmpdir(), 'ac-upload-chunks');
+
+async function cleanupOldChunks() {
+  try {
+    const entries = await fsp.readdir(CHUNK_TMP_DIR).catch(() => []);
+    const now = Date.now();
+    for (const entry of entries) {
+      const dir = path.join(CHUNK_TMP_DIR, entry);
+      const stat = await fsp.stat(dir).catch(() => null);
+      if (stat && now - stat.mtimeMs > 2 * 60 * 60 * 1000)
+        await fsp.rm(dir, { recursive: true }).catch(() => {});
+    }
+  } catch {}
+}
+
+async function apiModUploadChunk(req, res) {
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+
+  let parts;
+  try { parts = await parseMultipart(req, 100 * 1024 * 1024); }
+  catch (e) { return json(res, 400, { error: `Error en la subida: ${e.message}` }); }
+
+  const uploadId    = (parts.uploadId    || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const chunkIndex  = parseInt(parts.chunkIndex  || '-1', 10);
+  const totalChunks = parseInt(parts.totalChunks || '0',  10);
+  const filename    = parts.filename || '';
+  const chunkData   = parts.chunk?.data;
+
+  if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !chunkData || !filename)
+    return json(res, 400, { error: 'Parámetros de chunk inválidos' });
+
+  const uploadDir = path.join(CHUNK_TMP_DIR, uploadId);
+  if (!uploadDir.startsWith(CHUNK_TMP_DIR + path.sep))
+    return json(res, 400, { error: 'uploadId inválido' });
+
+  try {
+    await fsp.mkdir(uploadDir, { recursive: true });
+    await fsp.writeFile(path.join(uploadDir, `chunk-${chunkIndex}`), chunkData);
+
+    const received = (await fsp.readdir(uploadDir)).filter(f => f.startsWith('chunk-')).length;
+    if (received < totalChunks)
+      return json(res, 200, { ok: true, done: false, received, total: totalChunks });
+
+    // All chunks here — assemble and process
+    const buffers = [];
+    for (let i = 0; i < totalChunks; i++)
+      buffers.push(await fsp.readFile(path.join(uploadDir, `chunk-${i}`)));
+    await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+
+    const result = await processModBuffer(Buffer.concat(buffers), filename);
+    json(res, 200, { ok: true, done: true, ...result });
+  } catch (e) {
+    await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+    console.error('Chunk upload error:', e.message);
+    json(res, e.status || 500, { error: e.message });
+  }
+}
+
+// ── Mod upload endpoint ───────────────────────────────────────────────────────
+async function apiModUpload(req, res) {
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+
+  let maxMb = 500;
+  if (db) {
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+    if (row) maxMb = parseInt(row.value, 10) || 500;
+  }
+
+  let parts;
+  try { parts = await parseMultipart(req, maxMb * 1024 * 1024); }
+  catch (e) {
+    if (e.code === 'ELIMIT') return json(res, 413, { error: `Archivo demasiado grande (máx. ${maxMb} MB)` });
+    return json(res, 400, { error: `Error en la subida: ${e.message}` });
+  }
+  const filePart = parts.file;
+  if (!filePart?.data) return json(res, 400, { error: 'No se recibió ningún archivo (campo: file)' });
+
+  try {
+    const result = await processModBuffer(filePart.data, filePart.filename);
+    json(res, 200, { ok: true, ...result });
+  } catch (e) {
+    console.error('Mod upload error:', e.message);
+    json(res, e.status || 500, { error: e.message });
   }
 }
 
@@ -2063,7 +2107,8 @@ function handler(req, res) {
     if (urlPath === '/api/panel/settings' && req.method === 'PUT') return apiPanelSettingsPut(req, res);
 
     // Mod upload
-    if (urlPath === '/api/mods/upload' && req.method === 'POST') return apiModUpload(req, res);
+    if (urlPath === '/api/mods/upload'       && req.method === 'POST') return apiModUpload(req, res);
+    if (urlPath === '/api/mods/upload/chunk' && req.method === 'POST') return apiModUploadChunk(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));
@@ -2134,6 +2179,7 @@ loadKunosIds();
 importAllResults();
 startResultsWatcher();
 loadLogFileIntoBuffer();
+cleanupOldChunks();
 
 const server = http.createServer(handler);
 

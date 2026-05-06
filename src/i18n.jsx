@@ -401,6 +401,8 @@ const dict = {
     'config.upload_limit_hint': 'Applies to .zip, .rar and .7z · Max 10240 MB',
     'config.upload_saved': 'Upload limit saved',
     'config.upload_security_note': 'Anti Zip-Slip · Whitelist of allowed extensions · Surgical extraction of the mod root only',
+    'config.chunked_upload': 'Split uploads into chunks',
+    'config.chunked_upload_hint': 'Splits files into 50 MB pieces. Enable if uploads fail behind Cloudflare or a reverse proxy.',
   },
   es: {
     // Sidebar
@@ -803,6 +805,8 @@ const dict = {
     'config.upload_limit_hint': 'Aplica a .zip, .rar y .7z · Máximo 10240 MB',
     'config.upload_saved': 'Límite de subida guardado',
     'config.upload_security_note': 'Anti Zip-Slip · Lista blanca de extensiones · Extracción quirúrgica solo de la carpeta raíz',
+    'config.chunked_upload': 'Dividir subidas en fragmentos',
+    'config.chunked_upload_hint': 'Divide el archivo en trozos de 50 MB. Actívalo si las subidas fallan detrás de Cloudflare o un proxy.',
   },
   it: {
     // Sidebar
@@ -1205,6 +1209,8 @@ const dict = {
     'config.upload_limit_hint': 'Si applica a .zip, .rar e .7z · Max 10240 MB',
     'config.upload_saved': 'Limite upload salvato',
     'config.upload_security_note': 'Anti Zip-Slip · Whitelist estensioni · Estrazione chirurgica solo della root',
+    'config.chunked_upload': 'Carica in frammenti',
+    'config.chunked_upload_hint': 'Divide il file in pezzi da 50 MB. Attiva se gli upload falliscono dietro Cloudflare o un proxy.',
   }
 };
 

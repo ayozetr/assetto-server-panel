@@ -75,20 +75,24 @@ function PageMods({ isAdmin }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k) => k;
   const toast = window.AppShell.useToast();
 
-  const [dragging,  setDragging]  = uStE(false);
-  const [file,      setFile]      = uStE(null);
-  const [progress,  setProgress]  = uStE(0);
-  const [uploading, setUploading] = uStE(false);
-  const [result,    setResult]    = uStE(null);
-  const [history,   setHistory]   = uStE([]);
-  const [uploadMaxMb, setUploadMaxMb] = uStE(500);
+  const [dragging,      setDragging]      = uStE(false);
+  const [file,          setFile]          = uStE(null);
+  const [progress,      setProgress]      = uStE(0);
+  const [uploading,     setUploading]     = uStE(false);
+  const [result,        setResult]        = uStE(null);
+  const [history,       setHistory]       = uStE([]);
+  const [uploadMaxMb,   setUploadMaxMb]   = uStE(500);
+  const [chunkedUpload, setChunkedUpload] = uStE(false);
   const inputRef = uRfE(null);
 
-  // Load limit from backend
+  // Load settings from backend
   uEtE(() => {
     fetch('/api/panel/settings')
       .then(r => r.json())
-      .then(d => { if (d.uploadMaxMb) setUploadMaxMb(d.uploadMaxMb); })
+      .then(d => {
+        if (d.uploadMaxMb) setUploadMaxMb(d.uploadMaxMb);
+        setChunkedUpload(!!d.chunkedUpload);
+      })
       .catch(() => {});
   }, []);
 
@@ -118,58 +122,87 @@ function PageMods({ isAdmin }) {
     setProgress(0);
   };
 
+  const handleUploadResult = (d, filename) => {
+    const now = new Date().toLocaleTimeString();
+    if (d.ok) {
+      setResult({ ok: true, ...d });
+      setHistory(h => [{ ok: true, filename, ...d, time: now }, ...h.slice(0, 9)]);
+      toast.push(d.modType === 'car' ? t('mods.success_car') : t('mods.success_track'), 'success');
+      setFile(null);
+    } else {
+      setResult({ ok: false, error: d.error || t('common.error') });
+      setHistory(h => [{ ok: false, filename, error: d.error || t('common.error'), time: now }, ...h.slice(0, 9)]);
+      toast.push(d.error || t('common.error'), 'error');
+    }
+    setProgress(100);
+    setUploading(false);
+  };
+
+  const uploadDirect = () => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/mods/upload');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 90));
+    };
+    xhr.onload = () => {
+      try { handleUploadResult(JSON.parse(xhr.responseText), file.name); }
+      catch { handleUploadResult({ ok: false, error: 'Error al procesar respuesta' }, file.name); }
+    };
+    xhr.onerror = () => {
+      setResult({ ok: false, error: t('common.net_error') });
+      toast.push(t('common.net_error'), 'error');
+      setUploading(false); setProgress(0);
+    };
+    xhr.send(fd);
+  };
+
+  const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB per chunk
+  const uploadChunked = async () => {
+    const uploadId    = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const filename    = file.name;
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const fd = new FormData();
+        fd.append('chunk', chunk);
+        fd.append('uploadId', uploadId);
+        fd.append('chunkIndex', String(i));
+        fd.append('totalChunks', String(totalChunks));
+        fd.append('filename', filename);
+        const d = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/mods/upload/chunk');
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const chunkPct = e.loaded / e.total;
+              setProgress(Math.round(((i + chunkPct) / totalChunks) * 95));
+            }
+          };
+          xhr.onload  = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error('Respuesta inválida')); } };
+          xhr.onerror = () => reject(new Error(t('common.net_error')));
+          xhr.send(fd);
+        });
+        if (!d.ok) { handleUploadResult(d, filename); return; }
+        if (d.done) { handleUploadResult(d, filename); return; }
+        setProgress(Math.round(((i + 1) / totalChunks) * 95));
+      }
+    } catch (e) {
+      setResult({ ok: false, error: e.message });
+      toast.push(e.message, 'error');
+      setUploading(false); setProgress(0);
+    }
+  };
+
   const upload = () => {
     if (!file || uploading) return;
     setUploading(true);
     setProgress(0);
     setResult(null);
-
-    const fd = new FormData();
-    fd.append('file', file);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/mods/upload');
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 90));
-    };
-
-    xhr.onload = () => {
-      setProgress(100);
-      const now = new Date().toLocaleTimeString();
-      try {
-        const d = JSON.parse(xhr.responseText);
-        if (d.ok) {
-          setResult({ ok: true, ...d });
-          setHistory(h => [{
-            ok: true, filename: file.name, ...d, time: now,
-          }, ...h.slice(0, 9)]);
-          toast.push(d.modType === 'car' ? t('mods.success_car') : t('mods.success_track'), 'success');
-          setFile(null);
-        } else {
-          setResult({ ok: false, error: d.error || t('common.error') });
-          setHistory(h => [{
-            ok: false, filename: file.name, error: d.error || t('common.error'), time: now,
-          }, ...h.slice(0, 9)]);
-          toast.push(d.error || t('common.error'), 'error');
-        }
-      } catch {
-        const err = 'Error al procesar respuesta del servidor';
-        setResult({ ok: false, error: err });
-        toast.push(err, 'error');
-      }
-      setUploading(false);
-    };
-
-    xhr.onerror = () => {
-      const err = t('common.net_error');
-      setResult({ ok: false, error: err });
-      toast.push(err, 'error');
-      setUploading(false);
-      setProgress(0);
-    };
-
-    xhr.send(fd);
+    if (chunkedUpload) uploadChunked();
+    else uploadDirect();
   };
 
   const clearFile = () => { setFile(null); setResult(null); setProgress(0); };

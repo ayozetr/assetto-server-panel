@@ -1998,20 +1998,38 @@ async function processModBuffer(buffer, filename) {
     const allFiles = names.filter(n => !n.endsWith('/'));
     const allDirs  = names.filter(n => n.endsWith('/'));
 
-    const hasKn5    = allFiles.some(n => n.endsWith('.kn5'));
-    const hasData   = allDirs.some(n => /\/data\/$/.test(n) || /^data\/$/.test(n)) ||
-                      allFiles.some(n => /\/data\.acd$/.test(n) || /^data\.acd$/.test(n));
-    const hasModels = allFiles.some(n => /(^|\/)models(_[^/]+)?\.ini$/.test(n));
-    const hasAi     = allDirs.some(n => /(\/|^)ai\/$/.test(n)) ||
-                      allFiles.some(n => /(\/|^)ai\//.test(n));
+    // ── Definitive car signals ────────────────────────────────────────────────
+    // data.acd is encrypted physics — always a car, never a track
+    const hasDataAcd  = allFiles.some(n => /(^|\/)data\.acd$/.test(n));
+    // open data/ folder with car-specific INI files
+    const hasCarIni   = allFiles.some(n => /(^|\/)data\/(car|engine|tyres|suspensions)\.ini$/.test(n));
+    const hasCarUi    = allFiles.some(n => /ui_car\.json$/.test(n));
+    const hasKn5      = allFiles.some(n => n.endsWith('.kn5'));
 
+    // ── Definitive track signals ──────────────────────────────────────────────
+    // models*.ini declares 3D scene objects — always a track, never a car
+    const hasModels   = allFiles.some(n => /(^|\/)models(_[^/]+)?\.ini$/.test(n));
+    // surfaces.ini defines physics surface properties — always a track
+    const hasSurfaces = allFiles.some(n => /(^|\/)data\/surfaces\.ini$/.test(n));
+    const hasTrackUi  = allFiles.some(n => /ui_track\.json$/.test(n));
+    // ai/ can be in root or inside layout sub-directories
+    const hasAi       = allDirs.some(n => /(\/|^)ai\/$/.test(n)) ||
+                        allFiles.some(n => /(\/|^)ai\//.test(n));
+
+    // Priority: definitive signals → ambiguous fallback
     let modType = null;
-    if (hasKn5 && hasData)        modType = 'car';
-    else if (hasKn5 && hasModels)  modType = 'track';
-    else if (hasModels && hasAi)   modType = 'track';
+    if (hasDataAcd || hasCarIni || (hasCarUi && !hasModels && !hasSurfaces && !hasTrackUi && !hasAi)) {
+      modType = 'car';
+    } else if (hasModels || hasSurfaces || hasTrackUi || (hasAi && hasKn5)) {
+      modType = 'track';
+    }
 
     if (!modType)
-      throw Object.assign(new Error('No se encontró un mod válido. Un coche necesita .kn5 + data/; un circuito necesita models.ini + ai/'), { status: 422 });
+      throw Object.assign(new Error(
+        'No se encontró un mod válido.\n' +
+        'Coche: necesita data.acd, data/car.ini, o ui_car.json\n' +
+        'Circuito: necesita models.ini, data/surfaces.ini, ui_track.json, o ai/ + .kn5'
+      ), { status: 422 });
 
     const roots = new Set();
     for (const n of names) { const p = n.split('/'); if (p[0]) roots.add(p[0]); }

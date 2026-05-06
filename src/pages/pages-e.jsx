@@ -408,7 +408,7 @@ function PageMods({ isAdmin, refreshContent }) {
                 <div>
                   <div style={{fontSize: 12.5, fontWeight: 600, marginBottom: 2}}>{t('mods.type_car')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>
-                    <span className="mono">.kn5</span> + (<span className="mono">data/</span> {t('mods.or')} <span className="mono">data.acd</span>)
+                    <span className="mono">data.acd</span> · <span className="mono">data/car.ini</span> · <span className="mono">ui_car.json</span>
                   </div>
                 </div>
               </div>
@@ -417,7 +417,7 @@ function PageMods({ isAdmin, refreshContent }) {
                 <div>
                   <div style={{fontSize: 12.5, fontWeight: 600, marginBottom: 2}}>{t('mods.type_track')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>
-                    <span className="mono">models.ini</span> + <span className="mono">ai/</span>
+                    <span className="mono">models*.ini</span> · <span className="mono">data/surfaces.ini</span> · <span className="mono">ui_track.json</span>
                   </div>
                 </div>
               </div>

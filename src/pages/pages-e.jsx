@@ -66,12 +66,15 @@ function HistoryItem({ item, t }) {
           <div style={{fontSize: 11, color: '#ef4444', marginTop: 2}}>{item.error}</div>
         )}
       </div>
-      <div className="muted" style={{fontSize: 10.5, flexShrink: 0}}>{item.time}</div>
+      <div className="muted" style={{fontSize: 10.5, flexShrink: 0}}>
+        {item.time ? new Date(item.time).toLocaleString() : ''}
+        {item.uploadedBy ? ` · ${item.uploadedBy}` : ''}
+      </div>
     </div>
   );
 }
 
-function PageMods({ isAdmin }) {
+function PageMods({ isAdmin, refreshContent }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k) => k;
   const toast = window.AppShell.useToast();
 
@@ -85,7 +88,10 @@ function PageMods({ isAdmin }) {
   const [chunkedUpload, setChunkedUpload] = uStE(false);
   const inputRef = uRfE(null);
 
-  // Load settings from backend
+  const fetchHistory = () =>
+    fetch('/api/mods/history').then(r => r.json()).then(d => { if (Array.isArray(d)) setHistory(d); }).catch(() => {});
+
+  // Load settings + history from backend
   uEtE(() => {
     fetch('/api/panel/settings')
       .then(r => r.json())
@@ -94,6 +100,7 @@ function PageMods({ isAdmin }) {
         setChunkedUpload(!!d.chunkedUpload);
       })
       .catch(() => {});
+    fetchHistory();
   }, []);
 
   const handleDragOver  = (e) => { e.preventDefault(); setDragging(true); };
@@ -123,19 +130,18 @@ function PageMods({ isAdmin }) {
   };
 
   const handleUploadResult = (d, filename) => {
-    const now = new Date().toLocaleTimeString();
     if (d.ok) {
       setResult({ ok: true, ...d });
-      setHistory(h => [{ ok: true, filename, ...d, time: now }, ...h.slice(0, 9)]);
       toast.push(d.modType === 'car' ? t('mods.success_car') : t('mods.success_track'), 'success');
       setFile(null);
+      if (refreshContent) refreshContent();
     } else {
       setResult({ ok: false, error: d.error || t('common.error') });
-      setHistory(h => [{ ok: false, filename, error: d.error || t('common.error'), time: now }, ...h.slice(0, 9)]);
       toast.push(d.error || t('common.error'), 'error');
     }
     setProgress(100);
     setUploading(false);
+    fetchHistory();
   };
 
   const uploadDirect = () => {
@@ -442,7 +448,10 @@ function PageMods({ isAdmin }) {
               <div className="card-header">
                 <I5.IconHistory size={14} style={{color: 'var(--red)'}}/>
                 <div className="card-title">{t('mods.history_title')}</div>
-                <button className="btn btn-sm right" onClick={() => setHistory([])}>
+                <button className="btn btn-sm right" onClick={() => {
+                  fetch('/api/mods/history', { method: 'DELETE' }).catch(() => {});
+                  setHistory([]);
+                }}>
                   <I5.IconX size={11}/> {t('mods.history_clear')}
                 </button>
               </div>

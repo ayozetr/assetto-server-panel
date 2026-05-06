@@ -206,6 +206,19 @@ try {
       role       TEXT NOT NULL,
       expires_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS mod_history (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      ok              INTEGER NOT NULL,
+      filename        TEXT,
+      mod_type        TEXT,
+      mod_id          TEXT,
+      destination     TEXT,
+      files_extracted INTEGER,
+      error           TEXT,
+      uploaded_by     TEXT,
+      uploaded_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
@@ -1919,6 +1932,52 @@ async function extractArchive(buffer, ext) {
 }
 
 // ── Mod processing (shared by single and chunked upload) ─────────────────────
+function insertModHistory(entry) {
+  if (!db) return;
+  try {
+    db.prepare(`
+      INSERT INTO mod_history (ok, filename, mod_type, mod_id, destination, files_extracted, error, uploaded_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      entry.ok ? 1 : 0,
+      entry.filename || null,
+      entry.modType  || null,
+      entry.modId    || null,
+      entry.destination || null,
+      entry.filesExtracted ?? null,
+      entry.error    || null,
+      entry.uploadedBy || null
+    );
+  } catch {}
+}
+
+function apiModHistoryGet(res) {
+  if (!db) return json(res, 200, []);
+  const rows = db.prepare(`
+    SELECT id, ok, filename, mod_type, mod_id, destination, files_extracted, error, uploaded_by, uploaded_at
+    FROM mod_history ORDER BY id DESC LIMIT 100
+  `).all();
+  json(res, 200, rows.map(r => ({
+    id:             r.id,
+    ok:             !!r.ok,
+    filename:       r.filename,
+    modType:        r.mod_type,
+    modId:          r.mod_id,
+    destination:    r.destination,
+    filesExtracted: r.files_extracted,
+    error:          r.error,
+    uploadedBy:     r.uploaded_by,
+    time:           r.uploaded_at,
+  })));
+}
+
+function apiModHistoryDelete(req, res) {
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 200, { ok: true });
+  db.prepare('DELETE FROM mod_history').run();
+  json(res, 200, { ok: true });
+}
+
 async function processModBuffer(buffer, filename) {
   const ext = path.extname(filename).toLowerCase();
   if (!['.zip', '.rar', '.7z'].includes(ext))
@@ -2010,7 +2069,8 @@ async function cleanupOldChunks() {
 }
 
 async function apiModUploadChunk(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  const uploadedBy = checkAnyAuth(req)?.username || null;
+  if (!uploadedBy) return json(res, 401, { error: 'Unauthorized' });
 
   // Body is JSON with base64-encoded chunk data — same format as other API calls,
   // avoids multipart/form-data and binary bodies which Cloudflare WAF may block
@@ -2056,9 +2116,11 @@ async function apiModUploadChunk(req, res) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
 
     const result = await processModBuffer(Buffer.concat(buffers), filename);
+    insertModHistory({ ok: true, filename, uploadedBy, ...result });
     json(res, 200, { ok: true, done: true, ...result });
   } catch (e) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+    insertModHistory({ ok: false, filename, uploadedBy, error: e.message });
     console.error('Chunk upload error:', e.message);
     json(res, e.status || 500, { error: e.message });
   }
@@ -2083,10 +2145,13 @@ async function apiModUpload(req, res) {
   const filePart = parts.file;
   if (!filePart?.data) return json(res, 400, { error: 'No se recibió ningún archivo (campo: file)' });
 
+  const uploadedBy = checkAnyAuth(req)?.username || null;
   try {
     const result = await processModBuffer(filePart.data, filePart.filename);
+    insertModHistory({ ok: true, filename: filePart.filename, uploadedBy, ...result });
     json(res, 200, { ok: true, ...result });
   } catch (e) {
+    insertModHistory({ ok: false, filename: filePart.filename, uploadedBy, error: e.message });
     console.error('Mod upload error:', e.message);
     json(res, e.status || 500, { error: e.message });
   }
@@ -2118,9 +2183,11 @@ function handler(req, res) {
     if (urlPath === '/api/panel/settings' && req.method === 'GET') return apiPanelSettingsGet(res);
     if (urlPath === '/api/panel/settings' && req.method === 'PUT') return apiPanelSettingsPut(req, res);
 
-    // Mod upload
-    if (urlPath === '/api/mods/upload'       && req.method === 'POST') return apiModUpload(req, res);
-    if (urlPath === '/api/mods/upload/chunk' && req.method === 'POST') return apiModUploadChunk(req, res);
+    // Mod upload & history
+    if (urlPath === '/api/mods/upload'       && req.method === 'POST')   return apiModUpload(req, res);
+    if (urlPath === '/api/mods/upload/chunk' && req.method === 'POST')   return apiModUploadChunk(req, res);
+    if (urlPath === '/api/mods/history'      && req.method === 'GET')    return apiModHistoryGet(res);
+    if (urlPath === '/api/mods/history'      && req.method === 'DELETE') return apiModHistoryDelete(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));

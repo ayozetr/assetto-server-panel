@@ -392,6 +392,11 @@ function AppInner(props) {
       });
   };
 
+  const refreshContent = React.useCallback(() => {
+    fetch('/api/cars').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setCars(d); }).catch(() => {});
+    fetch('/api/tracks').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setTracks(d); }).catch(() => {});
+  }, []);
+
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
   else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
@@ -399,7 +404,7 @@ function AppInner(props) {
   else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes}/>;
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;
-  else if (page === 'mods')      content = <PageMods isAdmin={isAdmin}/>;
+  else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} refreshContent={refreshContent}/>;
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;

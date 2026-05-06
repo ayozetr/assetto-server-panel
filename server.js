@@ -1989,7 +1989,7 @@ async function processModBuffer(buffer, filename) {
 
     return { modType, modId: modRoot, destination: destDir, filesExtracted };
   } finally {
-    if (archive?.close) await archive.close().catch(() => {});
+    if (archive?.close) await Promise.resolve(archive.close()).catch(() => {});
   }
 }
 

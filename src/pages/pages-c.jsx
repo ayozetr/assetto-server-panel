@@ -157,10 +157,10 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
   const [saving, setSaving] = useStateC(false);
   const set = (k, v) => { setConfig(c => ({...c, [k]: v})); setDirty(true); };
 
-  const save = async () => {
+  const save = async (opts) => {
     setSaving(true);
-    try { await onSave(); setDirty(false); }
-    catch { toast.push(t('common.error'), 'error'); }
+    try { await onSave(opts); setDirty(false); }
+    catch {} // toast already raised by caller
     finally { setSaving(false); }
   };
 
@@ -365,10 +365,15 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
         <div className="row" style={{marginTop: 20, justifyContent: 'flex-end', gap: 8, position:'sticky', bottom: 16, background:'var(--bg-2)', padding:'10px 0'}}>
           {dirty && !saving && <span className="badge badge-amber">{t('config.unsaved')}</span>}
           <button className="btn" onClick={()=>setDirty(false)} disabled={saving}>{t('common.cancel')}</button>
-          <button className="btn btn-primary" onClick={save} disabled={!dirty || saving}>
+          <button className="btn" onClick={()=>save({ restart: false })} disabled={!dirty || saving}>
             {saving
               ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
               : <><I4.IconCheck size={13}/> {t('common.save')}</>}
+          </button>
+          <button className="btn btn-primary" onClick={()=>save({ restart: true })} disabled={!dirty || saving}>
+            {saving
+              ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
+              : <><I4.IconPower size={13}/> {t('config.save_and_restart') || 'Guardar y reiniciar'}</>}
           </button>
         </div>
       )}

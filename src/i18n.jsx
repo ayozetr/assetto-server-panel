@@ -80,8 +80,10 @@ const dict = {
     'toast.restart_server': 'Restarting server...',
     'toast.kick': 'kicked from server',
     'toast.ban': 'added to blacklist',
-    'toast.session_apply': 'Session written to server_cfg.ini — restart to apply',
+    'toast.session_apply': 'Session written to server_cfg.ini',
+    'toast.session_apply_restarted': 'Session applied · server restarted',
     'toast.config_saved': 'Configuration saved',
+    'toast.config_saved_restarted': 'Configuration saved · server restarted',
 
     // Tweaks
     'tweaks.title': 'Tweaks',
@@ -187,6 +189,7 @@ const dict = {
     'config.autorestart': 'Restart on fail',
     'config.autorestart_sub': 'Automatic recovery',
     'config.unsaved': 'Unsaved changes',
+    'config.save_and_restart': 'Save & restart',
     'config.lang': 'Language (Language)',
     'config.lang_sub': 'Interface language',
 
@@ -323,7 +326,7 @@ const dict = {
     'sess.no_cars': 'No cars selected',
     'sess.btn_apply': 'Apply Session',
     'sess.modal.title': 'Apply Session',
-    'sess.modal.msg': 'This will overwrite the server configuration.<br>The server needs to be restarted for the changes to take effect.',
+    'sess.modal.msg': 'This will overwrite the server configuration.<br>If the server is running, it will be restarted automatically to apply the changes.',
     'sess.modal.confirm': 'Confirm',
     'sess.practice': 'Practice',
     'sess.qualify': 'Qualify',
@@ -479,8 +482,10 @@ const dict = {
     'toast.restart_server': 'Reiniciando servidor…',
     'toast.kick': 'expulsado del servidor',
     'toast.ban': 'añadido a blacklist',
-    'toast.session_apply': 'Sesión escrita en server_cfg.ini — reinicia para aplicar',
+    'toast.session_apply': 'Sesión escrita en server_cfg.ini',
+    'toast.session_apply_restarted': 'Sesión aplicada · servidor reiniciado',
     'toast.config_saved': 'Configuración guardada',
+    'toast.config_saved_restarted': 'Configuración guardada · servidor reiniciado',
 
     // Tweaks
     'tweaks.title': 'Tweaks',
@@ -586,6 +591,7 @@ const dict = {
     'config.autorestart': 'Reiniciar al fallar',
     'config.autorestart_sub': 'Recuperación automática',
     'config.unsaved': 'Cambios sin guardar',
+    'config.save_and_restart': 'Guardar y reiniciar',
     'config.lang': 'Idioma (Language)',
     'config.lang_sub': 'Idioma de la interfaz',
 
@@ -722,7 +728,7 @@ const dict = {
     'sess.no_cars': 'Ningún coche seleccionado',
     'sess.btn_apply': 'Aplicar Sesión',
     'sess.modal.title': 'Aplicar Sesión',
-    'sess.modal.msg': 'Esto sobreescribirá la configuración del servidor.<br>Es necesario reiniciar el servidor para aplicar los cambios.',
+    'sess.modal.msg': 'Esto sobrescribirá la configuración del servidor.<br>Si está en ejecución, se reiniciará automáticamente para aplicar los cambios.',
     'sess.modal.confirm': 'Confirmar',
     'sess.practice': 'Práctica',
     'sess.qualify': 'Clasificación',
@@ -878,8 +884,10 @@ const dict = {
     'toast.restart_server': 'Riavvio server in corso...',
     'toast.kick': 'espulso dal server',
     'toast.ban': 'aggiunto alla blacklist',
-    'toast.session_apply': 'Sessione scritta su server_cfg.ini — riavvia per applicare',
+    'toast.session_apply': 'Sessione scritta su server_cfg.ini',
+    'toast.session_apply_restarted': 'Sessione applicata · server riavviato',
     'toast.config_saved': 'Configurazione salvata',
+    'toast.config_saved_restarted': 'Configurazione salvata · server riavviato',
 
     // Tweaks
     'tweaks.title': 'Tweak',
@@ -985,6 +993,7 @@ const dict = {
     'config.autorestart': 'Riavvio su errore',
     'config.autorestart_sub': 'Recupero automatico',
     'config.unsaved': 'Modifiche non salvate',
+    'config.save_and_restart': 'Salva e riavvia',
     'config.lang': 'Lingua (Language)',
     'config.lang_sub': 'Lingua interfaccia',
 
@@ -1121,7 +1130,7 @@ const dict = {
     'sess.no_cars': 'Nessuna auto selezionata',
     'sess.btn_apply': 'Applica Sessione',
     'sess.modal.title': 'Applica Sessione',
-    'sess.modal.msg': 'Questo sovrascriverà la configurazione del server.<br>È necessario riavviare il server per applicare le modifiche.',
+    'sess.modal.msg': 'Questo sovrascriverà la configurazione del server.<br>Se è in esecuzione, verrà riavviato automaticamente per applicare le modifiche.',
     'sess.modal.confirm': 'Conferma',
     'sess.practice': 'Pratica',
     'sess.qualify': 'Qualifica',

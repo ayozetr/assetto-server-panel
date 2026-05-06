@@ -890,7 +890,24 @@ async function apiConfigUpdate(req, res) {
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
-    json(res, 200, { ok: true });
+
+    // Optional auto-restart if requested
+    let restarted = false, restartError = null;
+    if (body.restart === true) {
+      const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
+      if (wasRunning) {
+        const k = await killAC();
+        if (!k.ok) restartError = k.error || 'No se pudo detener';
+        else {
+          await waitForACDown(6000);
+          await sleep(500);
+          const sp = await spawnAC();
+          if (!sp.ok) restartError = sp.error || 'No se pudo arrancar';
+          else { await waitForACUp(10000); restarted = true; }
+        }
+      }
+    }
+    json(res, 200, { ok: true, restarted, restartError });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -1317,83 +1334,227 @@ async function apiSessionApply(req, res) {
     const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
     const ini  = parseINI(raw);
     const s    = ini['SERVER'] = ini['SERVER'] || {};
-    if (body.trackId !== undefined) s['TRACK']        = body.trackId;
-    if (body.layout  !== undefined) s['CONFIG_TRACK'] = body.layout || '';
-    if (Array.isArray(body.cars) && body.cars.length)
-      s['CARS'] = [...new Set(body.cars)].join(';');
+    if (body.trackId !== undefined) {
+      if (body.trackId && !isValidContentId(body.trackId))
+        return json(res, 400, { error: 'trackId inválido' });
+      s['TRACK'] = body.trackId || '';
+    }
+    if (body.layout !== undefined) {
+      if (body.layout && !isValidContentId(body.layout))
+        return json(res, 400, { error: 'layout inválido' });
+      s['CONFIG_TRACK'] = body.layout || '';
+    }
+    if (Array.isArray(body.cars)) {
+      const clean = body.cars.filter(isValidContentId);
+      if (body.cars.length && !clean.length)
+        return json(res, 400, { error: 'cars contiene identificadores inválidos' });
+      if (clean.length) s['CARS'] = [...new Set(clean)].join(';');
+    }
     if (body.slots !== undefined) {
       const v = clampInt(body.slots, 1, 200);
       if (v) s['MAX_CLIENTS'] = String(v);
     }
+
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
-    json(res, 200, { ok: true });
+
+    // Auto-restart if server is running and the caller asks for it
+    let restarted = false, restartError = null;
+    const wantRestart = body.restart !== false; // default ON
+    if (wantRestart) {
+      const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
+      if (wasRunning) {
+        const k = await killAC();
+        if (!k.ok) restartError = k.error || 'No se pudo detener';
+        else {
+          await waitForACDown(6000);
+          await sleep(500);
+          const sp = await spawnAC();
+          if (!sp.ok) restartError = sp.error || 'No se pudo arrancar';
+          else { await waitForACUp(10000); restarted = true; }
+        }
+      }
+    }
+    json(res, 200, { ok: true, restarted, restartError });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
 // ── Server control ────────────────────────────────────────────────────────────
-function spawnAC() {
-  let logFd = null;
-  try {
-    fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true });
-    logFd = fs.openSync(AC_LOG_FILE, 'a');
-  } catch {}
-  try {
-    const stdio = logFd !== null ? ['ignore', logFd, logFd] : 'ignore';
-    acChild = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio, detached: false });
-    acChild.on('exit', () => {
-      if (logFd !== null) { try { fs.closeSync(logFd); } catch {} logFd = null; }
-      acChild = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Find acServer PID by name (for adoption when dashboard restarts mid-run)
+function findACPid() {
+  return new Promise(resolve => {
+    const p = spawn('pidof', ['-s', 'acServer']);
+    let out = '';
+    p.stdout.on('data', d => out += d);
+    p.on('close', () => {
+      const pid = parseInt(out.trim(), 10);
+      resolve(Number.isFinite(pid) && pid > 0 ? pid : null);
     });
+    p.on('error', () => resolve(null));
+  });
+}
+
+function pidAlive(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+// Wait until either (a) HTTP /INFO answers, or (b) timeout elapses
+async function waitForACUp(timeoutMs = 12000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const { running } = await getACInfo();
+    if (running) return true;
+    await sleep(400);
+  }
+  return false;
+}
+
+async function waitForACDown(timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const { running } = await getACInfo();
+    const childAlive = acChild && !acChild.killed;
+    const adoptedAlive = !childAlive && (await findACPid());
+    if (!running && !childAlive && !adoptedAlive) return true;
+    await sleep(300);
+  }
+  return false;
+}
+
+function checkBinary() {
+  try {
+    const st = fs.statSync(AC_BIN);
+    if (!st.isFile()) return `AC_SERVER_BIN no es un archivo: ${AC_BIN}`;
+    fs.accessSync(AC_BIN, fs.constants.X_OK);
+    return null;
   } catch (e) {
-    if (logFd !== null) { try { fs.closeSync(logFd); } catch {} }
-    console.error('acServer spawn failed:', e.message);
-    acChild = null;
+    if (e.code === 'ENOENT') return `Binario no encontrado: ${AC_BIN} (revisa AC_SERVER_BIN en .env)`;
+    if (e.code === 'EACCES') return `Binario sin permiso de ejecución: ${AC_BIN}`;
+    return `Binario inaccesible: ${e.message}`;
   }
 }
 
-function killAC() {
+function spawnAC() {
+  return new Promise((resolve) => {
+    const err = checkBinary();
+    if (err) { console.error('[AC] spawn error:', err); _acRunSince = null; return resolve({ ok: false, error: err }); }
+    let logFd = null;
+    try { fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true }); logFd = fs.openSync(AC_LOG_FILE, 'a'); } catch {}
+    const stdio = logFd !== null ? ['ignore', logFd, logFd] : 'ignore';
+    const closeLog = () => { if (logFd !== null) { try { fs.closeSync(logFd); } catch {} logFd = null; } };
+    try {
+      const child = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio, detached: false });
+      let settled = false;
+      child.once('error', e => {
+        if (settled) return;
+        settled = true;
+        console.error('[AC] spawn error:', e.message);
+        closeLog();
+        acChild = null;
+        resolve({ ok: false, error: e.message });
+      });
+      child.once('exit', (code, signal) => {
+        if (acChild === child) acChild = null;
+        closeLog();
+        if (!settled) {
+          settled = true;
+          resolve({ ok: false, error: `Proceso terminó al arrancar (code=${code} signal=${signal})` });
+        }
+      });
+      acChild = child;
+      // Give it a moment to confirm it didn't crash immediately
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        if (acChild && !acChild.killed) resolve({ ok: true });
+        else resolve({ ok: false, error: 'Proceso no continuó tras arrancar' });
+      }, 500);
+    } catch (e) {
+      console.error('[AC] spawn exception:', e.message);
+      closeLog();
+      acChild = null;
+      resolve({ ok: false, error: e.message });
+    }
+  });
+}
+
+async function killAC() {
+  // 1. tracked child
   if (acChild && !acChild.killed) {
     try { acChild.kill('SIGTERM'); } catch {}
-    acChild = null;
-  } else {
-    // Dashboard restarted while AC was running — no child handle; kill by name
-    try { spawn('pkill', ['-x', 'acServer'], { stdio: 'ignore' }); } catch {}
   }
+  // 2. adopted process (dashboard restarted while AC was running)
+  let adoptedPid = await findACPid();
+  if (adoptedPid) {
+    try { process.kill(adoptedPid, 'SIGTERM'); } catch {}
+  }
+
+  const deadline = Date.now() + 6000;
+  while (Date.now() < deadline) {
+    const childAlive = acChild && !acChild.killed && pidAlive(acChild.pid);
+    if (!childAlive) acChild = null;
+    adoptedPid = await findACPid();
+    if (!childAlive && !adoptedPid) {
+      _acRunSince = null;
+      return { ok: true };
+    }
+    await sleep(250);
+  }
+
+  // SIGKILL fallback
+  if (acChild) { try { acChild.kill('SIGKILL'); } catch {} acChild = null; }
+  adoptedPid = await findACPid();
+  if (adoptedPid) { try { process.kill(adoptedPid, 'SIGKILL'); } catch {} }
+  await sleep(400);
+
+  const stillUp = await findACPid();
+  _acRunSince = null;
+  if (stillUp) return { ok: false, error: 'No se pudo terminar acServer' };
+  return { ok: true };
 }
 
 async function apiServerStart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  if (acChild && !acChild.killed) return json(res, 409, { error: 'Already running' });
-  // Guard against double-spawn if dashboard restarted while AC was already running
+  // Already running?
+  if (acChild && !acChild.killed) return json(res, 409, { error: 'El servidor ya está en ejecución' });
+  if (await findACPid())          return json(res, 409, { error: 'El servidor ya está en ejecución' });
   const { running } = await getACInfo();
-  if (running) return json(res, 409, { error: 'Already running' });
-  spawnAC();
+  if (running) return json(res, 409, { error: 'El servidor ya está en ejecución' });
+
+  const r = await spawnAC();
+  if (!r.ok) return json(res, 500, { error: r.error || 'No se pudo arrancar' });
+  // Give it a chance to bind HTTP port; report success even if HTTP not yet up
+  await waitForACUp(8000);
   json(res, 200, { ok: true });
 }
 
-function apiServerStop(req, res) {
+async function apiServerStop(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  killAC();
+  const r = await killAC();
+  if (!r.ok) return json(res, 500, { error: r.error || 'No se pudo detener' });
+  await waitForACDown(6000);
   json(res, 200, { ok: true });
 }
 
-function apiServerRestart(req, res) {
+async function apiServerRestart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  killAC();
-  setTimeout(spawnAC, 1500);
+  const k = await killAC();
+  if (!k.ok) return json(res, 500, { error: k.error || 'No se pudo detener' });
+  await waitForACDown(6000);
+  await sleep(500); // let ports release
+  const s = await spawnAC();
+  if (!s.ok) return json(res, 500, { error: s.error || 'No se pudo arrancar' });
+  await waitForACUp(10000);
   json(res, 200, { ok: true });
 }
 
-function apiServerReload(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  if (acChild && !acChild.killed) {
-    try { acChild.kill('SIGHUP'); } catch {}
-  } else {
-    // Dashboard restarted — send SIGHUP by process name
-    try { spawn('pkill', ['-HUP', '-x', 'acServer'], { stdio: 'ignore' }); } catch {}
-  }
-  json(res, 200, { ok: true });
+// acServer no soporta SIGHUP para recargar config: el "reload" es un restart
+// rápido. Lo dejamos como alias claro para no romper la UI existente.
+async function apiServerReload(req, res) {
+  return apiServerRestart(req, res);
 }
 
 // ── Login rate limiting ───────────────────────────────────────────────────────

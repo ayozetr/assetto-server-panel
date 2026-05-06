@@ -232,22 +232,41 @@ function AppInner(props) {
 
   const handleServerAction = (action) => {
     if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
-    if (action === 'reload') {
-      toast.push(t('toast.reload_config'), 'info');
-      fetch('/api/server/reload', { method: 'POST' })
-        .then(r => r.json())
-        .then(d => toast.push(d.error ? `${t('common.error')}: ${d.error}` : t('toast.reload_sent'), d.error ? 'error' : 'success'))
-        .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
-      return;
-    }
     const transitional = action === 'stop' ? 'stopping' : 'starting';
     setServer(s => ({...s, status: transitional}));
-    const msgMap = { start: t('toast.start_server'), stop: t('toast.stop_server'), restart: t('toast.restart_server') };
-    toast.push(msgMap[action], 'info');
+    const msgMap = {
+      start:   t('toast.start_server'),
+      stop:    t('toast.stop_server'),
+      restart: t('toast.restart_server'),
+      reload:  t('toast.reload_config'),
+    };
+    toast.push(msgMap[action] || msgMap.start, 'info');
+
     fetch(`/api/server/${action}`, { method: 'POST' })
-      .then(r => r.json())
-      .then(d => { if (d.error) toast.push(`${t('common.error')}: ${d.error}`, 'error'); })
-      .catch(e => toast.push(`${t('common.net_error')}: ${e.message}`, 'error'));
+      .then(async r => {
+        let d = {};
+        try { d = await r.json(); } catch {}
+        if (!r.ok || d.error) {
+          // Restore status from next metrics poll instead of staying transitional
+          setServer(s => ({...s, status: 'stopped'}));
+          toast.push(`${t('common.error')}: ${d.error || ('HTTP ' + r.status)}`, 'error');
+          return;
+        }
+        const okMsg = action === 'stop' ? t('topbar.stopped')
+                    : action === 'start' ? t('topbar.running')
+                    : t('toast.reload_sent');
+        toast.push(okMsg, 'success');
+        // Reload current config so UI reflects what's actually live
+        if (action === 'restart' || action === 'reload' || action === 'start') {
+          fetch('/api/config').then(r => r.json()).then(c => {
+            if (c && !c.error) setConfig(prev => ({ ...prev, ...c }));
+          }).catch(()=>{});
+        }
+      })
+      .catch(e => {
+        setServer(s => ({...s, status: 'stopped'}));
+        toast.push(`${t('common.net_error')}: ${e.message}`, 'error');
+      });
   };
 
   const handleKick = (p) => {
@@ -288,7 +307,25 @@ function AppInner(props) {
       .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
   };
 
+  const refreshConfig = () =>
+    fetch('/api/config').then(r => r.json()).then(d => {
+      if (d && !d.error) {
+        setConfig(prev => ({ ...prev, ...d }));
+        if (d.track) {
+          setSessionCfg(s => ({
+            ...s,
+            trackId: d.track,
+            layout:  d.trackConfig || '',
+            carIds:  d.cars?.length ? d.cars : s.carIds,
+          }));
+        }
+      }
+    }).catch(()=>{});
+
   const handleApplySession = () => {
+    if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
+    const wasRunning = server.status === 'running';
+    if (wasRunning) setServer(s => ({...s, status: 'starting'}));
     fetch('/api/session/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -297,38 +334,63 @@ function AppInner(props) {
         layout:  sessionCfg.layout || '',
         cars:    sessionCfg.carIds,
         slots:   sessionCfg.slots,
+        restart: true,
       }),
     })
-      .then(r => r.json())
-      .then(d => {
-        if (!d.error) setServer(s => ({ ...s, slots: sessionCfg.slots }));
-        toast.push(d.error ? `${t('common.error')}: ${d.error}` : t('toast.session_apply'), d.error ? 'error' : 'success');
+      .then(async r => {
+        let d = {};
+        try { d = await r.json(); } catch {}
+        if (!r.ok || d.error) {
+          if (wasRunning) setServer(s => ({...s, status: 'running'}));
+          toast.push(`${t('common.error')}: ${d.error || ('HTTP ' + r.status)}`, 'error');
+          return;
+        }
+        if (sessionCfg.slots) setServer(s => ({ ...s, slots: sessionCfg.slots }));
+        if (d.restartError) {
+          toast.push(`${t('toast.session_apply')} · ${d.restartError}`, 'warn');
+        } else if (d.restarted) {
+          toast.push(t('toast.session_apply_restarted') || t('toast.session_apply'), 'success');
+        } else {
+          toast.push(t('toast.session_apply'), 'success');
+        }
+        refreshConfig();
       })
-      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
+      .catch(e => {
+        if (wasRunning) setServer(s => ({...s, status: 'running'}));
+        toast.push(`${t('common.error')}: ${e.message}`, 'error');
+      });
   };
-  const handleSaveConfig = () =>
-    fetch('/api/config', {
+
+  const handleSaveConfig = (opts = {}) => {
+    if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return Promise.reject(new Error('no admin')); }
+    const restart = opts.restart === true;
+    return fetch('/api/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify({ ...config, restart }),
     })
-      .then(r => {
+      .then(async r => {
         if (r.status === 401) { setUser(null); throw new Error('session_expired'); }
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then(d => {
-        if (d.error) throw new Error(d.error);
+        let d = {};
+        try { d = await r.json(); } catch {}
+        if (!r.ok || d.error) {
+          toast.push(`${t('common.error')}: ${d.error || ('HTTP ' + r.status)}`, 'error');
+          throw new Error(d.error || 'save failed');
+        }
         if (config.maxClients > 0) {
           setServer(s => ({ ...s, slots: config.maxClients }));
           setSessionCfg(s => ({ ...s, slots: config.maxClients }));
         }
-        toast.push(t('toast.config_saved'), 'success');
+        if (d.restartError) toast.push(`${t('toast.config_saved')} · ${d.restartError}`, 'warn');
+        else if (d.restarted) toast.push(t('toast.config_saved_restarted') || t('toast.config_saved'), 'success');
+        else toast.push(t('toast.config_saved'), 'success');
+        refreshConfig();
       })
-      .catch(e => {
-        if (e.message !== 'session_expired') toast.push(`${t('common.error')}: ${e.message}`, 'error');
+      .catch((e) => {
+        if (e.message !== 'save failed' && e.message !== 'session_expired') toast.push(t('common.error'), 'error');
         throw e;
       });
+  };
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;

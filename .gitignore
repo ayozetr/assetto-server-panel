@@ -16,6 +16,8 @@ logs/
 
 # Artefacts
 *.zip
+*.rar
+*.7z
 *.sh
 
 # Python

@@ -20,12 +20,12 @@ const HOST         = process.env.HOST              || '0.0.0.0';
 const PORT         = parseInt(process.env.PORT     || '3000', 10);
 const AC_HTTP_PORT = parseInt(process.env.AC_HTTP_PORT || '8081', 10);
 const AC_LOG_FILE  = process.env.AC_SERVER_LOG     || path.join(__dirname, 'logs', 'ac_server.log');
-const AC_RESULTS   = process.env.AC_SERVER_RESULTS || '/home/<user>/ac_server/results';
+const AC_RESULTS   = process.env.AC_SERVER_RESULTS || path.join(os.homedir(), 'ac_server', 'results');
 const AC_CFG_FILE  = path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'server_cfg.ini');
 const AC_CARS_DIR  = path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'cars');
 const AC_TRACKS_DIR= path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'tracks');
 const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
-const AC_BIN          = process.env.AC_SERVER_BIN || '/home/<user>/ac_server/acServer';
+const AC_BIN          = process.env.AC_SERVER_BIN || path.join(os.homedir(), 'ac_server', 'acServer');
 const AC_BIN_DIR      = process.env.AC_SERVER_DIR || path.dirname(AC_BIN);
 const AC_BLACKLIST    = process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt');
 const ADMIN_TOKEN     = process.env.ADMIN_TOKEN || '';
@@ -121,7 +121,7 @@ function checkAdminAuth(req) {
 }
 
 function checkAnyAuth(req) {
-  return !!getSession(req);
+  return getSession(req);
 }
 
 // ── MIME ──────────────────────────────────────────────────────────────────────

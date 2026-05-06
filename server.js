@@ -2012,22 +2012,29 @@ async function cleanupOldChunks() {
 async function apiModUploadChunk(req, res) {
   if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
 
-  let parts;
-  try { parts = await parseMultipart(req, 100 * 1024 * 1024); }
-  catch (e) { return json(res, 400, { error: `Error en la subida: ${e.message}` }); }
+  // Metadata comes from headers — avoids multipart (blocked by some proxies/WAF)
+  const uploadId    = (req.headers['x-upload-id']     || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const chunkIndex  = parseInt(req.headers['x-chunk-index']  || '-1', 10);
+  const totalChunks = parseInt(req.headers['x-total-chunks'] || '0',  10);
+  const filename    = (() => { try { return decodeURIComponent(req.headers['x-filename'] || ''); } catch { return ''; } })();
 
-  const uploadId    = (parts.uploadId    || '').replace(/[^a-zA-Z0-9_-]/g, '');
-  const chunkIndex  = parseInt(parts.chunkIndex  || '-1', 10);
-  const totalChunks = parseInt(parts.totalChunks || '0',  10);
-  const filename    = parts.filename || '';
-  const chunkData   = parts.chunk?.data;
-
-  if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !chunkData || !filename)
+  if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !filename)
     return json(res, 400, { error: 'Parámetros de chunk inválidos' });
 
   const uploadDir = path.join(CHUNK_TMP_DIR, uploadId);
   if (!uploadDir.startsWith(CHUNK_TMP_DIR + path.sep))
     return json(res, 400, { error: 'uploadId inválido' });
+
+  let chunkData;
+  try {
+    chunkData = await new Promise((resolve, reject) => {
+      const parts = [];
+      let total = 0;
+      req.on('data', c => { total += c.length; if (total > 10 * 1024 * 1024) { req.destroy(); reject(new Error('Chunk demasiado grande')); } else parts.push(c); });
+      req.on('error', reject);
+      req.on('end', () => resolve(Buffer.concat(parts)));
+    });
+  } catch (e) { return json(res, 400, { error: e.message }); }
 
   try {
     await fsp.mkdir(uploadDir, { recursive: true });
@@ -2037,7 +2044,6 @@ async function apiModUploadChunk(req, res) {
     if (received < totalChunks)
       return json(res, 200, { ok: true, done: false, received, total: totalChunks });
 
-    // All chunks here — assemble and process
     const buffers = [];
     for (let i = 0; i < totalChunks; i++)
       buffers.push(await fsp.readFile(path.join(uploadDir, `chunk-${i}`)));

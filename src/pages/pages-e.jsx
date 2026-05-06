@@ -158,7 +158,7 @@ function PageMods({ isAdmin }) {
     xhr.send(fd);
   };
 
-  const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB per chunk
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB — safely under Cloudflare/proxy limits
   const uploadChunked = async () => {
     const uploadId    = Math.random().toString(36).slice(2) + Date.now().toString(36);
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
@@ -166,28 +166,22 @@ function PageMods({ isAdmin }) {
     try {
       for (let i = 0; i < totalChunks; i++) {
         const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-        const fd = new FormData();
-        fd.append('chunk', chunk);
-        fd.append('uploadId', uploadId);
-        fd.append('chunkIndex', String(i));
-        fd.append('totalChunks', String(totalChunks));
-        fd.append('filename', filename);
-        const d = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', '/api/mods/upload/chunk');
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              const chunkPct = e.loaded / e.total;
-              setProgress(Math.round(((i + chunkPct) / totalChunks) * 95));
-            }
-          };
-          xhr.onload  = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error('Respuesta inválida')); } };
-          xhr.onerror = () => reject(new Error(t('common.net_error')));
-          xhr.send(fd);
+        // Send as raw binary with headers — avoids multipart/form-data which some proxies block
+        const resp = await fetch('/api/mods/upload/chunk', {
+          method: 'POST',
+          headers: {
+            'Content-Type':    'application/octet-stream',
+            'X-Upload-Id':     uploadId,
+            'X-Chunk-Index':   String(i),
+            'X-Total-Chunks':  String(totalChunks),
+            'X-Filename':      encodeURIComponent(filename),
+          },
+          body: chunk,
         });
+        const d = await resp.json();
+        setProgress(Math.round(((i + 1) / totalChunks) * 95));
         if (!d.ok) { handleUploadResult(d, filename); return; }
         if (d.done) { handleUploadResult(d, filename); return; }
-        setProgress(Math.round(((i + 1) / totalChunks) * 95));
       }
     } catch (e) {
       setResult({ ok: false, error: e.message });

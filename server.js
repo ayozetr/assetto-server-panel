@@ -2012,13 +2012,26 @@ async function cleanupOldChunks() {
 async function apiModUploadChunk(req, res) {
   if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
 
-  // Metadata comes from headers — avoids multipart (blocked by some proxies/WAF)
-  const uploadId    = (req.headers['x-upload-id']     || '').replace(/[^a-zA-Z0-9_-]/g, '');
-  const chunkIndex  = parseInt(req.headers['x-chunk-index']  || '-1', 10);
-  const totalChunks = parseInt(req.headers['x-total-chunks'] || '0',  10);
-  const filename    = (() => { try { return decodeURIComponent(req.headers['x-filename'] || ''); } catch { return ''; } })();
+  // Body is JSON with base64-encoded chunk data — same format as other API calls,
+  // avoids multipart/form-data and binary bodies which Cloudflare WAF may block
+  let body;
+  try {
+    body = await new Promise((resolve, reject) => {
+      const MAX = 10 * 1024 * 1024; // 10 MB JSON limit (base64 of 7 MB chunk)
+      let raw = '';
+      req.on('data', c => { raw += c; if (raw.length > MAX) { req.destroy(); reject(new Error('Body demasiado grande')); } });
+      req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { reject(new Error('JSON inválido')); } });
+      req.on('error', reject);
+    });
+  } catch (e) { return json(res, 400, { error: e.message }); }
 
-  if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !filename)
+  const uploadId    = (body.uploadId    || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const chunkIndex  = parseInt(body.chunkIndex  ?? '-1', 10);
+  const totalChunks = parseInt(body.totalChunks ?? '0',  10);
+  const filename    = body.filename || '';
+  const dataB64     = body.data || '';
+
+  if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !filename || !dataB64)
     return json(res, 400, { error: 'Parámetros de chunk inválidos' });
 
   const uploadDir = path.join(CHUNK_TMP_DIR, uploadId);
@@ -2026,15 +2039,8 @@ async function apiModUploadChunk(req, res) {
     return json(res, 400, { error: 'uploadId inválido' });
 
   let chunkData;
-  try {
-    chunkData = await new Promise((resolve, reject) => {
-      const parts = [];
-      let total = 0;
-      req.on('data', c => { total += c.length; if (total > 10 * 1024 * 1024) { req.destroy(); reject(new Error('Chunk demasiado grande')); } else parts.push(c); });
-      req.on('error', reject);
-      req.on('end', () => resolve(Buffer.concat(parts)));
-    });
-  } catch (e) { return json(res, 400, { error: e.message }); }
+  try { chunkData = Buffer.from(dataB64, 'base64'); }
+  catch { return json(res, 400, { error: 'Datos base64 inválidos' }); }
 
   try {
     await fsp.mkdir(uploadDir, { recursive: true });

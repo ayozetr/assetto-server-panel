@@ -158,26 +158,28 @@ function PageMods({ isAdmin }) {
     xhr.send(fd);
   };
 
-  const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB — safely under Cloudflare/proxy limits
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks
+  const toBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
   const uploadChunked = async () => {
     const uploadId    = Math.random().toString(36).slice(2) + Date.now().toString(36);
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     const filename    = file.name;
     try {
       for (let i = 0; i < totalChunks; i++) {
-        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-        // Send as raw binary with headers — avoids multipart/form-data which some proxies block
+        const chunk  = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const data   = await toBase64(chunk);
+        // Send as JSON — same format as login, guaranteed to pass through Cloudflare
         const resp = await fetch('/api/mods/upload/chunk', {
-          method: 'POST',
-          headers: {
-            'Content-Type':    'application/octet-stream',
-            'X-Upload-Id':     uploadId,
-            'X-Chunk-Index':   String(i),
-            'X-Total-Chunks':  String(totalChunks),
-            'X-Filename':      encodeURIComponent(filename),
-          },
-          body: chunk,
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ uploadId, chunkIndex: i, totalChunks, filename, data }),
         });
+        if (!resp.ok && resp.status !== 200) throw new Error(`HTTP ${resp.status}`);
         const d = await resp.json();
         setProgress(Math.round(((i + 1) / totalChunks) * 95));
         if (!d.ok) { handleUploadResult(d, filename); return; }

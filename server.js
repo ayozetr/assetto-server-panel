@@ -238,7 +238,7 @@ function seedDefaultUsers() {
   if (!db) return;
   try {
     const DEFAULT_PASS = 'Admin1234!';
-    for (const [username, role] of [['admin', 'admin'], ['mattia', 'admin']]) {
+    for (const [username, role] of [['admin', 'admin']]) {
       const existing = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
       if (!existing) {
         const salt = crypto.randomBytes(32).toString('hex');
@@ -1643,7 +1643,7 @@ async function apiAuthLogin(req, res) {
     if (!username || !password) return json(res, 400, { error: 'Usuario y contraseña requeridos' });
 
     if (!db) {
-      const role = (username === 'admin' || username === 'mattia') ? 'admin' : 'user';
+      const role = username === 'admin' ? 'admin' : 'user';
       return json(res, 200, { ok: true, user: { name: username, role } });
     }
 

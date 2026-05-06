@@ -1961,12 +1961,14 @@ async function apiModUpload(req, res) {
     const hasKn5    = allFiles.some(n => n.endsWith('.kn5'));
     const hasData   = allDirs.some(n => /\/data\/$/.test(n) || /^data\/$/.test(n)) ||
                       allFiles.some(n => /\/data\.acd$/.test(n) || /^data\.acd$/.test(n));
-    const hasModels = allFiles.some(n => /(^|\/)(models\.ini)$/.test(n));
-    const hasAi     = allDirs.some(n => /(\/|^)ai\/$/.test(n));
+    const hasModels = allFiles.some(n => /(^|\/)models(_[^/]+)?\.ini$/.test(n));
+    const hasAi     = allDirs.some(n => /(\/|^)ai\/$/.test(n)) ||
+                      allFiles.some(n => /(\/|^)ai\//.test(n));
 
     let modType = null;
-    if (hasKn5 && hasData)    modType = 'car';
-    else if (hasModels && hasAi) modType = 'track';
+    if (hasKn5 && hasData)       modType = 'car';
+    else if (hasKn5 && hasModels) modType = 'track';
+    else if (hasModels && hasAi)  modType = 'track';
 
     if (!modType)
       return json(res, 422, { error: 'No se encontró un mod válido. Un coche necesita .kn5 + data/; un circuito necesita models.ini + ai/' });

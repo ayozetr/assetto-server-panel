@@ -73,6 +73,7 @@ Open `http://<server-ip>:3000` in your browser.
 | [Database](docs/database.md) | SQLite schema and what gets stored |
 | [API reference](docs/api.md) | All server endpoints |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and how to fix them |
+| [Tools](docs/tools.md) | Scripts for extracting and compressing bundled Kunos assets |
 
 ---
 

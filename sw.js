@@ -1,7 +1,7 @@
 // Assetto Server Panel — Service Worker
 // Strategy: Network-first for API calls, Cache-first for static assets
 
-const CACHE_NAME  = 'ac-panel-v3';
+const CACHE_NAME  = 'ac-panel-v4';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install
@@ -47,6 +47,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // Never intercept chunk uploads — SW's fetch(request) corrupts large POST bodies
+  if (url.pathname === '/api/mods/upload/chunk') return;
 
   // Always go network-first for API calls (real-time data)
   if (url.pathname.startsWith(API_PREFIX)) {

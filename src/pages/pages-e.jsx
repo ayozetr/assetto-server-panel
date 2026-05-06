@@ -174,22 +174,6 @@ function PageMods({ isAdmin }) {
 
   const clearFile = () => { setFile(null); setResult(null); setProgress(0); };
 
-  if (!isAdmin) {
-    return (
-      <>
-        <div className="page-header">
-          <h1 className="page-title">{t('mods.title')}</h1>
-        </div>
-        <div className="card">
-          <div className="empty">
-            <I5.IconLock size={20} style={{display:'block', margin:'0 auto 10px'}}/>
-            {t('mods.admin_only')}
-          </div>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
       <div className="page-header">

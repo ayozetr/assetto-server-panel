@@ -1,7 +1,7 @@
 // Assetto Server Panel — Service Worker
 // Strategy: Network-first for API calls, Cache-first for static assets
 
-const CACHE_NAME  = 'ac-panel-v6';
+const CACHE_NAME  = 'ac-panel-v7';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install

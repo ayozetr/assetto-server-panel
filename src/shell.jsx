@@ -51,7 +51,8 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
     { id: 'session', label: t('nav.session'), icon: I.IconFlag, group: 'content' },
 
     { id: 'config', label: t('nav.config'), icon: I.IconSettings, group: 'admin', adminOnly: true },
-    { id: 'users', label: t('nav.users'), icon: I.IconUsers, group: 'admin', adminOnly: true },
+    { id: 'users',  label: t('nav.users'),  icon: I.IconUsers,    group: 'admin', adminOnly: true },
+    { id: 'audit',  label: t('nav.audit'),  icon: I.IconHistory,  group: 'admin', adminOnly: true },
     // profile is accessible only via the key icon in the footer, not listed in the nav
   ];
   const groups = {

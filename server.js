@@ -219,6 +219,16 @@ try {
       uploaded_by     TEXT,
       uploaded_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor      TEXT NOT NULL,
+      action     TEXT NOT NULL,
+      target     TEXT DEFAULT '',
+      detail     TEXT DEFAULT '',
+      logged_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logged_at ON audit_log(logged_at);
   `);
   // Schema migrations (safe to run on every start)
   try { db.exec(`ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`); } catch {}
@@ -945,6 +955,7 @@ async function apiConfigUpdate(req, res) {
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'config.save', 'server_cfg.ini');
 
     // Optional auto-restart if requested
     let restarted = false, restartError = null;
@@ -952,12 +963,12 @@ async function apiConfigUpdate(req, res) {
       const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
       if (wasRunning) {
         const k = await killAC();
-        if (!k.ok) restartError = k.error || 'No se pudo detener';
+        if (!k.ok) restartError = k.error || 'Failed to stop server';
         else {
           await waitForACDown(6000);
           await sleep(500);
           const sp = await spawnAC();
-          if (!sp.ok) restartError = sp.error || 'No se pudo arrancar';
+          if (!sp.ok) restartError = sp.error || 'Failed to start server';
           else { await waitForACUp(10000); restarted = true; }
         }
       }
@@ -1341,6 +1352,8 @@ async function apiPlayerKick(req, res) {
       r.write(JSON.stringify({ car_id: carId }));
       r.end();
     });
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    insertAuditLog(actor, 'player.kick', String(carId));
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1355,6 +1368,8 @@ async function apiPlayerBan(req, res) {
     try { existing = fs.readFileSync(AC_BLACKLIST, 'utf8'); } catch {}
     const guids = existing.split('\n').map(s => s.trim()).filter(Boolean);
     if (!guids.includes(guid)) fs.appendFileSync(AC_BLACKLIST, guid + '\n');
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    insertAuditLog(actor, 'player.ban', guid, body.name || '');
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1420,16 +1435,19 @@ async function apiSessionApply(req, res) {
       const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
       if (wasRunning) {
         const k = await killAC();
-        if (!k.ok) restartError = k.error || 'No se pudo detener';
+        if (!k.ok) restartError = k.error || 'Failed to stop server';
         else {
           await waitForACDown(6000);
           await sleep(500);
           const sp = await spawnAC();
-          if (!sp.ok) restartError = sp.error || 'No se pudo arrancar';
+          if (!sp.ok) restartError = sp.error || 'Failed to start server';
           else { await waitForACUp(10000); restarted = true; }
         }
       }
     }
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    const detail = [body.trackId, body.layout, ...(body.cars || [])].filter(Boolean).join(', ');
+    insertAuditLog(actor, 'session.apply', body.trackId || '', detail);
     json(res, 200, { ok: true, restarted, restartError });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1581,42 +1599,43 @@ async function killAC() {
 
   const stillUp = await findACPid();
   _acRunSince = null;
-  if (stillUp) return { ok: false, error: 'No se pudo terminar acServer' };
+  if (stillUp) return { ok: false, error: 'Failed to terminate acServer' };
   return { ok: true };
 }
 
 async function apiServerStart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  // Already running?
-  if (acChild && !acChild.killed) return json(res, 409, { error: 'El servidor ya está en ejecución' });
-  if (await findACPid())          return json(res, 409, { error: 'El servidor ya está en ejecución' });
+  if (acChild && !acChild.killed) return json(res, 409, { error: 'Server is already running' });
+  if (await findACPid())          return json(res, 409, { error: 'Server is already running' });
   const { running } = await getACInfo();
-  if (running) return json(res, 409, { error: 'El servidor ya está en ejecución' });
+  if (running) return json(res, 409, { error: 'Server is already running' });
 
   const r = await spawnAC();
-  if (!r.ok) return json(res, 500, { error: r.error || 'No se pudo arrancar' });
-  // Give it a chance to bind HTTP port; report success even if HTTP not yet up
+  if (!r.ok) return json(res, 500, { error: r.error || 'Failed to start server' });
   await waitForACUp(8000);
+  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.start');
   json(res, 200, { ok: true });
 }
 
 async function apiServerStop(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   const r = await killAC();
-  if (!r.ok) return json(res, 500, { error: r.error || 'No se pudo detener' });
+  if (!r.ok) return json(res, 500, { error: r.error || 'Failed to stop server' });
   await waitForACDown(6000);
+  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.stop');
   json(res, 200, { ok: true });
 }
 
 async function apiServerRestart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   const k = await killAC();
-  if (!k.ok) return json(res, 500, { error: k.error || 'No se pudo detener' });
+  if (!k.ok) return json(res, 500, { error: k.error || 'Failed to stop server' });
   await waitForACDown(6000);
-  await sleep(500); // let ports release
+  await sleep(500);
   const s = await spawnAC();
-  if (!s.ok) return json(res, 500, { error: s.error || 'No se pudo arrancar' });
+  if (!s.ok) return json(res, 500, { error: s.error || 'Failed to start server' });
   await waitForACUp(10000);
+  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.restart');
   json(res, 200, { ok: true });
 }
 
@@ -1730,8 +1749,10 @@ async function apiPanelUserCreate(req, res) {
     const exists = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
     if (exists) return json(res, 409, { error: 'Username already exists' });
     const salt = crypto.randomBytes(32).toString('hex');
+    const finalRole = role === 'admin' ? 'admin' : 'user';
     db.prepare('INSERT INTO panel_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?)')
-      .run(username, hashPassword(password, salt), salt, role === 'admin' ? 'admin' : 'user');
+      .run(username, hashPassword(password, salt), salt, finalRole);
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.create', username, finalRole);
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1743,13 +1764,18 @@ async function apiPanelUserUpdate(req, res, username) {
     if (!db) return json(res, 503, { error: 'Database unavailable' });
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
     if (!user) return json(res, 404, { error: 'User not found' });
-    if (body.role !== undefined && (body.role === 'admin' || body.role === 'user'))
+    const changes = [];
+    if (body.role !== undefined && (body.role === 'admin' || body.role === 'user')) {
       db.prepare('UPDATE panel_users SET role = ? WHERE username = ?').run(body.role, username);
+      changes.push(`role=${body.role}`);
+    }
     if (body.password && body.password.length >= 8) {
       const s = crypto.randomBytes(32).toString('hex');
       db.prepare('UPDATE panel_users SET password_hash = ?, salt = ? WHERE username = ?')
         .run(hashPassword(body.password, s), s, username);
+      changes.push('password changed');
     }
+    if (changes.length) insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.update', username, changes.join(', '));
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -1758,6 +1784,7 @@ function apiPanelUserDelete(req, res, username) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 503, { error: 'Database unavailable' });
   db.prepare('DELETE FROM panel_users WHERE username = ?').run(username);
+  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.delete', username);
   json(res, 200, { ok: true });
 }
 
@@ -1969,6 +1996,23 @@ function insertModHistory(entry) {
   } catch {}
 }
 
+function insertAuditLog(actor, action, target = '', detail = '') {
+  if (!db) return;
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, detail) VALUES (?, ?, ?, ?)').run(actor, action, target, detail);
+  } catch {}
+}
+
+function apiAuditGet(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 200, []);
+  const rows = db.prepare(`
+    SELECT id, actor, action, target, detail, logged_at
+    FROM audit_log ORDER BY id DESC LIMIT 200
+  `).all();
+  json(res, 200, rows);
+}
+
 function apiModHistoryGet(res) {
   if (!db) return json(res, 200, []);
   const rows = db.prepare(`
@@ -2163,6 +2207,7 @@ async function apiModUploadChunk(req, res) {
 
     const result = await processModBuffer(Buffer.concat(buffers), filename);
     insertModHistory({ ok: true, filename, uploadedBy, ...result });
+    insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
     json(res, 200, { ok: true, done: true, ...result });
   } catch (e) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
@@ -2195,6 +2240,7 @@ async function apiModUpload(req, res) {
   try {
     const result = await processModBuffer(filePart.data, filePart.filename);
     insertModHistory({ ok: true, filename: filePart.filename, uploadedBy, ...result });
+    insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filePart.filename, `${result.modType}, ${result.filesExtracted} files`);
     json(res, 200, { ok: true, ...result });
   } catch (e) {
     insertModHistory({ ok: false, filename: filePart.filename, uploadedBy, error: e.message });
@@ -2240,6 +2286,7 @@ function handler(req, res) {
     if (urlPath === '/api/mods/upload/chunk' && req.method === 'POST')   return apiModUploadChunk(req, res);
     if (urlPath === '/api/mods/history'      && req.method === 'GET')    return apiModHistoryGet(res);
     if (urlPath === '/api/mods/history'      && req.method === 'DELETE') return apiModHistoryDelete(req, res);
+    if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));

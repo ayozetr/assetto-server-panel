@@ -12,6 +12,7 @@ const PAGES = {
   session:   { title: 'Sesión',    component: 'PageSession' },
   config:    { title: 'Configuración', component: 'PageConfig' },
   users:     { title: 'Usuarios',  component: 'PageUsers' },
+  audit:     { title: 'Audit Log', component: 'PageAudit' },
   profile:   { title: 'Mi cuenta', component: 'PageProfile' },
 };
 
@@ -220,7 +221,7 @@ function AppInner(props) {
   const I = window.AppIcons;
   const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesMonitoring;
   const { PageCars, PageTracks, PageSession }    = window.AppPagesContent;
-  const { PageConfig, PageUsers, PageProfile }   = window.AppPagesSettings;
+  const { PageConfig, PageUsers, PageProfile, PageAudit } = window.AppPagesSettings;
   const { PageTimes }                            = window.AppPagesLaptimes;
   const { PageMods }                             = window.AppPagesMods;
   const toast = useToast();
@@ -420,6 +421,7 @@ function AppInner(props) {
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
+  else if (page === 'audit')     content = <PageAudit/>;
   else if (page === 'profile')   content = <PageProfile user={user} setUser={setUser}/>;
   else content = <div className="card" style={{margin: '32px 0'}}><div className="empty">{t('common.not_found')}</div></div>;
 

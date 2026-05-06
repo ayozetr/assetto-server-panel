@@ -299,9 +299,6 @@ function Login({ onLogin }) {
           {loading ? t('login.btn_loading') : t('login.btn')}
         </button>
 
-        <div className="login-hint">
-          {t('login.hint')}
-        </div>
       </form>
     </div>
   );

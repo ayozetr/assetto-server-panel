@@ -19,7 +19,7 @@ try { sevenBin = require('7zip-bin');        } catch {}
 const HOST         = process.env.HOST              || '0.0.0.0';
 const PORT         = parseInt(process.env.PORT     || '3000', 10);
 const AC_HTTP_PORT = parseInt(process.env.AC_HTTP_PORT || '8081', 10);
-const AC_LOG_FILE  = process.env.AC_SERVER_LOG     || '/home/<user>/ac_server/server_output.log';
+const AC_LOG_FILE  = process.env.AC_SERVER_LOG     || path.join(__dirname, 'logs', 'ac_server.log');
 const AC_RESULTS   = process.env.AC_SERVER_RESULTS || '/home/<user>/ac_server/results';
 const AC_CFG_FILE  = path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'server_cfg.ini');
 const AC_CARS_DIR  = path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'cars');
@@ -33,6 +33,33 @@ const ROOT            = __dirname;
 const KUNOS_ASSETS_DIR = path.join(__dirname, 'src/assets/kunos');
 
 let acChild = null; // tracked child process for the AC server
+
+// ── Log buffer + SSE ──────────────────────────────────────────────────────────
+const LOG_MAX = 500;
+let logBuffer = [];
+let logSeq    = 0;
+const sseClients = new Set();
+
+function appendLog(raw) {
+  if (!raw || !raw.trim()) return;
+  const entry = parseLine(raw.trim(), logSeq++);
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+  const data = JSON.stringify(entry);
+  for (const res of sseClients) {
+    try { res.write(`data: ${data}\n\n`); } catch { sseClients.delete(res); }
+  }
+}
+
+function loadLogFileIntoBuffer() {
+  try {
+    fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true });
+    const content = fs.readFileSync(AC_LOG_FILE, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean).slice(-LOG_MAX);
+    logBuffer = lines.map((l, i) => parseLine(l, i));
+    logSeq = logBuffer.length;
+  } catch {}
+}
 
 // Authoritative Kunos content ID sets, populated at startup from bundled assets
 const KUNOS_CAR_IDS   = new Set();
@@ -817,14 +844,19 @@ async function apiMetrics(res) {
 
 function apiLogs(req, res) {
   const n = Math.min(500, parseInt(new URL(req.url, 'http://x').searchParams.get('n') || '150'));
-  const child = spawn('tail', ['-n', String(n), AC_LOG_FILE], { stdio: ['ignore', 'pipe', 'ignore'] });
-  let data = '';
-  child.stdout.on('data', chunk => { data += chunk; });
-  child.on('error', () => json(res, 200, { lines: [] }));
-  child.on('close', () => {
-    const lines = data.trim().split('\n').filter(Boolean).map((l, i) => parseLine(l, i));
-    json(res, 200, { lines });
+  json(res, 200, { lines: logBuffer.slice(-n) });
+}
+
+function apiLogsStream(req, res) {
+  res.writeHead(200, {
+    'Content-Type':  'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection':    'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
+  res.write(`event: init\ndata: ${JSON.stringify(logBuffer)}\n\n`);
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
 }
 
 function apiConfig(res) {
@@ -1441,23 +1473,37 @@ function spawnAC() {
   return new Promise((resolve) => {
     const err = checkBinary();
     if (err) { console.error('[AC] spawn error:', err); _acRunSince = null; return resolve({ ok: false, error: err }); }
-    let logFd = null;
-    try { fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true }); logFd = fs.openSync(AC_LOG_FILE, 'a'); } catch {}
-    const stdio = logFd !== null ? ['ignore', logFd, logFd] : 'ignore';
-    const closeLog = () => { if (logFd !== null) { try { fs.closeSync(logFd); } catch {} logFd = null; } };
+    let logStream = null;
     try {
-      const child = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio, detached: false });
+      fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true });
+      logStream = fs.createWriteStream(AC_LOG_FILE, { flags: 'a' });
+    } catch {}
+    const closeLog = () => { if (logStream) { try { logStream.end(); } catch {} logStream = null; } };
+    try {
+      const child = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio: ['ignore', 'pipe', 'pipe'], detached: false });
+      let lineBuf = '';
+      const onChunk = chunk => {
+        if (logStream) logStream.write(chunk);
+        lineBuf += chunk.toString();
+        const parts = lineBuf.split('\n');
+        lineBuf = parts.pop();
+        parts.forEach(appendLog);
+      };
+      child.stdout.on('data', onChunk);
+      child.stderr.on('data', onChunk);
       let settled = false;
       child.once('error', e => {
         if (settled) return;
         settled = true;
         console.error('[AC] spawn error:', e.message);
+        if (lineBuf) { appendLog(lineBuf); lineBuf = ''; }
         closeLog();
         acChild = null;
         resolve({ ok: false, error: e.message });
       });
       child.once('exit', (code, signal) => {
         if (acChild === child) acChild = null;
+        if (lineBuf) { appendLog(lineBuf); lineBuf = ''; }
         closeLog();
         if (!settled) {
           settled = true;
@@ -2052,6 +2098,7 @@ function handler(req, res) {
     // Data endpoints
     if (urlPath === '/api/metrics'         && req.method === 'GET') return apiMetrics(res);
     if (urlPath === '/api/logs'            && req.method === 'GET') return apiLogs(req, res);
+    if (urlPath === '/api/logs/stream'     && req.method === 'GET') return apiLogsStream(req, res);
     if (urlPath === '/api/config'          && req.method === 'GET') return apiConfig(res);
     if (urlPath === '/api/config'          && req.method === 'PUT') return apiConfigUpdate(req, res);
     if (urlPath === '/api/players'         && req.method === 'GET') return apiPlayers(res);
@@ -2084,6 +2131,7 @@ seedDefaultUsers();
 loadKunosIds();
 importAllResults();
 startResultsWatcher();
+loadLogFileIntoBuffer();
 
 const server = http.createServer(handler);
 

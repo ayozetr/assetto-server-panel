@@ -433,16 +433,22 @@ function PageLogs({ server }) {
   const ref = useRef(null);
 
   useEffect(() => {
-    const load = () => {
-      fetch('/api/logs?n=150')
-        .then(r => r.json())
-        .then(d => setLogs(d.lines || []))
-        .catch(() => {});
-    };
-    load();
     if (paused) return;
-    const id = setInterval(load, 3000);
-    return () => clearInterval(id);
+    const es = new EventSource('/api/logs/stream');
+    es.addEventListener('init', e => {
+      try { setLogs(JSON.parse(e.data)); } catch {}
+    });
+    es.onmessage = e => {
+      try {
+        const line = JSON.parse(e.data);
+        setLogs(prev => {
+          const next = [...prev, line];
+          return next.length > 500 ? next.slice(-500) : next;
+        });
+      } catch {}
+    };
+    es.onerror = () => es.close();
+    return () => es.close();
   }, [paused]);
 
   useEffect(() => {

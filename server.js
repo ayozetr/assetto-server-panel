@@ -1857,9 +1857,12 @@ function isSafeEntry(entryName, destRoot) {
 
 async function extractZip(buffer) {
   if (!StreamZip) throw new Error('node-stream-zip not available');
-  const zip     = new StreamZip.async({ buffer });
+  // node-stream-zip v1.x only accepts a file path, not a buffer
+  const tmpIn = path.join(os.tmpdir(), `ac-mod-${Date.now()}.zip`);
+  await fsp.writeFile(tmpIn, buffer);
+  const zip = new StreamZip.async({ file: tmpIn });
   const entries = await zip.entries();
-  const list    = [];
+  const list = [];
   for (const [name, entry] of Object.entries(entries)) {
     list.push({
       name,
@@ -1867,7 +1870,13 @@ async function extractZip(buffer) {
       getData: async () => entry.isDirectory ? null : zip.entryData(name),
     });
   }
-  return { entries: list, close: () => zip.close() };
+  return {
+    entries: list,
+    close: async () => {
+      await Promise.resolve(zip.close()).catch(() => {});
+      await fsp.rm(tmpIn, { force: true }).catch(() => {});
+    },
+  };
 }
 
 async function extract7z(buffer) {

@@ -1,6 +1,6 @@
 # Assetto Server Panel
 
-A web-based administration panel for **Assetto Corsa** dedicated servers running on Linux. Monitor server health, manage players, review lap times, configure sessions, and control the server process — all from a clean, responsive interface accessible from any device on your network.
+A web-based administration panel for **Assetto Corsa** dedicated servers running on Linux. Monitor server health, manage players, review lap times, configure sessions, and install mods — all from a clean, responsive interface accessible from any device on your network.
 
 ---
 
@@ -24,7 +24,7 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 
 ### Monitoring
 - **Live server metrics** — CPU usage, RAM consumption, uptime, player count; polls every 4 s
-- **Live log stream** — tails the AC server log file with level badges (INFO · OK · WARN · ERROR), pause/resume, and export to `.txt`
+- **Real-time log stream** — AC server output streamed via Server-Sent Events (no polling); level badges (INFO · OK · WARN · ERROR), pause/resume, and export to `.txt`
 - **Dashboard activity feed** — last 5 notable log events (connections, laps, errors) loaded on page open
 - **Backend-down banner** — shown automatically after 3 consecutive failed metric polls
 
@@ -50,10 +50,13 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 - **Kunos asset fallback** — bundled WebP previews for all Kunos stock cars and tracks; shown automatically when the AC content directory has no thumbnails
 
 ### Mod upload
-- **Drag-and-drop uploader** — admin-only page to upload and install car or track mods directly from the browser
-- **Supported formats** — `.zip`, `.rar`, `.7z`; configurable size limit (default 500 MB, max 10 240 MB)
-- **Automatic mod detection** — identifies whether the archive contains a car (`.kn5` + `data/`) or a track (`models.ini` + `ai/`)
+- **Drag-and-drop uploader** — available to all logged-in users; installs car or track mods directly from the browser
+- **Supported formats** — `.zip`, `.rar`, `.7z`; configurable size limit (default 500 MB, up to 10 240 MB)
+- **Automatic mod detection** — inspects the archive's file tree using definitive signals with no false positives (see [Mod Detection](#mod-detection))
+- **Chunked upload** — optional setting that splits files into 5 MB base64 JSON chunks; required when accessing via Cloudflare Tunnel or other proxies that block large binary POST bodies
 - **Surgical extraction** — only the mod root folder is extracted into the AC content directory; extra files, scripts, and nested archives are discarded
+- **Persistent upload history** — every upload attempt (success or failure) is stored in SQLite and visible to all connected clients; shows uploader name and timestamp
+- **Auto-refresh** — cars and tracks lists update automatically after a successful upload without a full page reload
 - **Security** — anti Zip-Slip path traversal protection; executable files are blocked; only game-relevant extensions are allowed
 
 ### Session & server configuration
@@ -64,14 +67,14 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 
 ### Authentication & user management
 - **Real login** — PBKDF2-SHA-512 (100 000 iterations) against a `panel_users` SQLite table
-- **httpOnly session cookies** — 24 h TTL, invalidated on logout; token never exposed to JavaScript
+- **Session-based auth** — session token stored in `localStorage`, validated on every API call; sessions expire after 7 days
 - **Rate limiting** — 5 failed attempts per IP locks the login endpoint for 15 minutes
 - **Panel user CRUD** — create, edit role, change another user's password, delete; admin-only; persisted in SQLite
 - **My account page** — change own password (current + new + confirm) with show/hide toggles; secure password generator (length slider 8–24, special characters toggle, live preview field, copy and use buttons)
 
 ### UI/UX
 - **Light / dark theme** — persisted in `localStorage`
-- **Internationalisation (i18n)** — full English, Spanish, and Italian translations; language selector in the Configuration page; persisted in `localStorage` (`ac-lang`)
+- **Internationalisation (i18n)** — full English, Spanish, and Italian translations; language selector in the Configuration page; persisted in SQLite (`panel_settings`)
 - **Direct join link** — Dashboard shows a Content Manager–compatible join URL (`acmanager://`) with copy-to-clipboard and Open in CM buttons; public IP resolved automatically via `api.ipify.org` or overridden with `PUBLIC_IP` in `.env`
 - **Loading spinners** — shown in Cars, Tracks, and Lap Times while the initial fetch is in flight
 - **Page not found fallback** — graceful message for unknown routes
@@ -84,14 +87,15 @@ A web-based administration panel for **Assetto Corsa** dedicated servers running
 ```
 Browser
   │
-  │  HTTP (same-origin only)
+  │  HTTP / SSE (same-origin or via Cloudflare Tunnel)
   ▼
 server.js  ─── Node.js http module, no framework
   │
   ├── Serves static files from project root
   ├── All /api/* routes handled inline
-  ├── SQLite (better-sqlite3): laps, players, processed_files, panel_users, panel_settings
-  └── Sessions: in-memory Map, token → { role, expiresAt }
+  ├── SQLite (better-sqlite3): laps, players, mod_history, panel_users, panel_settings, sessions
+  ├── SSE endpoint (/api/logs/stream) pushes AC log lines in real time
+  └── Spawns acServer with piped stdio to capture log output
 ```
 
 ```
@@ -123,6 +127,28 @@ src/
 **AC server detection** uses an HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO` rather than `pgrep`, which avoids false positives from the dashboard's own shell environment.
 
 **Results watcher** — on startup, all unprocessed result JSON files are imported into SQLite. A `fs.watch` listener on the results directory then imports any new files automatically within ~2.5 s of them appearing.
+
+**Service worker** (`sw.js`) — cache-first for static assets, network-first for `/api/`. The chunk upload path (`/api/mods/upload/chunk`) is explicitly bypassed because the SW's `fetch(request)` forwarding corrupts large POST bodies.
+
+---
+
+## Mod Detection
+
+When a `.zip`, `.rar`, or `.7z` is uploaded, the server inspects its file tree using file signatures that never appear in both car and track mods:
+
+| Signal | Type | Notes |
+|--------|------|-------|
+| `data.acd` | **Car** | Encrypted physics blob — only cars have this |
+| `data/car.ini`, `data/engine.ini`, `data/tyres.ini`, `data/suspensions.ini` | **Car** | Open physics files |
+| `ui/ui_car.json` | **Car** | Car metadata |
+| `models.ini` / `models_*.ini` | **Track** | 3D scene declarations — single or multi-layout |
+| `data/surfaces.ini` | **Track** | Physics surface properties |
+| `ui/ui_track.json` | **Track** | Track metadata |
+| `ai/` + `.kn5` | **Track** | Fallback for older tracks without `models.ini` |
+
+Car signals are checked first. `data.acd` is unambiguous — if present, it is always a car. Tracks that predate `models.ini` (e.g. hillclimb stages with just a `.kn5` and `ai/` folder) are still correctly identified via the `ai/ + .kn5` fallback.
+
+The archive must contain exactly one root folder. Zip-Slip paths are rejected. Only known-safe extensions are extracted.
 
 ---
 
@@ -187,7 +213,7 @@ Expected output:
   ────────────────────────────────────────────
 ```
 
-Open the **Network** URL from any machine on the same network. On first start, two default users are seeded into the database (see [Default Credentials](#default-credentials)).
+Open the **Network** URL from any machine on the same network. On first start, default admin credentials are seeded into the database (see [Default Credentials](#default-credentials)).
 
 ---
 
@@ -199,7 +225,7 @@ All configuration lives in `.env` (never committed to git).
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | Bind address. Use `127.0.0.1` to restrict to localhost. |
 | `PORT` | `3000` | TCP port the web server listens on. |
-| `AC_SERVER_LOG` | `/home/.../server_output.log` | Path to the AC server log file. |
+| `AC_SERVER_LOG` | `<project>/logs/ac_server.log` | Path where AC server output is written. |
 | `AC_SERVER_RESULTS` | `/home/.../results` | Directory containing AC result JSON files. |
 | `AC_CFG_DIR` | `/srv/assetto/cfg` | Directory containing `server_cfg.ini` (and `whitelist.txt`). |
 | `AC_CONTENT_DIR` | `/srv/assetto/content` | Root content directory (must contain `cars/` and `tracks/`). |
@@ -210,33 +236,17 @@ All configuration lives in `.env` (never committed to git).
 | `AC_WHITELIST_FILE` | `<AC_CFG_DIR>/whitelist.txt` | Path to the whitelist file. |
 | `DB_PATH` | `<project>/assetto.db` | SQLite database path. |
 | `PUBLIC_IP` | _(empty)_ | Optional. Public IP shown in the Dashboard join link. If unset, resolved automatically via `api.ipify.org`. |
-| `ADMIN_TOKEN` | _(empty)_ | Optional static token for headless/script access to server control endpoints. Session cookies are the preferred mechanism for browser access. |
+| `ADMIN_TOKEN` | _(empty)_ | Optional static token for headless/script access to server control endpoints. |
 
-The upload size limit is not an env variable — it is stored in the `panel_settings` SQLite table and editable from the Configuration page (default: 500 MB).
+The upload size limit and chunked upload toggle are stored in the `panel_settings` SQLite table and editable from the Configuration page.
 
 ---
 
 ## Deployment
 
-### Running in the background with pm2
+### Systemd service (recommended)
 
-```bash
-npm install -g pm2
-pm2 start server.js --name assetto-panel
-pm2 save
-pm2 startup   # follow the printed command to enable autostart on boot
-```
-
-```bash
-pm2 status
-pm2 logs assetto-panel
-pm2 restart assetto-panel
-pm2 stop assetto-panel
-```
-
-### Systemd service (alternative)
-
-Create `/etc/systemd/system/assetto-panel.service`:
+Create `/etc/systemd/system/assetto-dashboard.service`:
 
 ```ini
 [Unit]
@@ -258,18 +268,37 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now assetto-panel
-sudo systemctl status assetto-panel
+sudo systemctl enable --now assetto-dashboard
+sudo systemctl status assetto-dashboard
+journalctl -u assetto-dashboard -f   # live logs
 ```
 
-### Opening the firewall port
+### Cloudflare Tunnel (optional, for remote access)
+
+If you want the panel accessible from outside your LAN without opening firewall ports, use [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
 
 ```bash
-# iptables
-sudo iptables -A INPUT -p tcp --dport 3000 -j ACCEPT
+# Add ingress rule pointing to localhost:3000 in /etc/cloudflared/config.yml
+sudo systemctl restart cloudflared
+```
+
+### Opening the firewall port (LAN access)
+
+```bash
+# ufw
+sudo ufw allow 3000/tcp
 
 # firewalld
 sudo firewall-cmd --permanent --add-port=3000/tcp && sudo firewall-cmd --reload
+```
+
+### Running in the background with pm2 (alternative)
+
+```bash
+npm install -g pm2
+pm2 start server.js --name assetto-panel
+pm2 save
+pm2 startup   # follow the printed command to enable autostart on boot
 ```
 
 ---
@@ -300,7 +329,9 @@ assetto-dashboard/
 ├── tools/
 │   ├── extract_kunos_assets.py  # Extracts car/track assets from an AC installation
 │   └── compress_to_webp.py      # Converts extracted images to WebP
+├── logs/                      # AC server log output (created on first run)
 ├── index.html                 # SPA entry point
+├── sw.js                      # Service worker
 ├── server.js                  # Node.js HTTP server + all API endpoints
 ├── assetto.db                 # SQLite database (created on first run, gitignored)
 ├── .env                       # Local environment variables — not in git
@@ -318,12 +349,12 @@ assetto-dashboard/
 | Dashboard | Dashboard | All | Live CPU/RAM gauges, server status pill, uptime, connected players, current session summary, recent activity feed from server log, direct join link with Content Manager protocol support |
 | Players | Players | All | Live player table with flag, car, laps, best/last time, ping; kick and ban actions; history tab with search and pagination |
 | Lap Times | Times | All | Records table filtered by track, car, validity, and date range; sector splits; delta to leader; player comparison view; CSV export; paginated |
-| Logs | Logs | All | Live log tail (polls every 3 s) with level filters, pause/resume, clear, and export to `.txt` |
+| Logs | Logs | All | Real-time AC server log via SSE with level filters, pause/resume, clear, and export to `.txt` |
 | Cars | Cars | All | Full car catalogue with skin thumbnails, specs, brand logos; add/remove to session; Kunos toggle; paginated |
 | Tracks | Tracks | All | Circuit catalogue with country flag, length, pit count; multi-layout modal with per-layout thumbnails; paginated |
 | Session | Session | All | Session parameters (track, layout, mode, conditions, aids); writes `server_cfg.ini` after confirmation |
-| Mods | Mods | **Admin** | Drag-and-drop uploader for car/track mods (.zip/.rar/.7z); automatic mod detection and surgical extraction; session upload history |
-| Configuration | Settings | **Admin** | Network ports, max clients, passwords, whitelist toggle + Steam ID editor, race rules, assists; mod upload size limit; language selector |
+| Mods | Mods | **All** | Drag-and-drop uploader for car/track mods (.zip/.rar/.7z); automatic mod detection; persistent upload history shared across all clients |
+| Configuration | Settings | **Admin** | Network ports, max clients, passwords, whitelist toggle + Steam ID editor, race rules, assists; mod upload size limit; chunked upload toggle; language selector |
 | Users | Users | **Admin** | Panel user CRUD: create, edit role, change password, delete; persisted in SQLite |
 | My account | My Account | All | Change own password; secure password generator with length slider, special characters toggle, live preview, copy and use |
 
@@ -333,11 +364,12 @@ assetto-dashboard/
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/auth/login` | Authenticate; sets `sid` httpOnly cookie (24 h TTL). Rate-limited: 5 attempts/15 min per IP. |
-| `POST` | `/api/auth/logout` | Invalidate session and clear cookie. |
+| `POST` | `/api/auth/login` | Authenticate; returns session token. Rate-limited: 5 attempts/15 min per IP. |
+| `POST` | `/api/auth/logout` | Invalidate session. |
 | `POST` | `/api/auth/change-password` | Change own password (requires current password). |
 | `GET` | `/api/metrics` | CPU %, RAM MB, AC running status, uptime, CPU model, OS info, public IP, live track. |
 | `GET` | `/api/logs?n=150` | Last N parsed log lines `{ id, time, lvl, tag, msg }`. Max 500. |
+| `GET` | `/api/logs/stream` | SSE stream — pushes `init` event with buffer then `message` per new line. |
 | `GET` | `/api/config` | Parsed `server_cfg.ini` as JSON. |
 | `PUT` | `/api/config` | Write JSON back to `server_cfg.ini` (backs up to `.bak`). |
 | `GET` | `/api/players` | Live player list proxied from AC HTTP API `/api/details`. |
@@ -354,34 +386,32 @@ assetto-dashboard/
 | `POST` | `/api/panel/users` | Create panel user. |
 | `PUT` | `/api/panel/users/:username` | Update role or password. |
 | `DELETE` | `/api/panel/users/:username` | Delete panel user. |
-| `GET` | `/api/panel/settings` | Read panel settings (e.g. `upload_max_mb`). |
+| `GET` | `/api/panel/settings` | Read panel settings (upload_max_mb, chunked_upload, lang). |
 | `PUT` | `/api/panel/settings` | Update panel settings. |
-| `POST` | `/api/mods/upload` | Upload and install a car or track mod (.zip/.rar/.7z). Admin only. Multipart stream; reads `Content-Length` for size check. |
-| `POST` | `/api/server/start` | Spawn `acServer` process. |
-| `POST` | `/api/server/stop` | Kill `acServer` process. |
-| `POST` | `/api/server/restart` | Stop then start. |
-| `POST` | `/api/server/reload` | Send SIGHUP to `acServer` (reload without restart). |
+| `POST` | `/api/mods/upload` | Direct multipart upload. All authenticated users. |
+| `POST` | `/api/mods/upload/chunk` | Chunked upload as base64 JSON (5 MB pieces). All authenticated users. |
+| `GET` | `/api/mods/history` | Upload history from SQLite (last 100 entries). |
+| `DELETE` | `/api/mods/history` | Clear upload history. |
+| `POST` | `/api/server/start` | Spawn `acServer` process. Admin only. |
+| `POST` | `/api/server/stop` | Kill `acServer` process. Admin only. |
+| `POST` | `/api/server/restart` | Stop then start. Admin only. |
+| `POST` | `/api/server/reload` | Send SIGHUP to `acServer`. Admin only. |
 | `GET` | `/api/content/cars/:id/thumb` | Serve car preview image. |
 | `GET` | `/api/content/cars/:id/skins/:skin/preview` | Serve skin preview image. |
-| `GET` | `/api/content/cars/:id/kunos-skin/:skin/preview` | Serve bundled Kunos skin preview (WebP fallback). |
 | `GET` | `/api/content/tracks/:id/thumb` | Serve track preview image. |
 | `GET` | `/api/content/tracks/:id/layout/:layout/thumb` | Serve per-layout track preview image. |
-
-All `POST`/`PUT` endpoints require `Content-Type: application/json` (except `/api/mods/upload` which is a raw binary stream). Server control and mod upload endpoints require an admin session cookie or a valid `ADMIN_TOKEN` header.
 
 ---
 
 ## Default Credentials
 
-Passwords are hashed with PBKDF2-SHA-512 (100 000 iterations) and stored in SQLite. The default account is seeded on first run.
+Passwords are hashed with PBKDF2-SHA-512 (100 000 iterations) and stored in SQLite.
 
 | Username | Default password | Role |
 |----------|-----------------|------|
 | `admin` | `Admin1234!` | Administrator |
 
-Administrators have access to server control, the Configuration page, the Users page, and the Mods uploader.
-
-> **Change the default password immediately after first login** — use the key icon in the sidebar footer or navigate to **My account**.
+> **Change the default password immediately after first login** — navigate to **My account** or use the key icon in the sidebar footer.
 
 ---
 
@@ -392,7 +422,8 @@ Administrators have access to server control, the Configuration page, the Users 
 Nothing is listening on port 3000. Check the server is running:
 
 ```bash
-ss -tlnp | grep 3000
+sudo systemctl status assetto-dashboard
+# or manually:
 npm start
 ```
 
@@ -402,25 +433,25 @@ The paths in `.env` point to the wrong directories. Verify that `AC_CONTENT_DIR/
 
 ### Lap times table is empty
 
-AC result files must be JSON files matching the format `{ TrackName, Laps: [{ LapTime, Sectors, Cuts, DriverName, CarModel }] }` in the directory set by `AC_SERVER_RESULTS`. Check that path and file permissions.
+AC result files must be JSON files in the directory set by `AC_SERVER_RESULTS`. Check that path and file permissions.
 
 ### Server always shows "Stopped"
 
-The panel detects the AC server via an HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO`. Verify `AC_HTTP_PORT` matches the `HTTP_PORT` value in your `server_cfg.ini`.
+The panel detects the AC server via HTTP ping to `http://127.0.0.1:<AC_HTTP_PORT>/INFO`. Verify `AC_HTTP_PORT` matches `HTTP_PORT` in your `server_cfg.ini`.
 
 ### Mod upload fails with "No valid mod found"
 
-The archive must contain a car (a `.kn5` file and a `data/` folder at the mod root) or a track (`models.ini` and an `ai/` folder). Nested archives (zip inside zip) are not supported.
+The archive must contain a car or track with at least one of the detection signals listed in [Mod Detection](#mod-detection). Nested archives (zip inside zip) are not supported.
+
+### Upload stuck at 0% when accessing remotely
+
+Enable **Dividir subidas en fragmentos** (Chunked upload) in the Configuration page. This splits the file into 5 MB JSON chunks that bypass Cloudflare WAF and other proxies that block large binary POST bodies.
 
 ### JSX files return 404
 
 All source files live under `src/`. Check that the directory structure matches the paths referenced in `index.html`.
 
 ### Port already in use
-
-```
-✖  Port 3000 already in use — change PORT in .env
-```
 
 ```bash
 sudo lsof -i :3000   # find the conflicting process

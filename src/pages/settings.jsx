@@ -599,7 +599,7 @@ function ConfirmModal({ title, message, onCancel, onConfirm }) {
 }
 
 // ── Profile / Change password ─────────────────────────────────────────────────
-function PageProfile({ user }) {
+function PageProfile({ user, setUser }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell.useToast();
 
@@ -671,6 +671,7 @@ function PageProfile({ user }) {
       if (d.ok) {
         toast.push(t('profile.pw_updated'), 'success');
         setCurrentPw(''); setNewPw(''); setConfirmPw('');
+        if (setUser) setUser(u => ({ ...u, mustChangePassword: false }));
       } else {
         setFormError(d.error || t('common.error'));
       }
@@ -695,6 +696,24 @@ function PageProfile({ user }) {
         <h1 className="page-title">{t('profile.title')}</h1>
         <p className="page-sub">{t('profile.sub')}</p>
       </div>
+
+      {user?.mustChangePassword && (
+        <div style={{
+          background: 'color-mix(in srgb, var(--red) 12%, var(--bg-2))',
+          border: '1px solid var(--red)',
+          borderRadius: 'var(--radius)',
+          padding: '12px 16px',
+          marginBottom: 20,
+          fontSize: 13,
+          color: 'var(--text)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <I4.IconAlertTriangle size={16} style={{color:'var(--red)',flexShrink:0}}/>
+          {t('profile.must_change')}
+        </div>
+      )}
 
       <div className="grid-2">
         <div className="card">

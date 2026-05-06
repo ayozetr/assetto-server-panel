@@ -95,7 +95,13 @@ function App() {
   // Validate server-side session on mount; force re-login if cookie is stale
   uE(() => {
     if (user) {
-      fetch('/api/auth/me').then(r => { if (r.status === 401) setUser(null); }).catch(() => {});
+      fetch('/api/auth/me')
+        .then(r => r.json())
+        .then(d => {
+          if (!d.username) setUser(null);
+          else if (d.mustChangePassword) setUser(u => ({ ...u, mustChangePassword: true }));
+        })
+        .catch(() => {});
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -229,6 +235,12 @@ function AppInner(props) {
 
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const isAdmin = user.role === 'admin';
+
+  // Redirect to profile if server requires a password change
+  const { useEffect: uEI } = React;
+  uEI(() => {
+    if (user?.mustChangePassword && page !== 'profile') setPage('profile');
+  }, [user?.mustChangePassword]);
 
   const handleServerAction = (action) => {
     if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
@@ -408,7 +420,7 @@ function AppInner(props) {
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
-  else if (page === 'profile')   content = <PageProfile user={user}/>;
+  else if (page === 'profile')   content = <PageProfile user={user} setUser={setUser}/>;
   else content = <div className="card" style={{margin: '32px 0'}}><div className="empty">{t('common.not_found')}</div></div>;
 
   return (

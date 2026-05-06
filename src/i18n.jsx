@@ -99,6 +99,7 @@ const dict = {
     // Profile
     'profile.title': 'My Account',
     'profile.sub': 'Manage your panel access password.',
+    'profile.must_change': 'For security, please change the default password before continuing.',
     'profile.change_pw': 'Change password',
     'profile.cur_pw': 'Current password',
     'profile.new_pw': 'New password',
@@ -503,6 +504,7 @@ const dict = {
     // Profile
     'profile.title': 'Mi cuenta',
     'profile.sub': 'Gestiona tu contraseña de acceso al panel.',
+    'profile.must_change': 'Por seguridad, cambia la contraseña predeterminada antes de continuar.',
     'profile.change_pw': 'Cambiar contraseña',
     'profile.cur_pw': 'Contraseña actual',
     'profile.new_pw': 'Contraseña nueva',
@@ -907,6 +909,7 @@ const dict = {
     // Profile
     'profile.title': 'Il Mio Account',
     'profile.sub': 'Gestisci la password di accesso al pannello.',
+    'profile.must_change': 'Per sicurezza, cambia la password predefinita prima di continuare.',
     'profile.change_pw': 'Cambia password',
     'profile.cur_pw': 'Password attuale',
     'profile.new_pw': 'Nuova password',

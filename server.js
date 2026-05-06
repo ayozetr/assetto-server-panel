@@ -70,7 +70,7 @@ async function loadKunosIds() {
 }
 
 // ── Session store (SQLite-backed, survives server restarts) ───────────────────
-const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 const _sessionsMemory = new Map(); // fallback when DB not ready
 
 function createSession(username, role) {
@@ -220,6 +220,9 @@ try {
       uploaded_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // Schema migrations (safe to run on every start)
+  try { db.exec(`ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`); } catch {}
+
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('lang', 'en')`).run();
@@ -242,7 +245,7 @@ function seedDefaultUsers() {
       const existing = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
       if (!existing) {
         const salt = crypto.randomBytes(32).toString('hex');
-        db.prepare('INSERT INTO panel_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?)')
+        db.prepare('INSERT INTO panel_users (username, password_hash, salt, role, must_change_password) VALUES (?, ?, ?, ?, 1)')
           .run(username, hashPassword(DEFAULT_PASS, salt), salt, role);
       }
     }
@@ -406,6 +409,12 @@ function getNetworkIP() {
     }
   }
   return '127.0.0.1';
+}
+
+function setSecurityHeaders(res) {
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 }
 
 function respond(res, status, mime, body, extraHeaders) {
@@ -904,7 +913,7 @@ function apiConfig(res) {
   });
 }
 
-function validPort(v) { const n = parseInt(v); return n >= 1024 && n <= 65535 ? n : null; }
+function validPort(v) { const n = parseInt(v); return n >= 1 && n <= 65535 ? n : null; }
 function clampInt(v, lo, hi) { const n = parseInt(v); return isNaN(n) ? null : Math.max(lo, Math.min(hi, n)); }
 
 async function apiConfigUpdate(req, res) {
@@ -1382,18 +1391,18 @@ async function apiSessionApply(req, res) {
     const s    = ini['SERVER'] = ini['SERVER'] || {};
     if (body.trackId !== undefined) {
       if (body.trackId && !isValidContentId(body.trackId))
-        return json(res, 400, { error: 'trackId inválido' });
+        return json(res, 400, { error: 'Invalid trackId' });
       s['TRACK'] = body.trackId || '';
     }
     if (body.layout !== undefined) {
       if (body.layout && !isValidContentId(body.layout))
-        return json(res, 400, { error: 'layout inválido' });
+        return json(res, 400, { error: 'Invalid layout' });
       s['CONFIG_TRACK'] = body.layout || '';
     }
     if (Array.isArray(body.cars)) {
       const clean = body.cars.filter(isValidContentId);
       if (body.cars.length && !clean.length)
-        return json(res, 400, { error: 'cars contiene identificadores inválidos' });
+        return json(res, 400, { error: 'cars contains invalid identifiers' });
       if (clean.length) s['CARS'] = [...new Set(clean)].join(';');
     }
     if (body.slots !== undefined) {
@@ -1636,27 +1645,24 @@ async function apiAuthLogin(req, res) {
   try {
     const ip   = req.socket?.remoteAddress || '';
     if (!checkLoginRateLimit(ip))
-      return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos.' });
+      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
 
     const body = await readBody(req);
     const { username, password } = body;
-    if (!username || !password) return json(res, 400, { error: 'Usuario y contraseña requeridos' });
+    if (!username || !password) return json(res, 400, { error: 'Username and password are required' });
 
-    if (!db) {
-      const role = username === 'Admin' ? 'admin' : 'user';
-      return json(res, 200, { ok: true, user: { name: username, role } });
-    }
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
 
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
-    if (!user) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
+    if (!user) return json(res, 401, { error: 'Invalid username or password' });
 
     const hash = hashPassword(password, user.salt);
-    if (hash !== user.password_hash) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
+    if (hash !== user.password_hash) return json(res, 401, { error: 'Invalid username or password' });
 
     _loginAttempts.delete(ip); // reset on success
     const token = createSession(username, user.role);
     res.setHeader('Set-Cookie', sessionCookieHeader(token));
-    json(res, 200, { ok: true, user: { name: username, role: user.role } });
+    json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1 } });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -1670,7 +1676,8 @@ function apiAuthLogout(req, res) {
 function apiAuthMe(req, res) {
   const sess = getSession(req);
   if (!sess) return json(res, 401, { error: 'Not authenticated' });
-  json(res, 200, { username: sess.username, role: sess.role });
+  const row = db?.prepare('SELECT must_change_password FROM panel_users WHERE username = ?').get(sess.username);
+  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: row?.must_change_password === 1 });
 }
 
 async function apiAuthChangePassword(req, res) {
@@ -1678,19 +1685,19 @@ async function apiAuthChangePassword(req, res) {
     const body = await readBody(req);
     const { username, currentPassword, newPassword } = body;
     if (!username || !currentPassword || !newPassword)
-      return json(res, 400, { error: 'Todos los campos son obligatorios' });
+      return json(res, 400, { error: 'All fields are required' });
     if (newPassword.length < 8)
-      return json(res, 400, { error: 'La contraseña debe tener al menos 8 caracteres' });
-    if (!db) return json(res, 500, { error: 'Base de datos no disponible' });
+      return json(res, 400, { error: 'Password must be at least 8 characters' });
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
 
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
-    if (!user) return json(res, 404, { error: 'Usuario no encontrado' });
+    if (!user) return json(res, 404, { error: 'User not found' });
 
     if (hashPassword(currentPassword, user.salt) !== user.password_hash)
-      return json(res, 401, { error: 'Contraseña actual incorrecta' });
+      return json(res, 401, { error: 'Current password is incorrect' });
 
     const newSalt = crypto.randomBytes(32).toString('hex');
-    db.prepare('UPDATE panel_users SET password_hash = ?, salt = ? WHERE username = ?')
+    db.prepare('UPDATE panel_users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE username = ?')
       .run(hashPassword(newPassword, newSalt), newSalt, username);
 
     json(res, 200, { ok: true });
@@ -1715,11 +1722,13 @@ async function apiPanelUserCreate(req, res) {
   try {
     const body = await readBody(req);
     const { username, password, role } = body;
-    if (!username || !password) return json(res, 400, { error: 'usuario y contraseña requeridos' });
-    if (password.length < 8) return json(res, 400, { error: 'contraseña mínimo 8 caracteres' });
-    if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+    if (!username || !password) return json(res, 400, { error: 'Username and password are required' });
+    if (typeof username !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(username))
+      return json(res, 400, { error: 'Username must be 1–64 chars: letters, numbers, _ and - only' });
+    if (password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
     const exists = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
-    if (exists) return json(res, 409, { error: 'El usuario ya existe' });
+    if (exists) return json(res, 409, { error: 'Username already exists' });
     const salt = crypto.randomBytes(32).toString('hex');
     db.prepare('INSERT INTO panel_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?)')
       .run(username, hashPassword(password, salt), salt, role === 'admin' ? 'admin' : 'user');
@@ -1731,9 +1740,9 @@ async function apiPanelUserUpdate(req, res, username) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
-    if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
-    if (!user) return json(res, 404, { error: 'Usuario no encontrado' });
+    if (!user) return json(res, 404, { error: 'User not found' });
     if (body.role !== undefined && (body.role === 'admin' || body.role === 'user'))
       db.prepare('UPDATE panel_users SET role = ? WHERE username = ?').run(body.role, username);
     if (body.password && body.password.length >= 8) {
@@ -1747,7 +1756,7 @@ async function apiPanelUserUpdate(req, res, username) {
 
 function apiPanelUserDelete(req, res, username) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+  if (!db) return json(res, 503, { error: 'Database unavailable' });
   db.prepare('DELETE FROM panel_users WHERE username = ?').run(username);
   json(res, 200, { ok: true });
 }
@@ -1767,16 +1776,16 @@ function apiPanelSettingsGet(res) {
 
 async function apiPanelSettingsPut(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  if (!db) return json(res, 500, { error: 'base de datos no disponible' });
+  if (!db) return json(res, 503, { error: 'Database unavailable' });
   try {
     const body = await readBody(req);
     if (body.uploadMaxMb !== undefined) {
       const mb = parseInt(body.uploadMaxMb, 10);
-      if (!mb || mb < 1 || mb > 10240) return json(res, 400, { error: 'Valor inválido (1–10240 MB)' });
+      if (!mb || mb < 1 || mb > 10240) return json(res, 400, { error: 'Invalid value (1–10240 MB)' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('upload_max_mb', ?)`).run(String(mb));
     }
     if (body.lang !== undefined) {
-      if (!['en', 'es', 'it'].includes(body.lang)) return json(res, 400, { error: 'Idioma no soportado' });
+      if (!['en', 'es', 'it'].includes(body.lang)) return json(res, 400, { error: 'Unsupported language' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('lang', ?)`).run(body.lang);
     }
     if (body.chunkedUpload !== undefined) {
@@ -1990,7 +1999,7 @@ function apiModHistoryDelete(req, res) {
 async function processModBuffer(buffer, filename) {
   const ext = path.extname(filename).toLowerCase();
   if (!['.zip', '.rar', '.7z'].includes(ext))
-    throw Object.assign(new Error(`Formato no soportado: ${ext}. Usa .zip, .rar o .7z`), { status: 400 });
+    throw Object.assign(new Error(`Unsupported format: ${ext}. Use .zip, .rar or .7z`), { status: 400 });
 
   let archive = null;
   try {
@@ -2000,7 +2009,7 @@ async function processModBuffer(buffer, filename) {
     const dummyRoot = path.join(os.tmpdir(), 'ac-slip-check');
     for (const e of entries) {
       if (!isSafeEntry(e.name, dummyRoot))
-        throw Object.assign(new Error(`Zip-Slip detectado en entrada: ${e.name}`), { status: 400 });
+        throw Object.assign(new Error(`Zip-Slip path rejected: ${e.name}`), { status: 400 });
     }
 
     const names    = entries.map(e => e.name.replace(/\\/g, '/').toLowerCase());
@@ -2035,21 +2044,21 @@ async function processModBuffer(buffer, filename) {
 
     if (!modType)
       throw Object.assign(new Error(
-        'No se encontró un mod válido.\n' +
-        'Coche: necesita data.acd, data/car.ini, o ui_car.json\n' +
-        'Circuito: necesita models.ini, data/surfaces.ini, ui_track.json, o ai/ + .kn5'
+        'No valid mod detected.\n' +
+        'Car: needs data.acd, data/car.ini, or ui_car.json\n' +
+        'Track: needs models.ini, data/surfaces.ini, ui_track.json, or ai/ + .kn5'
       ), { status: 422 });
 
     const roots = new Set();
     for (const n of names) { const p = n.split('/'); if (p[0]) roots.add(p[0]); }
     if (roots.size !== 1)
-      throw Object.assign(new Error(`El archivo debe contener exactamente una carpeta raíz. Se encontraron: ${[...roots].join(', ')}`), { status: 422 });
+      throw Object.assign(new Error(`Archive must contain exactly one root folder. Found: ${[...roots].join(', ')}`), { status: 422 });
 
     const modRoot  = [...roots][0];
     const destBase = modType === 'car' ? AC_CARS_DIR : AC_TRACKS_DIR;
     const destDir  = path.join(destBase, modRoot);
     if (!destDir.startsWith(destBase + path.sep))
-      throw Object.assign(new Error('Ruta de destino inválida'), { status: 400 });
+      throw Object.assign(new Error('Invalid destination path'), { status: 400 });
 
     await fsp.mkdir(destDir, { recursive: true });
 
@@ -2080,7 +2089,8 @@ async function processModBuffer(buffer, filename) {
 }
 
 // ── Chunked upload ─────────────────────────────────────────────────────────────
-const CHUNK_TMP_DIR = path.join(os.tmpdir(), 'ac-upload-chunks');
+const CHUNK_TMP_DIR    = path.join(os.tmpdir(), 'ac-upload-chunks');
+const _chunkAssembling = new Set(); // per-uploadId lock to prevent double-assembly
 
 async function cleanupOldChunks() {
   try {
@@ -2106,8 +2116,8 @@ async function apiModUploadChunk(req, res) {
     body = await new Promise((resolve, reject) => {
       const MAX = 10 * 1024 * 1024; // 10 MB JSON limit (base64 of 7 MB chunk)
       let raw = '';
-      req.on('data', c => { raw += c; if (raw.length > MAX) { req.destroy(); reject(new Error('Body demasiado grande')); } });
-      req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { reject(new Error('JSON inválido')); } });
+      req.on('data', c => { raw += c; if (raw.length > MAX) { req.destroy(); reject(new Error('Body too large')); } });
+      req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { reject(new Error('Invalid JSON')); } });
       req.on('error', reject);
     });
   } catch (e) { return json(res, 400, { error: e.message }); }
@@ -2119,15 +2129,15 @@ async function apiModUploadChunk(req, res) {
   const dataB64     = body.data || '';
 
   if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !filename || !dataB64)
-    return json(res, 400, { error: 'Parámetros de chunk inválidos' });
+    return json(res, 400, { error: 'Invalid chunk parameters' });
 
   const uploadDir = path.join(CHUNK_TMP_DIR, uploadId);
   if (!uploadDir.startsWith(CHUNK_TMP_DIR + path.sep))
-    return json(res, 400, { error: 'uploadId inválido' });
+    return json(res, 400, { error: 'Invalid uploadId' });
 
   let chunkData;
   try { chunkData = Buffer.from(dataB64, 'base64'); }
-  catch { return json(res, 400, { error: 'Datos base64 inválidos' }); }
+  catch { return json(res, 400, { error: 'Invalid base64 data' }); }
 
   try {
     await fsp.mkdir(uploadDir, { recursive: true });
@@ -2137,9 +2147,18 @@ async function apiModUploadChunk(req, res) {
     if (received < totalChunks)
       return json(res, 200, { ok: true, done: false, received, total: totalChunks });
 
+    // Lock: only the first request that reaches full-chunk-count assembles the file
+    if (_chunkAssembling.has(uploadId))
+      return json(res, 409, { error: 'Assembly already in progress for this upload' });
+    _chunkAssembling.add(uploadId);
+
     const buffers = [];
-    for (let i = 0; i < totalChunks; i++)
-      buffers.push(await fsp.readFile(path.join(uploadDir, `chunk-${i}`)));
+    try {
+      for (let i = 0; i < totalChunks; i++)
+        buffers.push(await fsp.readFile(path.join(uploadDir, `chunk-${i}`)));
+    } finally {
+      _chunkAssembling.delete(uploadId);
+    }
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
 
     const result = await processModBuffer(Buffer.concat(buffers), filename);
@@ -2166,11 +2185,11 @@ async function apiModUpload(req, res) {
   let parts;
   try { parts = await parseMultipart(req, maxMb * 1024 * 1024); }
   catch (e) {
-    if (e.code === 'ELIMIT') return json(res, 413, { error: `Archivo demasiado grande (máx. ${maxMb} MB)` });
+    if (e.code === 'ELIMIT') return json(res, 413, { error: `File too large (max ${maxMb} MB)` });
     return json(res, 400, { error: `Error en la subida: ${e.message}` });
   }
   const filePart = parts.file;
-  if (!filePart?.data) return json(res, 400, { error: 'No se recibió ningún archivo (campo: file)' });
+  if (!filePart?.data) return json(res, 400, { error: 'No file received (field: file)' });
 
   const uploadedBy = checkAnyAuth(req)?.username || null;
   try {
@@ -2186,21 +2205,27 @@ async function apiModUpload(req, res) {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
+  setSecurityHeaders(res);
   const urlPath = req.url.split('?')[0];
 
   if (urlPath.startsWith('/api/')) {
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'Allow': 'GET, PUT, POST, OPTIONS',
-      });
+      res.writeHead(204, { 'Allow': 'GET, PUT, POST, DELETE, OPTIONS' });
       return res.end();
     }
+
+    // Public endpoints — no auth required
+    if (urlPath === '/api/health' && req.method === 'GET')
+      return json(res, 200, { ok: true, uptime: Math.floor(process.uptime()) });
 
     // Auth
     if (urlPath === '/api/auth/me'              && req.method === 'GET')  return apiAuthMe(req, res);
     if (urlPath === '/api/auth/login'           && req.method === 'POST') return apiAuthLogin(req, res);
     if (urlPath === '/api/auth/logout'          && req.method === 'POST') return apiAuthLogout(req, res);
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
+
+    // All routes below require a valid session
+    if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
 
     // Panel users CRUD
     if (urlPath === '/api/panel/users' && req.method === 'GET')  return apiPanelUsers(req, res);
@@ -2286,6 +2311,7 @@ importAllResults();
 startResultsWatcher();
 loadLogFileIntoBuffer();
 cleanupOldChunks();
+setInterval(cleanupOldChunks, 60 * 60 * 1000); // sweep abandoned chunk dirs every hour
 
 const server = http.createServer(handler);
 
@@ -2308,3 +2334,18 @@ server.on('error', err => {
   }
   process.exit(1);
 });
+
+// ── Graceful shutdown ──────────────────────────────────────────────────────────
+function shutdown() {
+  console.log('\n  Shutting down…');
+  server.close(() => {
+    cleanupOldChunks().finally(() => {
+      if (acChild && !acChild.killed) acChild.kill('SIGTERM');
+      process.exit(0);
+    });
+  });
+  // Force-exit after 10 s if in-flight requests don't finish
+  setTimeout(() => process.exit(0), 10_000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT',  shutdown);

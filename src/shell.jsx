@@ -305,4 +305,88 @@ function Login({ onLogin }) {
   );
 }
 
-window.AppShell = { Sidebar, Topbar, Login, ToastProvider, useToast };
+// ──────────────────────────────────────────────────────
+// Forced password change modal — shown while mustChangePassword is set,
+// blocks the rest of the UI until the password is changed successfully.
+// ──────────────────────────────────────────────────────
+function ForcePasswordChange({ user, onDone, onLogout }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const [curPw,    setCurPw]    = useState('');
+  const [newPw,    setNewPw]    = useState('');
+  const [confirm,  setConfirm]  = useState('');
+  const [show,     setShow]     = useState(false);
+  const [err,      setErr]      = useState('');
+  const [busy,     setBusy]     = useState(false);
+
+  const submit = async (e) => {
+    e?.preventDefault();
+    setErr('');
+    if (!curPw || !newPw || !confirm)             return setErr(t('profile.err_req'));
+    if (newPw !== confirm)                         return setErr(t('profile.err_match'));
+    if (newPw.length < 8)                          return setErr(t('profile.err_len'));
+    if (newPw === curPw)                           return setErr(t('profile.err_diff'));
+    setBusy(true);
+    try {
+      const r = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: curPw, newPassword: newPw }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) onDone();
+      else setErr(d.error || t('login.err_cred'));
+    } catch {
+      setErr(t('login.err_conn'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <form className="login-card" onSubmit={submit} style={{maxWidth: 440}}>
+        <div className="login-brand">
+          <I.IconKey size={28}/>
+          <div>
+            <div className="login-title">{t('profile.change_pw')}</div>
+            <div className="login-sub">{t('profile.must_change')}</div>
+          </div>
+        </div>
+
+        <div className="login-fields">
+          <div className="field">
+            <label className="field-label">{t('profile.cur_pw')}</label>
+            <input className="input" type={show ? 'text' : 'password'} value={curPw} onChange={e=>setCurPw(e.target.value)} autoFocus/>
+          </div>
+          <div className="field">
+            <label className="field-label">{t('profile.new_pw')}</label>
+            <input className="input" type={show ? 'text' : 'password'} value={newPw} onChange={e=>setNewPw(e.target.value)}/>
+          </div>
+          <div className="field">
+            <label className="field-label">{t('profile.confirm_pw')}</label>
+            <div style={{position:'relative'}}>
+              <input className="input" type={show ? 'text' : 'password'} value={confirm} onChange={e=>setConfirm(e.target.value)} style={{paddingRight: 36}}/>
+              <button type="button" onClick={() => setShow(v => !v)}
+                style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}>
+                {show ? <I.IconEyeOff size={15}/> : <I.IconEye size={15}/>}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {err && <div style={{fontSize: 12, color: 'var(--red)', marginBottom: 12}}>{err}</div>}
+
+        <div style={{display:'flex', gap: 8}}>
+          <button type="button" className="btn" onClick={onLogout} disabled={busy}>
+            <I.IconLogout size={13}/> {t('sidebar.logout')}
+          </button>
+          <button type="submit" className="btn btn-primary" style={{flex: 1, justifyContent:'center', padding: '9px'}} disabled={busy}>
+            {busy ? t('login.btn_loading') : t('profile.change_pw')}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+window.AppShell = { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast };

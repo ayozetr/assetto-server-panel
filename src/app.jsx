@@ -48,7 +48,7 @@ const PAGES = {
 };
 
 function App() {
-  const { Sidebar, Topbar, Login, ToastProvider, useToast } = window.AppShell;
+  const { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast } = window.AppShell;
 
   const [theme, setTheme] = uS(() => localStorage.getItem('ac-theme') || 'light');
   const [user,  setUser]  = uS(() => {
@@ -230,6 +230,18 @@ function App() {
 
   if (!user) return <Login onLogin={setUser}/>;
 
+  // Block the rest of the panel until the user clears the must_change_password flag.
+  // The server enforces the same gate — no admin/data API will respond until flag = 0.
+  if (user.mustChangePassword) {
+    return (
+      <ForcePasswordChange
+        user={user}
+        onDone={() => setUser(u => ({ ...u, mustChangePassword: false }))}
+        onLogout={() => { fetch('/api/auth/logout', { method: 'POST' }).catch(()=>{}); setUser(null); }}
+      />
+    );
+  }
+
   return (
     <ToastProvider>
       <AppInner
@@ -273,12 +285,6 @@ function AppInner(props) {
 
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const isAdmin = user.role === 'admin';
-
-  // Redirect to profile if server requires a password change
-  const { useEffect: uEI } = React;
-  uEI(() => {
-    if (user?.mustChangePassword && page !== 'profile') setPage('profile');
-  }, [user?.mustChangePassword]);
 
   const handleServerAction = (action) => {
     if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }

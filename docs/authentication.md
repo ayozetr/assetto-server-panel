@@ -28,9 +28,9 @@ The default admin account is seeded with `must_change_password = 1`. Until the f
 
 **Client-side flow** — `src/app.jsx` watches `mustChangePassword`:
 
-- On login (or `/api/auth/me` response), if `mustChangePassword` is true, the UI navigates to **My account**.
-- The change-password form is the only interactive control.
-- After a successful password change the flag is cleared in the DB, the auth-me effect refreshes, and the rest of the panel becomes available.
+- On login (or `/api/auth/me` response), if `mustChangePassword` is true, the panel renders a blocking **forced-change modal** (`ForcePasswordChange` component in `src/shell.jsx`) instead of the main UI.
+- The modal contains the change-password form and a *Log out* button — there is no other reachable control until the password is changed.
+- After a successful password change the flag is cleared in the DB and `setUser` flips the local flag to `false`, so the modal unmounts and `AppInner` renders normally.
 
 **Recovery** — if you lock yourself out (e.g. forgot the new password before clearing the flag), open the SQLite DB and run:
 

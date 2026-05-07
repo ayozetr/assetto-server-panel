@@ -1,6 +1,9 @@
 # Tools
 
-The `tools/` folder contains two Python scripts for managing the bundled Kunos asset previews that the dashboard uses as fallbacks when a car or track has no thumbnails in the AC content directory.
+The `tools/` folder contains:
+
+- Two **Python scripts** for managing the bundled Kunos asset previews that the dashboard uses as fallbacks when a car or track has no thumbnails in the AC content directory.
+- One **Node script** for verifying the integrity of the audit log hash chain.
 
 ## Requirements
 
@@ -62,3 +65,17 @@ The script will ask for:
 
 1. **Directory to convert** — defaults to `src/assets/kunos/`.
 2. **WebP quality** — a number from 1 to 100, defaults to 85. Higher means better quality and larger files.
+
+---
+
+## verify-audit.js
+
+Walks the `audit_log` table in a SQLite snapshot and verifies the SHA-256 hash chain. Each row's `row_hash` is recomputed from `prev_hash | logged_at | actor | action | target | detail` — a tampered or deleted row breaks every subsequent hash and the verifier reports the first break.
+
+```bash
+node tools/verify-audit.js path/to/assetto.db
+```
+
+Defaults to `./assetto.db` if no path is given. Exits `0` on a clean chain, `1` on the first break.
+
+Pair this with the periodic `/api/admin/backup` download to detect tampering by comparing chains across snapshots — once a row is hashed in, you cannot edit `detail` (or any other column) without breaking every later row.

@@ -13,9 +13,9 @@ Requests that lack a valid session receive `401 Unauthorized`.
 ## Auth endpoints
 
 ### `GET /api/health`
-Liveness probe. No auth required.
+Liveness probe. No auth required. Intentionally returns no diagnostic data to anonymous clients.
 
-**Response:** `{ "ok": true, "uptime": 3600 }`
+**Response:** `{ "ok": true }`
 
 ---
 

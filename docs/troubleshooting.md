@@ -94,18 +94,55 @@ npm start                                 # or start manually
 
 ---
 
-## JSX files return 404
+## `dist/*.js` returns 404 / "MIME type 'text/plain'" warning
 
-All source files live under `src/`. If you moved files or cloned into a different directory structure, check that the paths in `index.html` match the actual file locations.
+Since the build step shipped, the panel serves pre-transpiled JS from `dist/` instead of raw JSX from `src/`. If `dist/` doesn't exist, the static-file allow-list will serve nothing and the page stays blank.
+
+**Fix:** rebuild from the project root:
+```bash
+node build.js
+# or
+npm run build
+```
+
+`npm start` runs the build automatically via the `prestart` script. If you launch the panel with `node server.js` directly (e.g. from a custom systemd unit), make sure your unit also runs `node build.js` first (`ExecStartPre=…/node build.js`, see `docs/deployment.md`).
 
 ---
 
 ## Changes after update don't appear
 
-The service worker caches static files aggressively. After pulling an update and restarting the server, force a full refresh in the browser:
+This used to require a hard reload. Since SW v12 the panel uses **network-first for navigation** — `index.html` always comes from the network when reachable, so security and UI fixes propagate without manual cache busts. If you still see a stale UI:
 
-- **Chrome / Edge:** `Ctrl+Shift+R`
-- **Firefox:** `Ctrl+Shift+R`
-- **Safari:** `Cmd+Option+R`
+1. The browser may still be running the old SW. Reload twice — the first reload activates the new SW, the second uses it.
+2. Confirm the server is actually up to date (`git log -1` and `systemctl status assetto-dashboard`).
+3. As a last resort, DevTools → Application → Service Workers → **Unregister**, then reload.
 
-Or go to DevTools → Application → Service Workers → **Unregister**, then reload.
+---
+
+## "Application crashed" red screen
+
+The frontend has a top-level error boundary. When a render error escapes React's normal handling, the panel shows a red screen with the stack trace and a "Clear session and reload" button. The button wipes `localStorage.ac-user` and reloads — useful when stale local state is the trigger.
+
+If it keeps happening, copy the stack trace and the `X-Request-Id` header from the failing request (DevTools → Network) and report it.
+
+---
+
+## Forced password change on first login
+
+By design — the seeded `Admin / Admin1234!` is locked into a blocking modal until a new password is set. **Server-side**, every authenticated route returns `403 { mustChangePassword: true }` until you clear the flag. The modal accepts only passwords ≥ 12 chars (or ≥ 8 with a mix of three character classes).
+
+If you lock yourself out, edit `assetto.db` directly:
+```sql
+UPDATE panel_users SET must_change_password = 0 WHERE username = 'Admin';
+```
+
+---
+
+## Cross-origin request blocked (`403`)
+
+The CSRF guard rejects POST/PUT/DELETE/PATCH whose `Origin` header does not match the request `Host`. Common causes:
+
+- A reverse proxy rewrote `Host` but kept the original `Origin`. Fix the proxy config so both reflect the public hostname.
+- A custom HTTP client setting an explicit `Origin: …` that differs from the panel's URL — drop the header or align it.
+
+If `Origin` is absent (some proxies strip it), the request is allowed and the cookie's `SameSite=Strict` is the only line of defence — that's intentional.

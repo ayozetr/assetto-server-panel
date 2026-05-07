@@ -123,7 +123,7 @@ Log of every mod upload attempt.
 
 ### `audit_log`
 
-Immutable record of every admin action.
+Tamper-evident record of every admin action.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -133,7 +133,31 @@ Immutable record of every admin action.
 | `target` | TEXT | Subject of the action (e.g. Steam GUID, username, mod name) |
 | `detail` | TEXT | Extra context (e.g. player display name) |
 | `logged_at` | TEXT | Timestamp of the action |
+| `prev_hash` | TEXT | SHA-256 of the previous row's `row_hash` (empty for the first row) |
+| `row_hash` | TEXT | `sha256(prev_hash + "|" + logged_at + "|" + actor + "|" + action + "|" + target + "|" + detail)` |
 
-Recorded action keys: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`.
+Each row chains into the next via `prev_hash`/`row_hash`. Editing or deleting an intermediate row breaks every subsequent hash. Verify the chain locally with:
 
-Readable via `GET /api/audit` (admin only — returns last 200 entries).
+```bash
+node tools/verify-audit.js path/to/assetto.db
+```
+
+(returns exit code 0 if intact, 1 if tampered).
+
+**Recorded action keys:** `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`, `admin.backup`.
+
+A daily sweeper deletes rows older than `AUDIT_RETENTION_DAYS` (env, default 365). Readable via `GET /api/audit` (admin-only, cursor-paginated).
+
+---
+
+### `login_attempts`
+
+Persistent rate-limit state for `/api/auth/login` and `/api/auth/change-password`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `ip` | TEXT PK | Client IP (or proxy-forwarded IP when `TRUST_PROXY=1`) |
+| `count` | INTEGER | Failed attempts within the current window |
+| `reset_at` | INTEGER | Unix ms when the count is cleared |
+
+Persisting these to SQLite means a brute-forcer cannot reset the counter by triggering a server restart. A sweeper drops expired rows every 30 minutes.

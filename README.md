@@ -99,6 +99,7 @@ in the SQLite DB and log in normally.
 | [API reference](docs/api.md) | All server endpoints |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and how to fix them |
 | [Tools](docs/tools.md) | Scripts for extracting and compressing bundled Kunos assets |
+| [Security policy](SECURITY.md) | How to report vulnerabilities and what is in / out of scope |
 
 ---
 

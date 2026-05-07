@@ -14,7 +14,7 @@ The Mods page lets any logged-in user upload and install car or track mods direc
 | RAR | `.rar` |
 | 7-Zip | `.7z` |
 
-The default upload size limit is **500 MB** and can be changed from the Configuration page (up to 10,240 MB).
+The default upload size limit is **500 MB**, configurable from the Configuration page. The panel enforces an absolute hard cap of **2 GB** (`UPLOAD_HARD_CAP_BYTES` in `server.js`) on top of whatever the admin sets — values higher than 2 GB in `panel_settings.upload_max_mb` are silently capped, so a misconfiguration can't OOM the panel.
 
 ---
 
@@ -50,9 +50,11 @@ Car signals are checked first. If `data.acd` is found, it is always a car — no
 
 - The archive must contain **exactly one root folder** (e.g. `my_car/`). Archives with multiple root folders or files loose at the root are rejected.
 - Only game-relevant file extensions are extracted. Scripts, executables and unknown formats are silently skipped.
-- **Zip-Slip protection** — any archive entry whose path escapes the destination directory is rejected immediately.
+- **Zip-Slip protection** — any archive entry whose path escapes the destination directory aborts the entire install (no silent skip; partial installs would be dangerous).
+- **Decompression-bomb caps** — archives are rejected before extraction if they have more than **50 000 entries**. During extraction, any entry over **2 GB** uncompressed, or a cumulative extracted size over **5 GB**, also aborts the install.
+- **INI value sanitisation** — text fields written into `server_cfg.ini` (server name, welcome message, passwords) are stripped of `[`, `]`, `;`, `#`, `=`, control chars, and (for passwords) non-printable bytes — protecting against config injection.
 - The extracted folder is placed in `AC_CONTENT_DIR/cars/` for cars and `AC_CONTENT_DIR/tracks/` for tracks.
-- After a successful install, the car/track lists update automatically in the UI without a page reload.
+- After a successful install, the car/track lists update automatically in the UI without a page reload (mtime-keyed cache invalidation).
 
 ---
 
@@ -85,7 +87,11 @@ Go to **Configuration → Chunked upload** and toggle it on. The setting is save
 1. The browser splits the file into 5 MB chunks.
 2. Each chunk is base64-encoded and sent to `POST /api/mods/upload/chunk` as JSON.
 3. The server stores each chunk in a temporary directory under `/tmp/ac-upload-chunks/<uploadId>/`.
-4. When the last chunk arrives, all pieces are reassembled in memory and passed to the same extraction pipeline as a direct upload.
+4. When the last chunk arrives, the server **streams** each chunk file into a single assembled temp file on disk (no `Buffer.concat` of the whole upload in RAM) and then passes it to the extraction pipeline. Peak RAM during assembly is ~5 MB (one chunk), not 2× the upload size.
 5. Temporary files are cleaned up automatically after assembly (or after 2 hours if an upload was abandoned).
+6. **Per-user quota:** each user can have at most one upload in-flight; a second `uploadId` from the same user is rejected with `429` until the active one finishes or stales out (5 min of no chunks).
+7. **Bounds:** `chunkIndex` must be `0 ≤ idx < totalChunks`, and `totalChunks` is capped at 4 096 (~20 GB ceiling, well above the 2 GB hard cap).
+
+The single-shot `POST /api/mods/upload` endpoint also streams the multipart body straight to a temp file as bytes arrive (the multipart parser is stream-based), so neither path ever buffers the whole archive in memory.
 
 > **Note:** The service worker explicitly bypasses `/api/mods/upload/chunk` to avoid a known browser bug where the SW's `fetch(request)` forwarding corrupts large POST bodies.

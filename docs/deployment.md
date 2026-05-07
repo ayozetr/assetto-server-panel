@@ -89,6 +89,10 @@ ingress:
 sudo systemctl enable --now cloudflared
 ```
 
+### Trust the proxy
+
+Add `TRUST_PROXY=1` to `.env` so the panel honours `CF-Connecting-IP` / `X-Forwarded-For` for rate-limiting, login lockouts, and audit-log IPs. Without this, every request appears to come from the Cloudflare edge and the per-IP limiter would either lock everyone out together or be useless. **Only set `TRUST_PROXY=1` when the panel is reachable exclusively through Cloudflare** — if it is also reachable directly on the LAN, clients could spoof the header.
+
 ### Chunked upload
 
 When accessing the panel via Cloudflare, large file uploads may be blocked by the WAF. Enable **Chunked upload** in the panel's Configuration page to split files into 5 MB JSON chunks that pass through without issues.

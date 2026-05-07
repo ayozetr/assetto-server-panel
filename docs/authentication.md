@@ -10,7 +10,7 @@ The panel uses a session-based authentication system backed by SQLite.
 4. The browser sends the cookie automatically with every API request.
 5. On logout, the token is deleted from the database immediately and the cookie is cleared.
 
-**Rate limiting:** 5 failed login or change-password attempts per IP address lock both endpoints for 15 minutes.
+**Rate limiting:** 5 failed login or change-password attempts per IP address lock both endpoints for 15 minutes. Lockout state is **persisted to SQLite** (`login_attempts` table), so a brute-forcer cannot reset the counter by triggering a server restart. A sweeper drops expired rows every 30 min.
 
 **CSRF protection:** state-changing requests (POST/PUT/DELETE/PATCH) must come from the same `Origin` (or `Referer`) as the request `Host`; mismatches return `403`. Combined with `SameSite=Strict` cookies this blocks cross-site requests at two layers.
 
@@ -74,12 +74,25 @@ Admins can manage panel users from the **Users** page:
 
 Users can change their own password from the **My account** page (requires entering the current password).
 
+### Password policy
+
+The server enforces (and the client mirrors) the same minimum strength on every password change:
+
+- **≥ 12 characters**, **or**
+- **≥ 8 characters and a mix of three classes** (lowercase / UPPERCASE / digit / symbol).
+- Maximum length: 128.
+- A short blacklist (`password`, `qwerty12`, `admin1234`, etc.) is rejected outright.
+
+Generated passwords always satisfy the policy.
+
 ### Password generator
 
 The My account page includes a built-in secure password generator:
 - Length slider (8–24 characters)
 - Toggle for special characters
 - Live preview field with copy and "use" buttons
+
+Internally it uses `crypto.getRandomValues()` with rejection sampling to avoid modulo bias — `Math.random()` is **not** used.
 
 ---
 

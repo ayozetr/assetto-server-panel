@@ -289,6 +289,8 @@ try {
   `);
   // Schema migrations (safe to run on every start)
   try { db.exec(`ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN row_hash  TEXT NOT NULL DEFAULT ''`); } catch {}
 
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
@@ -2486,11 +2488,27 @@ function insertModHistory(entry) {
   } catch {}
 }
 
+// Hash-chain the audit log for tamper-evidence. Each row's row_hash =
+// sha256(prev_hash || logged_at || actor || action || target || detail).
+// `tools/verify-audit.js` (or any consumer) can walk the table and recompute the
+// chain — a tampered or deleted row breaks every subsequent hash. This does not
+// prevent deletion (any admin with DB access can DROP), but it does prevent silent
+// edits and lets external backups detect tampering by comparing chains.
 function insertAuditLog(actor, action, target = '', detail = '') {
   if (!db) return;
   try {
-    db.prepare('INSERT INTO audit_log (actor, action, target, detail) VALUES (?, ?, ?, ?)').run(actor, action, target, detail);
-  } catch {}
+    const tx = db.transaction(() => {
+      const last = db.prepare('SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1').get();
+      const prev = last?.row_hash || '';
+      const loggedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const data = `${prev}|${loggedAt}|${actor}|${action}|${target}|${detail}`;
+      const rowHash = crypto.createHash('sha256').update(data).digest('hex');
+      db.prepare(
+        'INSERT INTO audit_log (actor, action, target, detail, logged_at, prev_hash, row_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(actor, action, target, detail, loggedAt, prev, rowHash);
+    });
+    tx();
+  } catch (e) { log.warn('audit log insert failed:', e.message); }
 }
 
 // Admin: download a consistent DB snapshot via SQLite VACUUM INTO. Streams the
@@ -3017,7 +3035,19 @@ function handler(req, res) {
     if (err) {
       return respond(res, err.code === 'ENOENT' ? 404 : 500, 'text/plain', `${err.code} — ${urlPath}`);
     }
-    respond(res, 200, MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream', data);
+    // Smart Cache-Control: long for /dist/ JS and /src/assets/ images (rare changes,
+    // network-first SW handles the few that matter); short for index.html / sw.js so
+    // updates propagate quickly; no-store for /api/ already handled by `respond()`'s
+    // default. Lets Cloudflare cache the heavy stuff and saves bandwidth.
+    const mime = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+    let cache = 'no-store';
+    if (requested.startsWith('/dist/'))            cache = 'public, max-age=600';
+    else if (requested.startsWith('/src/assets/')) cache = 'public, max-age=86400, immutable';
+    else if (requested === '/src/styles.css')      cache = 'public, max-age=600';
+    else if (requested === '/manifest.webmanifest')cache = 'public, max-age=3600';
+    else if (requested === '/sw.js')               cache = 'no-cache';
+    else if (requested === '/index.html')          cache = 'no-cache';
+    respond(res, 200, mime, data, { 'Cache-Control': cache });
   });
 }
 

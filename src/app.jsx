@@ -492,6 +492,20 @@ function AppInner(props) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [mobileMenuOpen]);
+
+  // Browser online/offline detection — separate from backendDown (which polls /api/metrics).
+  // Lets the user know the SW is serving cached data when their network drops.
+  const [offline, setOffline] = React.useState(typeof navigator !== 'undefined' && navigator.onLine === false);
+  React.useEffect(() => {
+    const onOnline  = () => setOffline(false);
+    const onOffline = () => setOffline(true);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
   // Esc closes the mobile drawer
   React.useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -521,7 +535,13 @@ function AppInner(props) {
           onMenuClick={() => setMobileMenuOpen(o => !o)}
         />
         <div className="content" id="ac-main-content">
-          {backendDown && (
+          {offline && (
+            <div className="alert-banner warn" role="status" aria-live="polite">
+              <I.IconAlertTriangle size={14}/>
+              {t('common.offline') || 'You are offline — data shown may be stale.'}
+            </div>
+          )}
+          {!offline && backendDown && (
             <div className="alert-banner error">
               <I.IconX size={14}/>
               {t('common.backend_down')}

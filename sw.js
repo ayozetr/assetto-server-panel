@@ -6,7 +6,7 @@
 //   - cross-origin (CDN)    : stale-while-revalidate
 //   - same-origin static    : stale-while-revalidate
 
-const CACHE_NAME  = 'ac-panel-v13';
+const CACHE_NAME  = 'ac-panel-v14';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -68,16 +68,40 @@ self.addEventListener('fetch', (event) => {
   // Never intercept chunk uploads — SW's fetch(request) corrupts large POST bodies
   if (url.pathname === '/api/mods/upload/chunk') return;
 
+  // Selected GETs are cached for offline read-only browsing (PWA mode). The
+  // cache is updated on every successful network response; if the network is
+  // unreachable the SW returns the last good response with a header marker so
+  // the UI can hint that data may be stale.
+  const OFFLINE_API_PATHS = ['/api/cars', '/api/tracks', '/api/config', '/api/results', '/api/players/history'];
+  const isOfflineable = request.method === 'GET'
+    && url.pathname.startsWith(API_PREFIX)
+    && OFFLINE_API_PATHS.includes(url.pathname);
+
   // Always go network-first for API calls (real-time data)
   if (url.pathname.startsWith(API_PREFIX)) {
-    event.respondWith(
-      fetch(request).catch(() =>
-        new Response(JSON.stringify({ error: 'Offline' }), {
+    event.respondWith((async () => {
+      try {
+        const res = await fetch(request);
+        if (isOfflineable && res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(url.pathname, clone)).catch(() => {});
+        }
+        return res;
+      } catch {
+        if (isOfflineable) {
+          const cached = await caches.match(url.pathname);
+          if (cached) {
+            const headers = new Headers(cached.headers);
+            headers.set('X-AC-Cache', 'stale-offline');
+            return new Response(await cached.clone().blob(), { status: cached.status, statusText: cached.statusText, headers });
+          }
+        }
+        return new Response(JSON.stringify({ error: 'Offline' }), {
           status: 503,
           headers: { 'Content-Type': 'application/json' },
-        })
-      )
-    );
+        });
+      }
+    })());
     return;
   }
 

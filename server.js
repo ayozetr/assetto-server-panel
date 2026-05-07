@@ -2520,6 +2520,42 @@ function insertAuditLog(actor, action, target = '', detail = '') {
   } catch (e) { log.warn('audit log insert failed:', e.message); }
 }
 
+// Admin: Prometheus exposition format. Scrape with HTTP basic / token auth or
+// from a sidecar with the panel cookie. Each metric is a snapshot — no rate
+// stats are kept in memory beyond the basic counters in `_sweeperState`.
+async function apiAdminMetricsProm(req, res) {
+  if (!checkAdminAuth(req)) return respond(res, 401, 'text/plain', 'Unauthorized');
+  const lines = [];
+  const m = (name, type, help, value, labels) => {
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} ${type}`);
+    const lbl = labels ? `{${Object.entries(labels).map(([k, v]) => `${k}="${v}"`).join(',')}}` : '';
+    lines.push(`${name}${lbl} ${value}`);
+  };
+  m('panel_uptime_seconds',         'counter', 'Process uptime in seconds',                          Math.floor(process.uptime()));
+  m('panel_memory_rss_bytes',       'gauge',   'Resident memory size of the Node process',          process.memoryUsage().rss);
+  m('panel_sse_clients',            'gauge',   'Active Server-Sent-Events connections',              sseClients.size);
+  m('panel_active_uploads',         'gauge',   'Per-user uploads currently in-flight',               _userUploads.size);
+  m('panel_server_action_in_flight','gauge',   'Whether an AC start/stop/restart is running (0/1)',  _serverActionInFlight ? 1 : 0);
+  if (db) {
+    try { m('panel_sessions_total',          'gauge', 'Active panel sessions',          db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n); } catch {}
+    try { m('panel_panel_users_total',       'gauge', 'Configured panel users',         db.prepare('SELECT COUNT(*) AS n FROM panel_users').get().n); } catch {}
+    try { m('panel_audit_log_total',         'gauge', 'Audit log entries',              db.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n); } catch {}
+    try { m('panel_login_attempts_total',    'gauge', 'Tracked login attempt buckets',  db.prepare('SELECT COUNT(*) AS n FROM login_attempts').get().n); } catch {}
+    try { m('panel_laps_total',              'gauge', 'Recorded lap times',             db.prepare('SELECT COUNT(*) AS n FROM laps').get().n); } catch {}
+    try { m('panel_mod_history_total',       'gauge', 'Mod uploads recorded',           db.prepare('SELECT COUNT(*) AS n FROM mod_history').get().n); } catch {}
+  }
+  // AC server presence — best-effort from cached state, no fresh probe to avoid
+  // a 1.5 s scrape latency.
+  m('ac_server_up', 'gauge', 'Whether acServer was up at the last poll (0/1)', _acRunSince ? 1 : 0);
+  if (_acRunSince) m('ac_server_uptime_seconds', 'counter', 'acServer uptime since first detection', Math.floor((Date.now() - _acRunSince) / 1000));
+  for (const [name, st] of Object.entries(_sweeperState)) {
+    if (st.lastRunAt) m('panel_sweeper_last_run_seconds', 'gauge', `Seconds since last sweep for ${name}`, Math.floor((Date.now() - st.lastRunAt) / 1000), { sweeper: name });
+    m('panel_sweeper_last_removed_total', 'counter', `Last sweep removed count for ${name}`, st.lastRemoved, { sweeper: name });
+  }
+  respond(res, 200, 'text/plain; version=0.0.4; charset=utf-8', lines.join('\n') + '\n');
+}
+
 // Admin: panel internals snapshot for ops debugging. Returns sweeper status,
 // table sizes, and current in-flight counters. Useful when "is the panel still
 // alive?" can't be answered from the UI alone.
@@ -3001,6 +3037,7 @@ function handler(req, res) {
     if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
     if (urlPath === '/api/admin/backup'      && req.method === 'GET')    return apiAdminBackup(req, res);
     if (urlPath === '/api/admin/stats'       && req.method === 'GET')    return apiAdminStats(req, res);
+    if (urlPath === '/api/admin/metrics'     && req.method === 'GET')    return apiAdminMetricsProm(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));

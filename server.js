@@ -1007,6 +1007,8 @@ function intOr(v, fallback) { const n = parseInt(v); return isNaN(n) ? fallback 
 
 async function apiConfigUpdate(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkRateLimit('config-put', clientIp(req), 30, 60 * 1000))
+    return json(res, 429, { error: 'Rate limit: too many config writes' });
   try {
     const body = await readBody(req);
     const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
@@ -1717,6 +1719,8 @@ async function withServerActionLock(req, res, fn) {
 
 async function apiServerStart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
+    return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
     if (acChild && !acChild.killed) return json(res, 409, { error: 'Server is already running' });
     if (await findACPid())          return json(res, 409, { error: 'Server is already running' });
@@ -1733,6 +1737,8 @@ async function apiServerStart(req, res) {
 
 async function apiServerStop(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
+    return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
     const r = await killAC();
     if (!r.ok) return json(res, 500, { error: r.error || 'Failed to stop server' });
@@ -1744,6 +1750,8 @@ async function apiServerStop(req, res) {
 
 async function apiServerRestart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
+    return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
     const k = await killAC();
     if (!k.ok) return json(res, 500, { error: k.error || 'Failed to stop server' });
@@ -1763,8 +1771,12 @@ async function apiServerReload(req, res) {
   return apiServerRestart(req, res);
 }
 
-// ── Login rate limiting ───────────────────────────────────────────────────────
-const _loginAttempts = new Map(); // ip → { count, resetAt }
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// In-memory token bucket per (kind, ip). Login keeps a 5/15min lockout so brute
+// force is meaningfully slowed; lighter limits guard write endpoints from accidental
+// hammering or scripted abuse.
+const _loginAttempts = new Map(); // ip → { count, resetAt } — login + change-password
+const _rateBuckets   = new Map(); // `${kind}|${ip}` → { count, resetAt }
 function checkLoginRateLimit(ip) {
   const now = Date.now();
   const e   = _loginAttempts.get(ip);
@@ -1776,6 +1788,19 @@ function checkLoginRateLimit(ip) {
   }
   return true;
 }
+function checkRateLimit(kind, ip, limit, windowMs) {
+  const now = Date.now();
+  const key = `${kind}|${ip || '_'}`;
+  const e   = _rateBuckets.get(key);
+  if (e && now < e.resetAt) {
+    if (e.count >= limit) return false;
+    e.count++;
+  } else {
+    _rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+  }
+  return true;
+}
+function clientIp(req) { return req.socket?.remoteAddress || ''; }
 
 // ── Auth API ─────────────────────────────────────────────────────────────────
 async function apiAuthLogin(req, res) {
@@ -2315,6 +2340,11 @@ async function cleanupOldChunks() {
 async function apiModUploadChunk(req, res) {
   const uploadedBy = checkAnyAuth(req)?.username || null;
   if (!uploadedBy) return json(res, 401, { error: 'Unauthorized' });
+  // Each chunk is a separate request; allow up to 4096 chunks/hour per IP (≈ one full
+  // 20 GB upload at 5 MB/chunk before lockout). Stops scripted spam without breaking
+  // legitimate uploads.
+  if (!checkRateLimit('mod-chunk', clientIp(req), 4096, 60 * 60 * 1000))
+    return json(res, 429, { error: 'Rate limit: too many chunks' });
 
   // Body is JSON with base64-encoded chunk data — same format as other API calls,
   // avoids multipart/form-data and binary bodies which Cloudflare WAF may block
@@ -2392,6 +2422,8 @@ async function apiModUploadChunk(req, res) {
 // ── Mod upload endpoint ───────────────────────────────────────────────────────
 async function apiModUpload(req, res) {
   if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkRateLimit('mod-upload', clientIp(req), 30, 60 * 60 * 1000))
+    return json(res, 429, { error: 'Rate limit: too many uploads (max 30/hour)' });
 
   let maxMb = 500;
   if (db) {

@@ -1800,12 +1800,25 @@ function checkRateLimit(kind, ip, limit, windowMs) {
   }
   return true;
 }
-function clientIp(req) { return req.socket?.remoteAddress || ''; }
+// Behind Cloudflare / a trusted proxy, every request shares the same socket IP and the
+// rate limiter would either DoS everyone (one bucket) or be useless. Set TRUST_PROXY=1
+// in .env to honour CF-Connecting-IP / X-Forwarded-For instead. Only enable when the
+// panel cannot be reached directly — otherwise a client can spoof the header.
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+function clientIp(req) {
+  if (TRUST_PROXY) {
+    const cf = req.headers['cf-connecting-ip'];
+    if (cf) return String(cf).trim();
+    const xff = req.headers['x-forwarded-for'];
+    if (xff) return String(xff).split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || '';
+}
 
 // ── Auth API ─────────────────────────────────────────────────────────────────
 async function apiAuthLogin(req, res) {
   try {
-    const ip   = req.socket?.remoteAddress || '';
+    const ip   = clientIp(req);
     if (!checkLoginRateLimit(ip))
       return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
 
@@ -1854,7 +1867,7 @@ async function apiAuthChangePassword(req, res) {
     const sess = getSession(req);
     if (!sess) return json(res, 401, { error: 'Unauthorized' });
 
-    const ip = req.socket?.remoteAddress || '';
+    const ip = clientIp(req);
     if (!checkLoginRateLimit(ip))
       return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
 

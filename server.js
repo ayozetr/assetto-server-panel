@@ -1846,6 +1846,8 @@ async function apiPanelUserUpdate(req, res, username) {
       const s = crypto.randomBytes(32).toString('hex');
       db.prepare('UPDATE panel_users SET password_hash = ?, salt = ? WHERE username = ?')
         .run(hashPassword(body.password, s), s, username);
+      // Revoke all live sessions for this user — admin reset must kick the user out
+      try { db.prepare('DELETE FROM sessions WHERE username = ?').run(username); } catch {}
       changes.push('password changed');
     }
     if (changes.length) insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.update', username, changes.join(', '));
@@ -1856,7 +1858,16 @@ async function apiPanelUserUpdate(req, res, username) {
 function apiPanelUserDelete(req, res, username) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 503, { error: 'Database unavailable' });
+  // Refuse to leave the panel without admins
+  try {
+    const target = db.prepare('SELECT role FROM panel_users WHERE username = ?').get(username);
+    if (target?.role === 'admin') {
+      const adminCount = db.prepare(`SELECT COUNT(*) AS n FROM panel_users WHERE role = 'admin'`).get().n;
+      if (adminCount <= 1) return json(res, 400, { error: 'Cannot delete the last admin' });
+    }
+  } catch {}
   db.prepare('DELETE FROM panel_users WHERE username = ?').run(username);
+  try { db.prepare('DELETE FROM sessions WHERE username = ?').run(username); } catch {}
   insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.delete', username);
   json(res, 200, { ok: true });
 }

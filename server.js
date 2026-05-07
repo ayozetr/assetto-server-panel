@@ -46,7 +46,8 @@ function appendLog(raw) {
   logBuffer.push(entry);
   if (logBuffer.length > LOG_MAX) logBuffer.shift();
   const data = JSON.stringify(entry);
-  for (const res of sseClients) {
+  // Iterate a snapshot so deleting on write-failure doesn't skip the next client
+  for (const res of [...sseClients]) {
     try { res.write(`data: ${data}\n\n`); } catch { sseClients.delete(res); }
   }
 }
@@ -869,23 +870,32 @@ function getRAM() {
 }
 
 // ── AC Server detection ───────────────────────────────────────────────────────
-let _acRunSince = null;
+let _acRunSince  = null;
+let _acFailCount = 0;
+const AC_FAIL_THRESHOLD = 3; // require N consecutive /INFO failures before declaring it down
 
 // Fetches /INFO from the AC HTTP API and returns { running, liveTrack }.
-// Also maintains _acRunSince for uptime tracking.
+// Also maintains _acRunSince for uptime tracking. Resilient to transient hiccups:
+// a single failed poll keeps the previous "up" verdict; the uptime is only
+// cleared after N consecutive failures.
 function getACInfo() {
   return new Promise(resolve => {
     let body = '';
+    const onDown = () => {
+      _acFailCount++;
+      if (_acFailCount >= AC_FAIL_THRESHOLD) _acRunSince = null;
+      resolve({ running: false, liveTrack: null });
+    };
     const req = http.get(
       { hostname: '127.0.0.1', port: AC_HTTP_PORT, path: '/INFO', timeout: 1500 },
       res => {
         if (res.statusCode !== 200) {
           res.destroy();
-          _acRunSince = null;
-          return resolve({ running: false, liveTrack: null });
+          return onDown();
         }
         res.on('data', d => { body += d; });
         res.on('end', () => {
+          _acFailCount = 0;
           if (!_acRunSince) _acRunSince = Date.now();
           try {
             const info = JSON.parse(body);
@@ -896,8 +906,8 @@ function getACInfo() {
         });
       }
     );
-    req.on('error', () => { _acRunSince = null; resolve({ running: false, liveTrack: null }); });
-    req.setTimeout(1500, () => { req.destroy(); _acRunSince = null; resolve({ running: false, liveTrack: null }); });
+    req.on('error', onDown);
+    req.setTimeout(1500, () => { req.destroy(); onDown(); });
   });
 }
 
@@ -1453,17 +1463,25 @@ async function apiPlayerKick(req, res) {
     const body  = await readBody(req);
     const carId = body.carId;
     if (carId === undefined) return json(res, 400, { error: 'carId required' });
-    await new Promise(resolve => {
+    const result = await new Promise(resolve => {
       const r = http.request(
         { hostname: '127.0.0.1', port: AC_HTTP_PORT, path: '/api/kick', method: 'POST',
           headers: { 'Content-Type': 'application/json' }, timeout: 2000 },
-        resp => { resp.resume(); resolve(); }
+        resp => {
+          let data = '';
+          resp.on('data', d => data += d);
+          resp.on('end', () => resolve({ status: resp.statusCode || 0, body: data }));
+        }
       );
-      r.on('error', resolve);
-      r.setTimeout(2000, () => { r.destroy(); resolve(); });
+      r.on('error', e   => resolve({ status: 0, error: e.message }));
+      r.setTimeout(2000, () => { r.destroy(); resolve({ status: 0, error: 'AC server timeout' }); });
       r.write(JSON.stringify({ car_id: carId }));
       r.end();
     });
+    if (result.error || result.status === 0)
+      return json(res, 502, { error: result.error || 'AC server unreachable' });
+    if (result.status >= 400)
+      return json(res, 502, { error: `AC server rejected kick: HTTP ${result.status}` });
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'player.kick', String(carId));
     json(res, 200, { ok: true });
@@ -1720,7 +1738,8 @@ async function killAC() {
     if (!childAlive) acChild = null;
     adoptedPid = await findACPid();
     if (!childAlive && !adoptedPid) {
-      _acRunSince = null;
+      _acRunSince  = null;
+      _acFailCount = 0;
       return { ok: true };
     }
     await sleep(250);
@@ -1733,7 +1752,8 @@ async function killAC() {
   await sleep(400);
 
   const stillUp = await findACPid();
-  _acRunSince = null;
+  _acRunSince  = null;
+  _acFailCount = 0;
   if (stillUp) return { ok: false, error: 'Failed to terminate acServer' };
   return { ok: true };
 }
@@ -1760,7 +1780,10 @@ async function apiServerStart(req, res) {
 
     const r = await spawnAC();
     if (!r.ok) return json(res, 500, { error: r.error || 'Failed to start server' });
-    await waitForACUp(8000);
+    const up = await waitForACUp(8000);
+    if (!up) {
+      return json(res, 500, { error: 'acServer started but its HTTP port did not respond within 8s — check ports and logs' });
+    }
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.start');
     json(res, 200, { ok: true });
   });
@@ -1790,7 +1813,10 @@ async function apiServerRestart(req, res) {
     await sleep(500);
     const s = await spawnAC();
     if (!s.ok) return json(res, 500, { error: s.error || 'Failed to start server' });
-    await waitForACUp(10000);
+    const up = await waitForACUp(10000);
+    if (!up) {
+      return json(res, 500, { error: 'acServer restarted but its HTTP port did not respond within 10s — check ports and logs' });
+    }
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.restart');
     json(res, 200, { ok: true });
   });

@@ -53,12 +53,22 @@ Return the currently authenticated user.
 ### `POST /api/auth/change-password`
 Change the authenticated user's own password.
 
+**Auth required:** yes (session). Username is read from the session — it can not be passed in the body.
+
+**Rate limit:** shares the login limiter (5 attempts per IP per 15 minutes).
+
 **Body:**
 ```json
-{ "username": "Admin", "currentPassword": "...", "newPassword": "..." }
+{ "currentPassword": "...", "newPassword": "..." }
 ```
 
 Resets `mustChangePassword` to `false` on success.
+
+---
+
+### CSRF & Origin checks
+
+All `POST`/`PUT`/`DELETE`/`PATCH` requests require either a missing `Origin`/`Referer` header (when the proxy strips it) **or** a value whose `host` matches the request `Host` header. Cross-origin requests are rejected with `403 { error: 'Cross-origin request blocked' }`.
 
 ---
 
@@ -146,6 +156,17 @@ Write a new list of Steam IDs to `whitelist.txt`. Each ID is validated as a 17-d
 
 ---
 
+### `POST /api/whitelist/add`
+Append a single Steam GUID to the whitelist (used by the per-player button on the *Players* page).
+
+**Auth required:** yes (admin)
+
+**Body:** `{ "guid": "76561198000000001", "name": "optional display name" }`
+
+**Response:** `{ "ok": true, "total": <count>, "alreadyPresent": false }`
+
+---
+
 ## Players
 
 ### `GET /api/players`
@@ -196,10 +217,18 @@ All tracks from `AC_CONTENT_DIR/tracks/`, normalised with name, country, length 
 
 ---
 
-### `GET /api/results?limit=500`
-All lap times from imported result files (max 5000).
+### `GET /api/results`
+Lap times from imported result files. Supports server-side filtering — push the filter into the URL instead of round-tripping every row.
 
 **Auth required:** yes
+
+**Query params:**
+- `limit` — max rows (default 500, hard cap 5000)
+- `track` — exact track ID
+- `car` — exact car ID
+- `driver` — Steam GUID
+- `from`, `to` — `YYYY-MM-DD` (inclusive)
+- `validOnly=1` — exclude laps with cuts
 
 ---
 
@@ -332,25 +361,33 @@ Delete a panel user.
 ## Audit log
 
 ### `GET /api/audit`
-Return the last 200 audit log entries in reverse chronological order.
+Return audit log entries in reverse chronological order, with cursor pagination.
 
 **Auth required:** yes (admin)
 
+**Query params:**
+- `limit` — page size (default 50, max 500)
+- `before` — id cursor; returns entries with `id < before`. Use `nextCursor` from a previous response.
+
 **Response:**
 ```json
-[
-  {
-    "id": 42,
-    "actor": "Admin",
-    "action": "player.ban",
-    "target": "76561198000000001",
-    "detail": "PlayerName",
-    "logged_at": "2026-05-06 14:23:00"
-  }
-]
+{
+  "rows": [
+    {
+      "id": 42,
+      "actor": "Admin",
+      "action": "player.ban",
+      "target": "76561198000000001",
+      "detail": "PlayerName",
+      "logged_at": "2026-05-06 14:23:00"
+    }
+  ],
+  "hasMore": true,
+  "nextCursor": 23
+}
 ```
 
-Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`.
+Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`.
 
 ---
 

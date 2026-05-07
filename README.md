@@ -35,10 +35,22 @@ Browse all installed cars and tracks with images, specs and multi-layout support
 Upload mods as `.zip`, `.rar` or `.7z` straight from the browser. The server automatically detects whether it's a car or a track and installs it in the right folder. Works remotely too, with chunked upload support for Cloudflare and other proxies.
 
 ### ⚙️ Server configuration
-Edit `server_cfg.ini` through a visual interface: server name, ports, slots, passwords, driving aids, whitelist and more.
+Edit `server_cfg.ini` through a visual interface: server name, ports, slots, passwords (with show/hide toggle), driving aids, whitelist and more. Race-rule and behaviour options persist correctly even at value `0`.
 
 ### 👥 User management
-Create, edit and delete panel users. Each user has their own profile with password change and a built-in secure password generator.
+Create, edit and delete panel users. Each user has their own profile with password change and a built-in secure password generator (uses `crypto.getRandomValues`). The panel refuses to delete the last admin and revokes a user's active sessions when an admin resets their password.
+
+### 🛡️ Security
+- **Sessions:** scrypt password hashing (constant-time compare), `HttpOnly; SameSite=Strict` cookies with 7-day TTL, automatic 401 → logout interceptor on the client.
+- **Forced first-login change:** seeded `Admin / Admin1234!` is locked into a blocking modal until the password is changed; server-side gate refuses every authenticated endpoint until the flag clears.
+- **CSRF:** unsafe methods require `Origin`/`Referer` to match `Host`; combined with `SameSite=Strict` cookies, cross-site requests are rejected at two layers.
+- **Headers:** CSP, Permissions-Policy, X-Frame-Options, Referrer-Policy on every response. HSTS auto-enabled when behind an HTTPS-terminating proxy.
+- **Rate-limited** login, change-password, mod uploads, server start/stop/restart and config writes. Optional `TRUST_PROXY=1` to honour `CF-Connecting-IP` / `X-Forwarded-For` so the limiter sees real client IPs through Cloudflare.
+- **Mod uploads:** strict zip-slip abort, archive entry-count and aggregate-size caps, INI value sanitisation against injection.
+- **Per-user audit log** of every admin action, with cursor pagination.
+
+### 📱 Responsive
+Sidebar collapses into a drawer with a hamburger toggle below 900 px wide; layouts re-flow to single columns on phones. Tested on portrait phones down to 360 px.
 
 ### 🌍 Multilingual
 Full interface available in **English**, **Spanish** and **Italian**.
@@ -58,7 +70,12 @@ npm start
 
 Open `http://<server-ip>:3000` in your browser.
 
-**Default credentials:** `Admin` / `Admin1234!` — change them after first login.
+**Default credentials:** `Admin` / `Admin1234!`. The first login forces a password change in a blocking modal — the rest of the panel is unreachable (server-side enforced) until the password is changed. If you ever lock yourself out, run:
+
+```sql
+UPDATE panel_users SET must_change_password = 0 WHERE username = 'Admin';
+```
+in the SQLite DB and log in normally.
 
 ---
 

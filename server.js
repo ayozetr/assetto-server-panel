@@ -88,11 +88,22 @@ function createSession(username, role) {
   return token;
 }
 
-function getSession(req) {
+// Parse a cookie name out of the request header by exact name match (split on `=`),
+// not by `startsWith('name=')` — that would also match `name_alt=…`, `name-other=…`,
+// or any future cookie whose name happens to share a prefix.
+function readCookie(req, name) {
   const raw = req.headers.cookie || '';
-  const match = raw.split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
-  if (!match) return null;
-  const token = match.slice(4);
+  for (const part of raw.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+  }
+  return null;
+}
+
+function getSession(req) {
+  const token = readCookie(req, 'sid');
+  if (!token) return null;
   if (db) {
     try {
       return db.prepare('SELECT username, role FROM sessions WHERE token = ? AND expires_at > ?').get(token, Date.now()) || null;
@@ -827,13 +838,19 @@ function getOSInfo() {
 
 function getCPU() {
   return new Promise(resolve => {
+    // /proc/stat is Linux-only. On macOS / FreeBSD / Windows readFileSync throws —
+    // fall back to a 0 % reading so the dashboard still works.
     const read = () => {
-      const v = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0].split(/\s+/).slice(1).map(Number);
-      return { idle: v[3] + (v[4] || 0), total: v.reduce((a, b) => a + b, 0) };
+      try {
+        const v = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0].split(/\s+/).slice(1).map(Number);
+        return { idle: v[3] + (v[4] || 0), total: v.reduce((a, b) => a + b, 0) };
+      } catch { return null; }
     };
     const s1 = read();
+    if (!s1) return resolve(0);
     setTimeout(() => {
       const s2 = read();
+      if (!s2) return resolve(0);
       const di = s2.idle - s1.idle, dt = s2.total - s1.total;
       resolve(dt === 0 ? 0 : Math.round((1 - di / dt) * 100));
     }, 250);
@@ -1525,8 +1542,12 @@ async function apiPlayerBan(req, res) {
 }
 
 // ── Whitelist ─────────────────────────────────────────────────────────────────
-const AC_WHITELIST = process.env.AC_WHITELIST_FILE
-  || path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'whitelist.txt');
+// path.resolve canonicalises the path so the whitelist write/read can never escape
+// to an unintended location via env var injection (e.g. AC_WHITELIST_FILE=/etc/passwd).
+const AC_WHITELIST = path.resolve(
+  process.env.AC_WHITELIST_FILE
+  || path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'whitelist.txt')
+);
 
 function apiWhitelistGet(res) {
   let raw = '';
@@ -1595,7 +1616,8 @@ async function apiSessionApply(req, res) {
     }
     if (body.slots !== undefined) {
       const v = clampInt(body.slots, 1, 200);
-      if (v) s['MAX_CLIENTS'] = String(v);
+      if (!v) return json(res, 400, { error: 'slots must be an integer between 1 and 200' });
+      s['MAX_CLIENTS'] = String(v);
     }
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
@@ -1696,12 +1718,19 @@ function spawnAC() {
     try {
       const child = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio: ['ignore', 'pipe', 'pipe'], detached: false });
       let lineBuf = '';
+      // Force-flush very long lines so misbehaving stdout (no newlines for kilobytes)
+      // doesn't grow the buffer unbounded.
+      const LINE_BUF_MAX = 8 * 1024;
       const onChunk = chunk => {
         if (logStream) logStream.write(chunk);
         lineBuf += chunk.toString();
         const parts = lineBuf.split('\n');
         lineBuf = parts.pop();
         parts.forEach(appendLog);
+        if (lineBuf.length > LINE_BUF_MAX) {
+          appendLog(lineBuf.slice(0, LINE_BUF_MAX) + ' …(truncated)');
+          lineBuf = '';
+        }
       };
       child.stdout.on('data', onChunk);
       child.stderr.on('data', onChunk);
@@ -1925,8 +1954,8 @@ async function apiAuthLogin(req, res) {
 }
 
 function apiAuthLogout(req, res) {
-  const raw = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
-  if (raw) deleteSession(raw.slice(4));
+  const token = readCookie(req, 'sid');
+  if (token) deleteSession(token);
   res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
   json(res, 200, { ok: true });
 }
@@ -2588,9 +2617,10 @@ function handler(req, res) {
       return json(res, 403, { error: 'Cross-origin request blocked' });
     }
 
-    // Public endpoints — no auth required
+    // Public endpoints — no auth required. Don't leak process.uptime to anonymous
+    // clients; it is a fingerprinting signal worth nothing to legitimate health probes.
     if (urlPath === '/api/health' && req.method === 'GET')
-      return json(res, 200, { ok: true, uptime: Math.floor(process.uptime()) });
+      return json(res, 200, { ok: true });
 
     // Auth
     if (urlPath === '/api/auth/me'              && req.method === 'GET')  return apiAuthMe(req, res);

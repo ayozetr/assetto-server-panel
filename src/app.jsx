@@ -157,7 +157,10 @@ function App() {
         .then(r => r.json())
         .then(d => {
           if (!d.username) setUser(null);
-          else if (d.mustChangePassword) setUser(u => ({ ...u, mustChangePassword: true }));
+          // Mirror the server flag in both directions — true → true (forces modal),
+          // false → false (clears stale local state). Without this, a user who cleared
+          // the flag on a different browser keeps seeing the forced-change modal here.
+          else setUser(u => ({ ...u, mustChangePassword: !!d.mustChangePassword }));
         })
         .catch(() => {});
     }

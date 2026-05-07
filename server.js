@@ -1159,8 +1159,28 @@ function apiPlayersHistory(res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Mtime-keyed memoization for the heavy content listings. /api/cars and /api/tracks
+// hit hundreds of files per call; the panel SPA polls them on every login. Cached
+// result is invalidated when (a) the parent directory's mtime changes (new mod added,
+// renamed, deleted) or (b) processModBuffer explicitly calls invalidateContentCache.
+const _contentCache = { cars: null, tracks: null };
+function invalidateContentCache(which) {
+  if (!which || which === 'cars')   _contentCache.cars   = null;
+  if (!which || which === 'tracks') _contentCache.tracks = null;
+}
+async function maybeInvalidateByMtime(key, dir) {
+  try {
+    const st = await fsp.stat(dir);
+    const cached = _contentCache[key];
+    if (cached && cached.mtime === st.mtimeMs) return cached;
+    return { mtime: st.mtimeMs, data: null };
+  } catch { return { mtime: 0, data: null }; }
+}
+
 async function apiCars(res) {
   try {
+    const probe = await maybeInvalidateByMtime('cars', AC_CARS_DIR);
+    if (probe.data) return json(res, 200, probe.data);
     const dirs = await fsp.readdir(AC_CARS_DIR);
     const cars = await Promise.all(
       dirs.map(async id => {
@@ -1229,12 +1249,16 @@ async function apiCars(res) {
         };
       })
     );
-    json(res, 200, cars.sort((a, b) => a.name.localeCompare(b.name)));
+    const sorted = cars.sort((a, b) => a.name.localeCompare(b.name));
+    _contentCache.cars = { mtime: probe.mtime, data: sorted };
+    json(res, 200, sorted);
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
 async function apiTracks(res) {
   try {
+    const probe = await maybeInvalidateByMtime('tracks', AC_TRACKS_DIR);
+    if (probe.data) return json(res, 200, probe.data);
     const dirs = await fsp.readdir(AC_TRACKS_DIR);
     const tracks = await Promise.all(dirs.map(async id => {
       const uiDir    = path.join(AC_TRACKS_DIR, id, 'ui');
@@ -1324,7 +1348,9 @@ async function apiTracks(res) {
         isKunos:       KUNOS_TRACK_IDS.has(id),
       };
     }));
-    json(res, 200, tracks.sort((a, b) => a.name.localeCompare(b.name)));
+    const sorted = tracks.sort((a, b) => a.name.localeCompare(b.name));
+    _contentCache.tracks = { mtime: probe.mtime, data: sorted };
+    json(res, 200, sorted);
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -2423,6 +2449,7 @@ async function apiModUploadChunk(req, res) {
       await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
 
       const result = await processModBuffer(Buffer.concat(buffers), filename);
+      invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
       insertModHistory({ ok: true, filename, uploadedBy, ...result });
       insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
       json(res, 200, { ok: true, done: true, ...result });
@@ -2461,6 +2488,7 @@ async function apiModUpload(req, res) {
   const uploadedBy = checkAnyAuth(req)?.username || null;
   try {
     const result = await processModBuffer(filePart.data, filePart.filename);
+    invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
     insertModHistory({ ok: true, filename: filePart.filename, uploadedBy, ...result });
     insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filePart.filename, `${result.modType}, ${result.filesExtracted} files`);
     json(res, 200, { ok: true, ...result });

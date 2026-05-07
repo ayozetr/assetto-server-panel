@@ -1,6 +1,37 @@
 // Main App: state orchestration + routing
 const { useState: uS, useEffect: uE, useMemo: uM, useRef: uR } = React;
 
+// Error boundary — surfaces render errors instead of leaving a blank page
+class AppErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    this.setState({ info });
+    try { console.error('[AppErrorBoundary]', error, info); } catch {}
+  }
+  reset = () => {
+    try { localStorage.removeItem('ac-user'); } catch {}
+    this.setState({ error: null, info: null });
+    location.reload();
+  };
+  render() {
+    if (!this.state.error) return this.props.children;
+    const msg  = (this.state.error && (this.state.error.stack || this.state.error.message)) || String(this.state.error);
+    const info = this.state.info && this.state.info.componentStack || '';
+    return (
+      <div style={{padding:24, fontFamily:'monospace', fontSize:12, color:'#dc2626', background:'#fff', minHeight:'100vh'}}>
+        <h2 style={{margin:'0 0 12px'}}>Application crashed</h2>
+        <p style={{color:'#444'}}>The UI hit a render error. Reload after clearing local state.</p>
+        <pre style={{whiteSpace:'pre-wrap', background:'#fafafa', border:'1px solid #eee', padding:12, borderRadius:6}}>{msg}</pre>
+        {info && <pre style={{whiteSpace:'pre-wrap', background:'#fafafa', border:'1px solid #eee', padding:12, borderRadius:6, marginTop:8, color:'#555'}}>{info}</pre>}
+        <button onClick={this.reset} style={{marginTop:12, padding:'8px 14px', background:'#dc2626', color:'#fff', border:0, borderRadius:6, cursor:'pointer'}}>
+          Clear session and reload
+        </button>
+      </div>
+    );
+  }
+}
+
 const PAGES = {
   dashboard: { title: 'Dashboard', component: 'PageDashboard' },
   players:   { title: 'Jugadores', component: 'PagePlayers' },
@@ -515,4 +546,6 @@ function TweaksUI() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <AppErrorBoundary><App/></AppErrorBoundary>
+);

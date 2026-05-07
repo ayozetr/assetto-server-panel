@@ -1,6 +1,25 @@
 // Main App: state orchestration + routing
 const { useState: uS, useEffect: uE, useMemo: uM, useRef: uR } = React;
 
+// Global fetch interceptor — when any /api/ call returns 401 the session is gone
+// (expired or revoked). Dispatch a custom event so App can clear user state and
+// re-render the Login screen instead of leaving the UI hanging on stale data.
+// Login attempts (which legitimately return 401 on bad credentials) are excluded.
+if (!window.__acFetchPatched) {
+  window.__acFetchPatched = true;
+  const origFetch = window.fetch;
+  window.fetch = async function patchedFetch(...args) {
+    const res = await origFetch.apply(this, args);
+    try {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+      if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/auth/login')) {
+        window.dispatchEvent(new CustomEvent('ac-session-expired'));
+      }
+    } catch {}
+    return res;
+  };
+}
+
 // Error boundary — surfaces render errors instead of leaving a blank page
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null, info: null }; }
@@ -62,6 +81,13 @@ function App() {
     const handler = () => setLangNonce(n => n + 1);
     window.addEventListener('ac-lang-change', handler);
     return () => window.removeEventListener('ac-lang-change', handler);
+  }, []);
+
+  // Auto-logout when any API call comes back 401 (session expired/revoked)
+  uE(() => {
+    const handler = () => setUser(null);
+    window.addEventListener('ac-session-expired', handler);
+    return () => window.removeEventListener('ac-session-expired', handler);
   }, []);
 
   const [server, setServer] = uS({

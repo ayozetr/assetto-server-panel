@@ -1364,6 +1364,10 @@ function apiKunosSkinPreview(carId, skinName, res) {
   if (!isValidContentId(carId) || !isValidSkinName(skinName))
     return respond(res, 400, 'text/plain', 'Invalid ID');
   const dir = path.join(KUNOS_ASSETS_DIR, 'cars', carId, 'skins', skinName);
+  // Defense in depth: even though the ID validators reject `..`/slashes, assert the
+  // resolved path stays under KUNOS_ASSETS_DIR. Mirrors the guard in apiCarSkinPreview.
+  if (!dir.startsWith(KUNOS_ASSETS_DIR + path.sep))
+    return respond(res, 403, 'text/plain', 'Forbidden');
   serveAssetFallback(res, [
     { path: path.join(dir, 'preview.webp'), mime: 'image/webp' },
     { path: path.join(dir, 'preview.jpg'),  mime: 'image/jpeg' },

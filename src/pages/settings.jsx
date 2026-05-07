@@ -638,20 +638,31 @@ function PageProfile({ user, setUser }) {
   const [genSpecial, setGenSpecial] = useStateC(true);
   const [generated,  setGenerated]  = useStateC('');
 
+  // Crypto-secure: Math.random() exposes V8's xorshift state; one observed password
+  // can predict the next. crypto.getRandomValues() is the WebCrypto CSPRNG.
+  // Modulo bias is avoided with rejection sampling (drop values outside the largest
+  // multiple-of-N below 2^32).
+  const secureRandomInt = (max) => {
+    if (max <= 0) return 0;
+    const limit = Math.floor(0x100000000 / max) * max; // largest multiple of max that fits in u32
+    const buf = new Uint32Array(1);
+    let v;
+    do { window.crypto.getRandomValues(buf); v = buf[0]; } while (v >= limit);
+    return v % max;
+  };
+  const pick = (s) => s[secureRandomInt(s.length)];
   const buildPassword = (length, special) => {
     const lower   = 'abcdefghijklmnopqrstuvwxyz';
     const upper   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const digits  = '0123456789';
     const specials = '!@#$%^&*()_+-=[]{}|;:,.?';
     const pool = lower + upper + digits + (special ? specials : '');
-    let pwd = lower[Math.floor(Math.random() * lower.length)]
-            + upper[Math.floor(Math.random() * upper.length)]
-            + digits[Math.floor(Math.random() * digits.length)];
-    if (special) pwd += specials[Math.floor(Math.random() * specials.length)];
-    while (pwd.length < length) pwd += pool[Math.floor(Math.random() * pool.length)];
+    let pwd = pick(lower) + pick(upper) + pick(digits);
+    if (special) pwd += pick(specials);
+    while (pwd.length < length) pwd += pick(pool);
     const arr = pwd.split('');
     for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = secureRandomInt(i + 1);
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr.join('');
@@ -841,6 +852,7 @@ const ACTION_ICONS = {
   'user.create':    '👤+',
   'user.update':    '👤✎',
   'user.delete':    '👤-',
+  'whitelist.add':  '✓',
 };
 const ACTION_COLOR = {
   'server.start':   'var(--green,#22c55e)',
@@ -854,6 +866,7 @@ const ACTION_COLOR = {
   'user.create':    'var(--text-muted)',
   'user.update':    'var(--text-muted)',
   'user.delete':    'var(--red)',
+  'whitelist.add':  'var(--green,#22c55e)',
 };
 
 function PageAudit() {

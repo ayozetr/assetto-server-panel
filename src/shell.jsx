@@ -225,7 +225,7 @@ function Topbar({ theme, setTheme, server, onServerAction, user, onMenuClick }) 
 // ──────────────────────────────────────────────────────
 function Login({ onLogin }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
-  const [user, setUser] = useState('Admin');
+  const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');

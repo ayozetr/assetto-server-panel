@@ -2335,8 +2335,15 @@ async function apiModUploadChunk(req, res) {
   const filename    = body.filename || '';
   const dataB64     = body.data || '';
 
+  // Bounds: prevents an inflated chunkIndex (e.g. 9999) from inflating the readdir
+  // count and triggering early assembly with missing chunks.
+  const MAX_TOTAL_CHUNKS = 4096; // 4096 × 5 MB ≈ 20 GB ceiling — much higher than any real mod
   if (!uploadId || chunkIndex < 0 || totalChunks < 1 || !filename || !dataB64)
     return json(res, 400, { error: 'Invalid chunk parameters' });
+  if (totalChunks > MAX_TOTAL_CHUNKS)
+    return json(res, 400, { error: `totalChunks > ${MAX_TOTAL_CHUNKS}` });
+  if (chunkIndex >= totalChunks)
+    return json(res, 400, { error: 'chunkIndex out of range' });
 
   const uploadDir = path.join(CHUNK_TMP_DIR, uploadId);
   if (!uploadDir.startsWith(CHUNK_TMP_DIR + path.sep))
@@ -2354,24 +2361,26 @@ async function apiModUploadChunk(req, res) {
     if (received < totalChunks)
       return json(res, 200, { ok: true, done: false, received, total: totalChunks });
 
-    // Lock: only the first request that reaches full-chunk-count assembles the file
+    // Lock: only the first request that reaches full-chunk-count assembles the file.
+    // The lock must cover the entire processModBuffer call — if released earlier, two
+    // concurrent final-chunk requests can both pass the check and double-extract.
     if (_chunkAssembling.has(uploadId))
       return json(res, 409, { error: 'Assembly already in progress for this upload' });
     _chunkAssembling.add(uploadId);
 
-    const buffers = [];
     try {
+      const buffers = [];
       for (let i = 0; i < totalChunks; i++)
         buffers.push(await fsp.readFile(path.join(uploadDir, `chunk-${i}`)));
+      await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+
+      const result = await processModBuffer(Buffer.concat(buffers), filename);
+      insertModHistory({ ok: true, filename, uploadedBy, ...result });
+      insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
+      json(res, 200, { ok: true, done: true, ...result });
     } finally {
       _chunkAssembling.delete(uploadId);
     }
-    await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
-
-    const result = await processModBuffer(Buffer.concat(buffers), filename);
-    insertModHistory({ ok: true, filename, uploadedBy, ...result });
-    insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
-    json(res, 200, { ok: true, done: true, ...result });
   } catch (e) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
     insertModHistory({ ok: false, filename, uploadedBy, error: e.message });

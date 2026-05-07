@@ -51,21 +51,6 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
-const PAGES = {
-  dashboard: { title: 'Dashboard', component: 'PageDashboard' },
-  players:   { title: 'Jugadores', component: 'PagePlayers' },
-  times:     { title: 'Tiempos',   component: 'PageTimes' },
-  logs:      { title: 'Logs',      component: 'PageLogs' },
-  cars:      { title: 'Coches',    component: 'PageCars' },
-  tracks:    { title: 'Tramos',    component: 'PageTracks' },
-  mods:      { title: 'Mods',      component: 'PageMods' },
-  session:   { title: 'Sesión',    component: 'PageSession' },
-  config:    { title: 'Configuración', component: 'PageConfig' },
-  users:     { title: 'Usuarios',  component: 'PageUsers' },
-  audit:     { title: 'Audit Log', component: 'PageAudit' },
-  profile:   { title: 'Mi cuenta', component: 'PageProfile' },
-};
-
 function App() {
   const { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast } = window.AppShell;
 

@@ -1141,7 +1141,7 @@ async function apiConfigUpdate(req, res) {
     if (body.stability   !== undefined) { s['STABILITY_ALLOWED']       = body.stability  ? '1' : '0'; applied.push('stability'); }
     if (body.whitelist   !== undefined) { s['WELCOME_WHITELIST_ENABLED']= body.whitelist  ? '1' : '0'; applied.push('whitelist'); }
 
-    await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
+    await rotateConfigBackup();
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'config.save', 'server_cfg.ini');
 
@@ -1699,7 +1699,7 @@ async function apiSessionApply(req, res) {
       s['MAX_CLIENTS'] = String(v);
     }
 
-    await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
+    await rotateConfigBackup();
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
 
     // Auto-restart if server is running and the caller asks for it
@@ -3080,7 +3080,33 @@ function handler(req, res) {
     if (err) {
       return respond(res, err.code === 'ENOENT' ? 404 : 500, 'text/plain', `${err.code} — ${urlPath}`);
     }
-    // Smart Cache-Control: long for /dist/ JS and /src/assets/ images (rare changes,
+    // Rotate up to N timestamped backups of server_cfg.ini before each save. Without
+// rotation, a single .bak file is overwritten on every save — two bad saves in
+// a row would lose the last good config. We keep the legacy .bak for backwards
+// compat and add per-day timestamped copies (or per-save when run multiple times
+// in the same minute) up to a hard cap.
+const CFG_BACKUPS_KEEP = Math.max(1, parseInt(process.env.CFG_BACKUPS_KEEP, 10) || 10);
+async function rotateConfigBackup() {
+  try {
+    const dir   = path.dirname(AC_CFG_FILE);
+    const base  = path.basename(AC_CFG_FILE);
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const dated = path.join(dir, `${base}.${stamp}.bak`);
+    await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');     // legacy single .bak
+    await fsp.copyFile(AC_CFG_FILE, dated).catch(() => {});    // dated rotation
+    // Trim oldest dated backups beyond the limit
+    const entries = await fsp.readdir(dir).catch(() => []);
+    const ours    = entries
+      .filter(n => n.startsWith(base + '.') && n.endsWith('.bak') && n !== base + '.bak')
+      .sort();
+    while (ours.length > CFG_BACKUPS_KEEP) {
+      const drop = ours.shift();
+      await fsp.unlink(path.join(dir, drop)).catch(() => {});
+    }
+  } catch (e) { log.warn('config backup rotation failed:', e.message); }
+}
+
+// Smart Cache-Control: long for /dist/ JS and /src/assets/ images (rare changes,
     // network-first SW handles the few that matter); short for index.html / sw.js so
     // updates propagate quickly; no-store for /api/ already handled by `respond()`'s
     // default. Lets Cloudflare cache the heavy stuff and saves bandwidth.

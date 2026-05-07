@@ -232,6 +232,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             <div className="field">
               <label className="field-label">{t('config.welcome')}</label>
               <input className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!isAdmin}/>
+              <span className="field-hint">{t('config.welcome_hint') || 'Newlines are not preserved by Assetto Corsa.'}</span>
             </div>
             <div className="row-between">
               <div>

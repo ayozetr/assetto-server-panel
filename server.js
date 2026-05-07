@@ -1798,7 +1798,7 @@ async function apiAuthChangePassword(req, res) {
 
 // ── Panel users CRUD ─────────────────────────────────────────────────────────
 function apiPanelUsers(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 200, []);
   const rows = db.prepare('SELECT username, role, created_at FROM panel_users ORDER BY created_at').all();
   json(res, 200, rows.map(r => ({
@@ -2118,7 +2118,7 @@ function apiModHistoryGet(res) {
 }
 
 function apiModHistoryDelete(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 200, { ok: true });
   db.prepare('DELETE FROM mod_history').run();
   json(res, 200, { ok: true });

@@ -6,24 +6,26 @@
 //   - cross-origin (CDN)    : stale-while-revalidate
 //   - same-origin static    : stale-while-revalidate
 
-const CACHE_NAME  = 'ac-panel-v12';
+const CACHE_NAME  = 'ac-panel-v13';
 const API_PREFIX  = '/api/';
 
-// Static assets to pre-cache on install
+// Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
+// by build.js; the SW pre-fetches the .js files instead of the source .jsx files.
 const PRECACHE = [
   '/',
   '/src/styles.css',
-  '/src/tweaks-panel.jsx',
-  '/src/icons.jsx',
-  '/src/utils.jsx',
-  '/src/i18n.jsx',
-  '/src/shell.jsx',
-  '/src/pages/monitoring.jsx',
-  '/src/pages/content.jsx',
-  '/src/pages/settings.jsx',
-  '/src/pages/laptimes.jsx',
-  '/src/pages/mods.jsx',
-  '/src/app.jsx',
+  '/dist/tweaks-panel.js',
+  '/dist/icons.js',
+  '/dist/utils.js',
+  '/dist/i18n.js',
+  '/dist/shell.js',
+  '/dist/pages/monitoring.js',
+  '/dist/pages/content.js',
+  '/dist/pages/settings.js',
+  '/dist/pages/laptimes.js',
+  '/dist/pages/mods.js',
+  '/dist/app.js',
+  '/dist/sw-register.js',
   '/src/assets/icon.png',
   '/src/assets/icon-192.png',
   '/src/assets/icon-512.png',

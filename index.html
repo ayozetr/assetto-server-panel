@@ -21,30 +21,21 @@
 <body>
   <div id="root"></div>
 
-  <script data-cfasync="false" src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script data-cfasync="false" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-  <script data-cfasync="false" src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script data-cfasync="false" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script data-cfasync="false" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 
-  <script data-cfasync="false" type="text/babel" src="src/tweaks-panel.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/icons.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/utils.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/i18n.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/shell.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/pages/monitoring.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/pages/content.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/pages/settings.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/pages/laptimes.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/pages/mods.jsx"></script>
-  <script data-cfasync="false" type="text/babel" src="src/app.jsx"></script>
+  <script data-cfasync="false" src="dist/tweaks-panel.js"></script>
+  <script data-cfasync="false" src="dist/icons.js"></script>
+  <script data-cfasync="false" src="dist/utils.js"></script>
+  <script data-cfasync="false" src="dist/i18n.js"></script>
+  <script data-cfasync="false" src="dist/shell.js"></script>
+  <script data-cfasync="false" src="dist/pages/monitoring.js"></script>
+  <script data-cfasync="false" src="dist/pages/content.js"></script>
+  <script data-cfasync="false" src="dist/pages/settings.js"></script>
+  <script data-cfasync="false" src="dist/pages/laptimes.js"></script>
+  <script data-cfasync="false" src="dist/pages/mods.js"></script>
+  <script data-cfasync="false" src="dist/app.js"></script>
 
-  <script data-cfasync="false">
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('[PWA] Service Worker registered', reg.scope))
-          .catch(err => console.warn('[PWA] Service Worker registration failed', err));
-      });
-    }
-  </script>
+  <script data-cfasync="false" src="dist/sw-register.js"></script>
 </body>
 </html>

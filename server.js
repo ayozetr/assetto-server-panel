@@ -505,13 +505,13 @@ function setSecurityHeaders(req, res) {
   // Lock down browser features the panel never uses
   res.setHeader('Permissions-Policy',
     'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
-  // Content Security Policy. Babel-standalone needs both 'unsafe-eval' (Function/eval
-  // calls) AND 'unsafe-inline' (it injects each transpiled `<script type=text/babel>`
-  // back into the DOM as a fresh inline <script> element). Both directives can be
-  // dropped after the build-step migration (TASKS §4.46) ships precompiled bundles.
+  // Content Security Policy. JSX is now pre-transpiled by build.js (esbuild) and
+  // served from /dist/ as plain JS, so 'unsafe-eval' / 'unsafe-inline' are no
+  // longer required. 'unsafe-inline' for style stays — many components use inline
+  // style props which compile to inline `style="..."` attributes.
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com",
+    "script-src 'self' https://unpkg.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: https:",
@@ -2867,8 +2867,11 @@ function handler(req, res) {
     '/index.html',
     '/sw.js',
     '/manifest.webmanifest',
+    '/src/styles.css',
   ]);
-  const STATIC_ALLOWED_PREFIXES = ['/src/'];
+  // /src/assets/ is kept reachable for the bundled Kunos preview images only;
+  // JSX is served from /dist/ now (pre-transpiled by build.js).
+  const STATIC_ALLOWED_PREFIXES = ['/src/assets/', '/dist/'];
   const requested = urlPath === '/' ? '/index.html' : urlPath;
   const isAllowed = STATIC_ALLOWED_FILES.has(requested)
     || STATIC_ALLOWED_PREFIXES.some(p => requested.startsWith(p));

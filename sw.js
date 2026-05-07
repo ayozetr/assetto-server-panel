@@ -1,7 +1,7 @@
 // Assetto Server Panel — Service Worker
 // Strategy: Network-first for API calls, Cache-first for static assets
 
-const CACHE_NAME  = 'ac-panel-v9';
+const CACHE_NAME  = 'ac-panel-v10';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install
@@ -26,9 +26,19 @@ const PRECACHE = [
 ];
 
 // ── Install: pre-cache static shell ──────────────────────────────────────────
+// Fetch each asset individually so a single 404 (e.g. a renamed file behind
+// Cloudflare) does not abort the whole install and leave clients on the old SW.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(
+        PRECACHE.map((url) =>
+          fetch(url, { cache: 'reload' })
+            .then((res) => { if (res.ok) return cache.put(url, res); })
+            .catch(() => {})
+        )
+      )
+    )
   );
   self.skipWaiting();
 });

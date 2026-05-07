@@ -2509,6 +2509,10 @@ async function processModBuffer(buffer, filename) {
 
 // ── Chunked upload ─────────────────────────────────────────────────────────────
 const CHUNK_TMP_DIR    = path.join(os.tmpdir(), 'ac-upload-chunks');
+// Hard ceiling for any single archive, regardless of panel_settings.upload_max_mb.
+// The frontend setting goes in admin Configuración; this cap is a safety net so
+// a misconfigured value (or hostile DB edit) cannot OOM the panel.
+const UPLOAD_HARD_CAP_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const _chunkAssembling = new Set(); // per-uploadId lock to prevent double-assembly
 // Per-user state: at most one active upload at a time. A new uploadId from the
 // same user is rejected until the current one finishes or stales out (no chunks
@@ -2607,19 +2611,42 @@ async function apiModUploadChunk(req, res) {
       return json(res, 409, { error: 'Assembly already in progress for this upload' });
     _chunkAssembling.add(uploadId);
 
+    // Assemble chunks into a single temp file on disk — never `Buffer.concat` the
+    // whole upload, which would peak at 2× the file size in RAM. Read each chunk,
+    // append it to the output stream, free the buffer. Peak RAM stays at one
+    // chunk (≈5 MB).
+    const assembledPath = path.join(os.tmpdir(), `ac-assembled-${uploadId}.bin`);
     try {
-      const buffers = [];
-      for (let i = 0; i < totalChunks; i++)
-        buffers.push(await fsp.readFile(path.join(uploadDir, `chunk-${i}`)));
+      const out = fs.createWriteStream(assembledPath);
+      let totalBytes = 0;
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(uploadDir, `chunk-${i}`);
+        const buf = await fsp.readFile(chunkPath);
+        totalBytes += buf.length;
+        if (totalBytes > UPLOAD_HARD_CAP_BYTES) {
+          out.destroy();
+          throw Object.assign(new Error(`Upload exceeds hard cap of ${UPLOAD_HARD_CAP_BYTES} bytes`), { status: 413 });
+        }
+        await new Promise((resolve, reject) => {
+          out.write(buf, e => e ? reject(e) : resolve());
+        });
+        await fsp.unlink(chunkPath).catch(() => {});
+      }
+      await new Promise(r => out.end(r));
       await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
 
-      const result = await processModBuffer(Buffer.concat(buffers), filename);
+      // Pass the assembled file to processModBuffer. We still read it into a Buffer
+      // here because the extractors operate on Buffer; refactoring them to streaming
+      // input is a follow-up task. At least we no longer hold N + 1 copies in RAM.
+      const fileBuf = await fsp.readFile(assembledPath);
+      const result = await processModBuffer(fileBuf, filename);
       invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
       insertModHistory({ ok: true, filename, uploadedBy, ...result });
       insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
       clearUserUpload(uploadedBy);
       json(res, 200, { ok: true, done: true, ...result });
     } finally {
+      await fsp.unlink(assembledPath).catch(() => {});
       _chunkAssembling.delete(uploadId);
     }
   } catch (e) {
@@ -2642,11 +2669,14 @@ async function apiModUpload(req, res) {
     const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
     if (row) maxMb = parseInt(row.value, 10) || 500;
   }
+  // Cap whatever the admin configured — UPLOAD_HARD_CAP_BYTES is the absolute
+  // ceiling so a runaway setting cannot OOM the panel.
+  const effectiveCap = Math.min(maxMb * 1024 * 1024, UPLOAD_HARD_CAP_BYTES);
 
   let parts;
-  try { parts = await parseMultipart(req, maxMb * 1024 * 1024); }
+  try { parts = await parseMultipart(req, effectiveCap); }
   catch (e) {
-    if (e.code === 'ELIMIT') return json(res, 413, { error: `File too large (max ${maxMb} MB)` });
+    if (e.code === 'ELIMIT') return json(res, 413, { error: `File too large (max ${Math.floor(effectiveCap / 1024 / 1024)} MB)` });
     return json(res, 400, { error: `Error en la subida: ${e.message}` });
   }
   const filePart = parts.file;

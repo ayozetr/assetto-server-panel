@@ -109,7 +109,7 @@ function deleteSession(token) {
 }
 
 function sessionCookieHeader(token) {
-  return `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`;
+  return `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL / 1000}`;
 }
 
 function checkAdminAuth(req) {
@@ -1732,7 +1732,7 @@ async function apiAuthLogin(req, res) {
 function apiAuthLogout(req, res) {
   const raw = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
   if (raw) deleteSession(raw.slice(4));
-  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
   json(res, 200, { ok: true });
 }
 
@@ -2304,6 +2304,22 @@ async function apiModUpload(req, res) {
   }
 }
 
+// CSRF: reject unsafe methods whose Origin/Referer does not match Host.
+// Cookie is SameSite=Strict so cross-site requests already lose the cookie,
+// but the Origin check is a belt-and-braces second layer (e.g. against
+// subtle browser bugs or a same-site malicious context).
+function isUnsafeMethod(m) { return m === 'POST' || m === 'PUT' || m === 'DELETE' || m === 'PATCH'; }
+function checkOrigin(req) {
+  const host = (req.headers.host || '').toLowerCase();
+  if (!host) return false;
+  const raw = req.headers.origin || req.headers.referer || '';
+  if (!raw) return true; // some proxies strip Origin/Referer; allow cookie-only flow
+  try {
+    const u = new URL(raw);
+    return u.host.toLowerCase() === host;
+  } catch { return false; }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
   setSecurityHeaders(res);
@@ -2313,6 +2329,11 @@ function handler(req, res) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, { 'Allow': 'GET, PUT, POST, DELETE, OPTIONS' });
       return res.end();
+    }
+
+    // CSRF guard: unsafe methods must come from same-origin contexts
+    if (isUnsafeMethod(req.method) && !checkOrigin(req)) {
+      return json(res, 403, { error: 'Cross-origin request blocked' });
     }
 
     // Public endpoints — no auth required

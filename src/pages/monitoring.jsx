@@ -225,8 +225,33 @@ const fmtMs = window.AppUtils.fmtMs;
 // Players page
 function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, onKick, onBan }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
   const [players, setPlayers] = useState(initialPlayers);
   const [historySearch, setHistorySearch] = useState('');
+  const [whitelisting, setWhitelisting] = useState({}); // guid → boolean
+
+  const handleWhitelist = async (p) => {
+    if (!p.steam) { toast.push(t('pl.no_guid') || 'Player has no Steam GUID', 'warn'); return; }
+    setWhitelisting(prev => ({ ...prev, [p.steam]: true }));
+    try {
+      const r = await fetch('/api/whitelist/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guid: p.steam, name: p.name }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        if (d.alreadyPresent) toast.push(`${p.name} ${t('pl.wl_exists') || 'already in whitelist'}`, 'info');
+        else toast.push(`${p.name} ${t('pl.wl_added') || 'added to whitelist'}`, 'success');
+      } else {
+        toast.push(`${t('common.error')}: ${d.error || 'failed'}`, 'error');
+      }
+    } catch (e) {
+      toast.push(`${t('common.error')}: ${e.message}`, 'error');
+    } finally {
+      setWhitelisting(prev => ({ ...prev, [p.steam]: false }));
+    }
+  };
   useEffect(() => {
     if (server.status !== 'running') return;
     const load = () => {
@@ -405,6 +430,14 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                 {isAdmin && (
                   <td>
                     <div className="row" style={{gap: 4}}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleWhitelist(p)}
+                        disabled={!p.steam || whitelisting[p.steam]}
+                        title={t('pl.wl_tip') || 'Add to whitelist'}
+                      >
+                        <I2P.IconShield size={12}/> {t('pl.wl') || 'Whitelist'}
+                      </button>
                       <button className="btn btn-sm" onClick={() => onKick(p)}>
                         <I2P.IconKick size={12}/> {t('pl.kick')}
                       </button>

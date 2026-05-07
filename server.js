@@ -1438,6 +1438,29 @@ async function apiWhitelistPut(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Add a single GUID to the whitelist file. Used by the per-player button on the
+// Players page so the caller doesn't have to read-modify-write the whole list.
+async function apiWhitelistAdd(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  try {
+    const body = await readBody(req);
+    const guid = String(body.guid || '').trim();
+    if (!/^\d{17}$/.test(guid)) return json(res, 400, { error: 'guid must be 17 digits' });
+    let raw = '';
+    try { raw = await fsp.readFile(AC_WHITELIST, 'utf8'); } catch {}
+    const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    if (ids.includes(guid)) {
+      const actor = checkAnyAuth(req)?.username || 'unknown';
+      return json(res, 200, { ok: true, alreadyPresent: true, total: ids.length });
+    }
+    ids.push(guid);
+    await fsp.writeFile(AC_WHITELIST, ids.join('\n') + '\n', 'utf8');
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    insertAuditLog(actor, 'whitelist.add', guid, body.name || '');
+    json(res, 200, { ok: true, total: ids.length });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // ── Session apply ─────────────────────────────────────────────────────────────
 async function apiSessionApply(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
@@ -2416,8 +2439,9 @@ function handler(req, res) {
     if (urlPath === '/api/players/ban'    && req.method === 'POST') return apiPlayerBan(req, res);
 
     // Whitelist
-    if (urlPath === '/api/whitelist' && req.method === 'GET')  return apiWhitelistGet(res);
-    if (urlPath === '/api/whitelist' && req.method === 'PUT')  return apiWhitelistPut(req, res);
+    if (urlPath === '/api/whitelist'     && req.method === 'GET')  return apiWhitelistGet(res);
+    if (urlPath === '/api/whitelist'     && req.method === 'PUT')  return apiWhitelistPut(req, res);
+    if (urlPath === '/api/whitelist/add' && req.method === 'POST') return apiWhitelistAdd(req, res);
 
     // Session apply
     if (urlPath === '/api/session/apply'  && req.method === 'POST') return apiSessionApply(req, res);

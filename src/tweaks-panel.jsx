@@ -394,7 +394,7 @@ function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) 
   return (
     <div className="twk-num">
       <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
-      <input type="number" value={value} min={min} max={max} step={step}
+      <input type="number" inputMode="numeric" value={value} min={min} max={max} step={step}
              onChange={(e) => onChange(clamp(Number(e.target.value)))} />
       {unit && <span className="twk-num-unit">{unit}</span>}
     </div>

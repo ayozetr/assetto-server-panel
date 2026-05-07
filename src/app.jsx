@@ -492,9 +492,17 @@ function AppInner(props) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [mobileMenuOpen]);
+  // Esc closes the mobile drawer
+  React.useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMobileMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileMenuOpen]);
 
   return (
     <div className="app">
+      <a href="#ac-main-content" className="skip-link">Skip to main content</a>
       <Sidebar
         page={page} setPage={setPage}
         user={user}
@@ -512,7 +520,7 @@ function AppInner(props) {
           user={user}
           onMenuClick={() => setMobileMenuOpen(o => !o)}
         />
-        <div className="content">
+        <div className="content" id="ac-main-content">
           {backendDown && (
             <div className="alert-banner error">
               <I.IconX size={14}/>

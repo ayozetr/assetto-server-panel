@@ -782,11 +782,11 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               <div className="grid-2">
                 <div className="field">
                   <label className="field-label">{sessionCfg.mode === 'Race' ? t('sess.laps') : t('sess.duration')}</label>
-                  <input className="input" type="number" min="1" value={sessionCfg.laps} onChange={e => set('laps', Number(e.target.value))} disabled={!isAdmin}/>
+                  <input className="input" type="number" inputMode="numeric" min="1" value={sessionCfg.laps} onChange={e => set('laps', Number(e.target.value))} disabled={!isAdmin}/>
                 </div>
                 <div className="field">
                   <label className="field-label">{t('sess.slots')}</label>
-                  <input className="input" type="number" min="2" max="64" value={sessionCfg.slots} onChange={e => set('slots', Number(e.target.value))} disabled={!isAdmin}/>
+                  <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.slots} onChange={e => set('slots', Number(e.target.value))} disabled={!isAdmin}/>
                 </div>
               </div>
             </div>

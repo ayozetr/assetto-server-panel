@@ -748,6 +748,26 @@ input, select, textarea { font-family: inherit; color: inherit; }
   text-align: center;
 }
 
+/* Mobile UX: disable double-tap zoom on buttons/links so taps register instantly */
+button, .btn, .nav-item, a.btn, .icon-btn, .switch { touch-action: manipulation; }
+
+/* Accessibility: skip-to-content link, hidden until focused */
+.skip-link {
+  position: fixed;
+  top: -40px;
+  left: 8px;
+  z-index: 1000;
+  background: var(--red);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: top 120ms ease;
+}
+.skip-link:focus { top: 8px; outline: 2px solid #fff; outline-offset: 2px; }
+
 /* ───── Responsive: hamburger / sidebar drawer ───── */
 .hamburger {
   display: none;

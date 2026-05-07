@@ -465,6 +465,10 @@ function PageLogs({ server }) {
   const [logs, setLogs] = useState([]);
   const [confirmClear, setConfirmClear] = useState(false);
   const ref = useRef(null);
+  // Highest log id at the time the user pressed "Clear". Used to suppress
+  // re-display of old entries when the SSE reconnects (server replays its
+  // 500-line buffer on every connect via the `init` event).
+  const clearedSeqRef = useRef(0);
 
   useEffect(() => {
     if (paused) return;
@@ -477,12 +481,17 @@ function PageLogs({ server }) {
       if (cancelled) return;
       es = new EventSource('/api/logs/stream');
       es.addEventListener('init', e => {
-        try { setLogs(JSON.parse(e.data)); } catch {}
+        try {
+          const data = JSON.parse(e.data);
+          const cutoff = clearedSeqRef.current;
+          setLogs(Array.isArray(data) ? data.filter(l => l.id > cutoff) : []);
+        } catch {}
         backoff = 1000; // reset backoff after a clean init
       });
       es.onmessage = e => {
         try {
           const line = JSON.parse(e.data);
+          if (line.id <= clearedSeqRef.current) return; // honour clear cutoff for incoming
           setLogs(prev => {
             const next = [...prev, line];
             return next.length > 500 ? next.slice(-500) : next;
@@ -561,7 +570,12 @@ function PageLogs({ server }) {
           title={t('log.clear')}
           message={t('log.clear_confirm')}
           onCancel={() => setConfirmClear(false)}
-          onConfirm={() => { setLogs([]); setConfirmClear(false); }}
+          onConfirm={() => {
+            // Remember the latest seen id so reconnects don't replay old buffer
+            clearedSeqRef.current = logs.length ? logs[logs.length - 1].id : clearedSeqRef.current;
+            setLogs([]);
+            setConfirmClear(false);
+          }}
         />
       )}
     </>

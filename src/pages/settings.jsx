@@ -49,7 +49,7 @@ function UploadLimitCard({ isAdmin }) {
             <label className="field-label">{t('config.upload_limit')}</label>
             <input
               className="input mono"
-              type="number"
+              type="number" inputMode="numeric"
               min="1"
               max="10240"
               value={maxMb}
@@ -252,26 +252,26 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             <div className="grid-2">
               <div className="field">
                 <label className="field-label">{t('config.tcp')}</label>
-                <input className="input mono" type="number" value={config.tcp} onChange={e=>set('tcp', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.tcp} onChange={e=>set('tcp', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.udp')}</label>
-                <input className="input mono" type="number" value={config.udp} onChange={e=>set('udp', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.udp} onChange={e=>set('udp', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
             </div>
             <div className="grid-2">
               <div className="field">
                 <label className="field-label">{t('config.http')}</label>
-                <input className="input mono" type="number" value={config.http} onChange={e=>set('http', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.http} onChange={e=>set('http', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.tickrate')}</label>
-                <input className="input mono" type="number" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
             </div>
             <div className="field">
               <label className="field-label">{t('config.max_clients')}</label>
-              <input className="input mono" type="number" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!isAdmin}/>
+              <input className="input mono" type="number" inputMode="numeric" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!isAdmin}/>
             </div>
           </div>
         </div>
@@ -310,16 +310,16 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             <div className="grid-2">
               <div className="field">
                 <label className="field-label">{t('config.fuel')}</label>
-                <input className="input mono" type="number" min="0" max="200" value={config.fuelRate ?? 100} onChange={e=>set('fuelRate', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.fuelRate ?? 100} onChange={e=>set('fuelRate', Number(e.target.value))} disabled={!isAdmin}/>
                 <span className="field-hint">{t('config.fuel_hint')}</span>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.damage')}</label>
-                <input className="input mono" type="number" min="0" max="200" value={config.damage ?? 100} onChange={e=>set('damage', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.damage ?? 100} onChange={e=>set('damage', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
               <div className="field" style={{gridColumn: 'span 2'}}>
                 <label className="field-label">{t('config.tyres')}</label>
-                <input className="input mono" type="number" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.abs')}</label>
@@ -602,8 +602,14 @@ function UserModal({ user, onClose, onSave }) {
 
 function ConfirmModal({ title, message, onCancel, onConfirm }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  // Esc closes; backdrop click closes; click on dialog does not bubble.
+  useEffectC(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel} role="dialog" aria-modal="true">
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>
@@ -613,7 +619,7 @@ function ConfirmModal({ title, message, onCancel, onConfirm }) {
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onCancel}>{t('common.cancel')}</button>
-          <button className="btn btn-primary" onClick={onConfirm} style={{background: 'var(--red)', borderColor: 'var(--red)'}}>
+          <button className="btn btn-primary" onClick={onConfirm} autoFocus style={{background: 'var(--red)', borderColor: 'var(--red)'}}>
             {t('users.del.confirm')}
           </button>
         </div>

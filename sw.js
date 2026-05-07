@@ -1,7 +1,12 @@
 // Assetto Server Panel — Service Worker
-// Strategy: Network-first for API calls, Cache-first for static assets
+// Strategy:
+//   - /api/*                : network-first (no cache)
+//   - / and /index.html     : network-first with cache fallback (so security/UI
+//                             updates ship without manual SW bumps)
+//   - cross-origin (CDN)    : stale-while-revalidate
+//   - same-origin static    : stale-while-revalidate
 
-const CACHE_NAME  = 'ac-panel-v11';
+const CACHE_NAME  = 'ac-panel-v12';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install
@@ -70,6 +75,26 @@ self.addEventListener('fetch', (event) => {
           headers: { 'Content-Type': 'application/json' },
         })
       )
+    );
+    return;
+  }
+
+  // Network-first for the HTML shell so security headers and UI changes propagate
+  // without users needing to manually clear cache. Cache fallback keeps the panel
+  // usable when the server is briefly unreachable.
+  const isNavigation = request.mode === 'navigate'
+    || url.pathname === '/' || url.pathname === '/index.html';
+  if (isNavigation) {
+    event.respondWith(
+      fetch(request).then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone)).catch(() => {});
+        }
+        return res;
+      }).catch(() => caches.match('/index.html').then((cached) =>
+        cached || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
+      ))
     );
     return;
   }

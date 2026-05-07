@@ -755,6 +755,19 @@ function parseINI(text) {
 function sanitizeIniVal(v) {
   return String(v).replace(/[\r\n\0]/g, ' ');
 }
+// Strict text fields (NAME, WELCOME_MESSAGE) — strip control chars and INI metacharacters
+// that could alter parsing (`[`, `]`, `;`, `#`, `=`).
+function sanitizeIniText(v) {
+  return String(v)
+    .replace(/[\r\n\0]/g, ' ')
+    .replace(/[\[\];#=]/g, '');
+}
+// Password fields — printable ASCII only (excluding INI metacharacters and quote chars).
+// AC server passwords are joined into a URL on the in-game UI; we keep the alphabet narrow
+// so an admin cannot lock themselves (or others) out via stray glyphs.
+function sanitizeIniPassword(v) {
+  return String(v).replace(/[^\x21-\x7E]/g, '').replace(/[\[\];#"'`]/g, '');
+}
 
 function patchINI(raw, obj) {
   const lines = raw.split('\n');
@@ -1000,10 +1013,10 @@ async function apiConfigUpdate(req, res) {
     const ini  = parseINI(raw);
     const s    = ini['SERVER'] = ini['SERVER'] || {};
 
-    if (body.name        !== undefined) s['NAME']                    = String(body.name).slice(0, 255);
-    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']         = String(body.welcome).slice(0, 255);
-    if (body.password    !== undefined) s['PASSWORD']                = String(body.password).slice(0, 255);
-    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']          = String(body.adminPass).slice(0, 255);
+    if (body.name        !== undefined) s['NAME']                    = sanitizeIniText(body.name).slice(0, 255);
+    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']         = sanitizeIniText(body.welcome).slice(0, 255);
+    if (body.password    !== undefined) s['PASSWORD']                = sanitizeIniPassword(body.password).slice(0, 64);
+    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']          = sanitizeIniPassword(body.adminPass).slice(0, 64);
     if (body.tcp         !== undefined) { const p = validPort(body.tcp);         if (p) s['TCP_PORT']                = String(p); }
     if (body.udp         !== undefined) { const p = validPort(body.udp);         if (p) s['UDP_PORT']                = String(p); }
     if (body.http        !== undefined) { const p = validPort(body.http);        if (p) s['HTTP_PORT']               = String(p); }

@@ -109,7 +109,7 @@ function deleteSession(token) {
 }
 
 function sessionCookieHeader(token) {
-  return `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL / 1000}`;
+  return `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`;
 }
 
 function checkAdminAuth(req) {
@@ -889,7 +889,10 @@ function apiLogsStream(req, res) {
   });
   res.write(`event: init\ndata: ${JSON.stringify(logBuffer)}\n\n`);
   sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch { clearInterval(heartbeat); }
+  }, 25000);
+  req.on('close', () => { sseClients.delete(res); clearInterval(heartbeat); });
 }
 
 function apiConfig(res) {
@@ -1688,7 +1691,7 @@ async function apiAuthLogin(req, res) {
 function apiAuthLogout(req, res) {
   const raw = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('sid='));
   if (raw) deleteSession(raw.slice(4));
-  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
   json(res, 200, { ok: true });
 }
 

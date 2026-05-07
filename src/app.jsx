@@ -106,11 +106,14 @@ function App() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load all data from backend on mount
+  // Load all data from backend — runs whenever user logs in (user goes from null → truthy)
   uE(() => {
+    if (!user) return;
+
     fetch('/api/config')
       .then(r => r.json())
       .then(d => {
+        if (d.error) return;
         setConfig(c => ({ ...c, ...d }));
         setSessionCfg(s => ({
           ...s,
@@ -153,7 +156,7 @@ function App() {
       .then(r => r.json())
       .then(d => { if (d.lang && window.AppI18n) window.AppI18n.setLang(d.lang); })
       .catch(() => {});
-  }, []);
+  }, [!!user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll /api/metrics every 4s
   uE(() => {

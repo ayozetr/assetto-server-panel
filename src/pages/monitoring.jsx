@@ -467,21 +467,40 @@ function PageLogs({ server }) {
 
   useEffect(() => {
     if (paused) return;
-    const es = new EventSource('/api/logs/stream');
-    es.addEventListener('init', e => {
-      try { setLogs(JSON.parse(e.data)); } catch {}
-    });
-    es.onmessage = e => {
-      try {
-        const line = JSON.parse(e.data);
-        setLogs(prev => {
-          const next = [...prev, line];
-          return next.length > 500 ? next.slice(-500) : next;
-        });
-      } catch {}
+    let es;
+    let backoff = 1000; // start at 1s, double up to 30s
+    let reconnectTimer = null;
+    let cancelled = false;
+
+    const connect = () => {
+      if (cancelled) return;
+      es = new EventSource('/api/logs/stream');
+      es.addEventListener('init', e => {
+        try { setLogs(JSON.parse(e.data)); } catch {}
+        backoff = 1000; // reset backoff after a clean init
+      });
+      es.onmessage = e => {
+        try {
+          const line = JSON.parse(e.data);
+          setLogs(prev => {
+            const next = [...prev, line];
+            return next.length > 500 ? next.slice(-500) : next;
+          });
+        } catch {}
+      };
+      es.onerror = () => {
+        es.close();
+        if (cancelled) return;
+        reconnectTimer = setTimeout(connect, backoff);
+        backoff = Math.min(backoff * 2, 30000);
+      };
     };
-    es.onerror = () => es.close();
-    return () => es.close();
+    connect();
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (es) es.close();
+    };
   }, [paused]);
 
   useEffect(() => {

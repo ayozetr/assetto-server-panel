@@ -930,7 +930,9 @@ function apiLogsStream(req, res) {
   req.on('close', () => { sseClients.delete(res); clearInterval(heartbeat); });
 }
 
-function apiConfig(res) {
+function apiConfig(req, res) {
+  const sess  = getSession(req);
+  const isAdmin = sess?.role === 'admin';
   fs.readFile(AC_CFG_FILE, 'utf8', (err, data) => {
     if (err) return json(res, 404, { error: 'server_cfg.ini not found' });
     const ini = parseINI(data);
@@ -938,8 +940,8 @@ function apiConfig(res) {
     json(res, 200, {
       name:        s['NAME']                    || '',
       welcome:     s['WELCOME_MESSAGE']          || '',
-      password:    s['PASSWORD']                || '',
-      adminPass:   s['ADMIN_PASSWORD']           || '',
+      password:    isAdmin ? (s['PASSWORD']         || '') : '',
+      adminPass:   isAdmin ? (s['ADMIN_PASSWORD']   || '') : '',
       tcp:         parseInt(s['TCP_PORT'])       || 9600,
       udp:         parseInt(s['UDP_PORT'])       || 9600,
       http:        parseInt(s['HTTP_PORT'])      || 8081,
@@ -2407,7 +2409,7 @@ function handler(req, res) {
     if (urlPath === '/api/metrics'         && req.method === 'GET') return apiMetrics(res);
     if (urlPath === '/api/logs'            && req.method === 'GET') return apiLogs(req, res);
     if (urlPath === '/api/logs/stream'     && req.method === 'GET') return apiLogsStream(req, res);
-    if (urlPath === '/api/config'          && req.method === 'GET') return apiConfig(res);
+    if (urlPath === '/api/config'          && req.method === 'GET') return apiConfig(req, res);
     if (urlPath === '/api/config'          && req.method === 'PUT') return apiConfigUpdate(req, res);
     if (urlPath === '/api/players'         && req.method === 'GET') return apiPlayers(res);
     if (urlPath === '/api/players/history' && req.method === 'GET') return apiPlayersHistory(res);

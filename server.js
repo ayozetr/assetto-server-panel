@@ -456,10 +456,34 @@ function getNetworkIP() {
   return '127.0.0.1';
 }
 
-function setSecurityHeaders(res) {
+function setSecurityHeaders(req, res) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Lock down browser features the panel never uses
+  res.setHeader('Permissions-Policy',
+    'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
+  // Content Security Policy. 'unsafe-eval' is needed for Babel-standalone (in-browser
+  // JSX transpile); after a build step migrates JSX to plain JS (see TASKS §4.46),
+  // this directive can be dropped.
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-eval' https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: https:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; '));
+  // HSTS only when the connection actually arrived over HTTPS (or via a TLS-terminating proxy).
+  const proto = (req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  const isHttps = req?.connection?.encrypted || proto === 'https';
+  if (isHttps) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
 }
 
 function respond(res, status, mime, body, extraHeaders) {
@@ -2376,7 +2400,7 @@ function checkOrigin(req) {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 function handler(req, res) {
-  setSecurityHeaders(res);
+  setSecurityHeaders(req, res);
   const urlPath = req.url.split('?')[0];
 
   if (urlPath.startsWith('/api/')) {

@@ -37,7 +37,7 @@ function ToastProvider({ children }) {
 // ──────────────────────────────────────────────────────
 // Sidebar
 // ──────────────────────────────────────────────────────
-function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
+function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOpen, onCloseMobile }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const items = [
     { id: 'dashboard', label: t('nav.dashboard'), icon: I.IconDashboard, group: 'general' },
@@ -65,8 +65,13 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
     items: items.filter(i => i.group === g),
   })).filter(g => g.items.length > 0);
 
+  // Auto-close drawer when navigating to a new page on mobile
+  const navigate = (id) => { setPage(id); if (onCloseMobile) onCloseMobile(); };
+
   return (
-    <aside className="sidebar">
+    <>
+      {mobileOpen && <div className="sidebar-backdrop" onClick={onCloseMobile}/>}
+      <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="brand">
         <img src="src/assets/icon.png" className="brand-mark" alt="logo"/>
         <div>
@@ -89,7 +94,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
               <button
                 key={item.id}
                 className={`nav-item ${page === item.id ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
-                onClick={() => !disabled && setPage(item.id)}
+                onClick={() => !disabled && navigate(item.id)}
                 disabled={disabled}
                 title={disabled ? t('sidebar.admin_only') : ''}
               >
@@ -128,7 +133,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
             <div className="user-name">{user.name}</div>
             <div className="user-role">{user.role === 'admin' ? t('sidebar.role.admin') : t('sidebar.role.user')}</div>
           </div>
-          <button className="icon-btn" onClick={() => setPage('profile')} title={t('nav.profile')}>
+          <button className="icon-btn" onClick={() => navigate('profile')} title={t('nav.profile')}>
             <I.IconKey size={15}/>
           </button>
           <button className="icon-btn" onClick={onLogout} title={t('sidebar.logout')}>
@@ -136,14 +141,15 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo }) {
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
 // ──────────────────────────────────────────────────────
 // Topbar with server pill + theme toggle
 // ──────────────────────────────────────────────────────
-function Topbar({ theme, setTheme, server, onServerAction, user }) {
+function Topbar({ theme, setTheme, server, onServerAction, user, onMenuClick }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const statusLabel = {
     running: t('topbar.running'),
@@ -157,7 +163,10 @@ function Topbar({ theme, setTheme, server, onServerAction, user }) {
 
   return (
     <div className="topbar">
-      <div style={{display:'flex', alignItems:'center', gap: 10}}>
+      <button className="hamburger" onClick={onMenuClick} aria-label="Menu" title="Menu">
+        <I.IconMenu size={18}/>
+      </button>
+      <div style={{display:'flex', alignItems:'center', gap: 10, minWidth: 0, flexShrink: 1}}>
         <div className="topbar-title">{t('topbar.server')}</div>
         <div className="server-pill">
           <span className={`dot ${dotClass}`}></span>
@@ -173,7 +182,7 @@ function Topbar({ theme, setTheme, server, onServerAction, user }) {
       <div className="topbar-spacer"></div>
 
       {user.role === 'admin' && (
-        <div className="row" style={{gap: 6}}>
+        <div className="row topbar-actions" style={{gap: 6}}>
           {server.status === 'stopped' && (
             <button className="btn btn-primary btn-sm" onClick={() => onServerAction('start')}>
               <I.IconPlay size={12}/> {t('topbar.start')}

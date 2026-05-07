@@ -494,6 +494,14 @@ function AppInner(props) {
   else if (page === 'profile')   content = <PageProfile user={user} setUser={setUser}/>;
   else content = <div className="card" style={{margin: '32px 0'}}><div className="empty">{t('common.not_found')}</div></div>;
 
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  // Auto-close drawer when crossing the desktop breakpoint
+  React.useEffect(() => {
+    const onResize = () => { if (window.innerWidth > 900 && mobileMenuOpen) setMobileMenuOpen(false); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [mobileMenuOpen]);
+
   return (
     <div className="app">
       <Sidebar
@@ -502,6 +510,8 @@ function AppInner(props) {
         onLogout={() => { fetch('/api/auth/logout', { method: 'POST' }).catch(()=>{}); setUser(null); }}
         playersCount={server.status === 'running' ? players.length : 0}
         osInfo={osInfo}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
       <div className="main">
         <Topbar
@@ -509,6 +519,7 @@ function AppInner(props) {
           server={server}
           onServerAction={handleServerAction}
           user={user}
+          onMenuClick={() => setMobileMenuOpen(o => !o)}
         />
         <div className="content">
           {backendDown && (

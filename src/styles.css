@@ -747,3 +747,78 @@ input, select, textarea { font-family: inherit; color: inherit; }
   min-width: 120px;
   text-align: center;
 }
+
+/* ───── Responsive: hamburger / sidebar drawer ───── */
+.hamburger {
+  display: none;
+  width: 36px; height: 36px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  align-items: center;
+  justify-content: center;
+}
+.hamburger:hover { background: var(--bg-3); color: var(--text); }
+.sidebar-backdrop { display: none; }
+
+/* Tablet & phone */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0;
+    width: 84vw;
+    max-width: 320px;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 220ms ease;
+    z-index: 100;
+    box-shadow: 2px 0 24px rgba(0,0,0,0.18);
+    overflow-y: auto;
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.42);
+    z-index: 99;
+    animation: fadeIn 180ms ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .hamburger { display: inline-flex; }
+  .topbar { padding: 0 14px; gap: 10px; height: 52px; }
+  .topbar-title { display: none; }
+  .content { padding: 16px; }
+  .grid-2 { grid-template-columns: 1fr !important; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .page-title { font-size: 19px; }
+  .page-sub { font-size: 12.5px; }
+  /* Tables: horizontal scroll inside the card so layout doesn't burst the viewport */
+  .card { max-width: 100%; overflow-x: auto; }
+  .table { min-width: 540px; }
+  /* Sticky bottom save bar in Config: keep it edge-to-edge */
+  .content > .row[style*="sticky"] { padding: 10px 16px; margin: 16px -16px -16px; }
+  /* Tweaks panel — switch to bottom sheet style on small screens (handled in component) */
+  .login-card { width: calc(100vw - 32px); max-width: 440px; }
+}
+
+/* Phone-only tweaks */
+@media (max-width: 520px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi-value { font-size: 18px !important; }
+  .content { padding: 12px; }
+  .page-header { margin-bottom: 16px; }
+  .topbar { padding: 0 10px; gap: 6px; }
+  .server-pill { padding: 4px 8px; font-size: 11.5px; }
+  .server-pill .muted { display: none; } /* hide "12/24 · 1h 23m" tail to save room */
+  .row.topbar-actions .btn { padding: 5px 8px; font-size: 11.5px; }
+  /* Force sticky save buttons in Config to wrap and stay tappable */
+  .content > .row[style*="sticky"] { flex-wrap: wrap; }
+  .content > .row[style*="sticky"] .btn { flex: 1; justify-content: center; min-width: 110px; }
+}
+
+/* Very narrow (older phones / split screen) */
+@media (max-width: 360px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .brand-name { font-size: 13px; }
+}

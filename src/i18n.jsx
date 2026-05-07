@@ -58,7 +58,7 @@ const dict = {
     'login.err_pass': 'Enter password',
     'login.err_cred': 'Invalid credentials',
     'login.err_conn': 'Connection error',
-    'login.hint': 'Users: admin · mattia',
+    'login.hint': '',
 
     // Common / Global
     'common.save': 'Save',
@@ -473,7 +473,7 @@ const dict = {
     'login.err_pass': 'Introduce una contraseña',
     'login.err_cred': 'Credenciales incorrectas',
     'login.err_conn': 'Error de conexión con el servidor',
-    'login.hint': 'Usuarios: admin · mattia',
+    'login.hint': '',
 
     // Common / Global
     'common.save': 'Guardar',
@@ -888,7 +888,7 @@ const dict = {
     'login.err_pass': 'Inserisci una password',
     'login.err_cred': 'Credenziali non valide',
     'login.err_conn': 'Errore di connessione',
-    'login.hint': 'Utenti: admin · mattia',
+    'login.hint': '',
 
     // Common / Global
     'common.save': 'Salva',

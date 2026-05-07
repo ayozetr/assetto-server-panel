@@ -114,7 +114,7 @@ function sessionCookieHeader(token) {
 
 function checkAdminAuth(req) {
   const sess = getSession(req);
-  if (sess?.role === 'admin') return true;
+  if (sess?.role === 'admin' && !userMustChangePassword(sess.username)) return true;
   if (!ADMIN_TOKEN) return false;
   const h = req.headers['x-admin-token'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '';
   return h === ADMIN_TOKEN;
@@ -122,6 +122,14 @@ function checkAdminAuth(req) {
 
 function checkAnyAuth(req) {
   return getSession(req);
+}
+
+function userMustChangePassword(username) {
+  if (!db || !username) return false;
+  try {
+    const row = db.prepare('SELECT must_change_password FROM panel_users WHERE username = ?').get(username);
+    return row?.must_change_password === 1;
+  } catch { return false; }
 }
 
 // ── MIME ──────────────────────────────────────────────────────────────────────
@@ -2274,7 +2282,14 @@ function handler(req, res) {
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
 
     // All routes below require a valid session
-    if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+    const sess = checkAnyAuth(req);
+    if (!sess) return json(res, 401, { error: 'Unauthorized' });
+
+    // While must_change_password is set, deny everything except the change-password
+    // flow (already handled above as a public endpoint with credential proof).
+    if (userMustChangePassword(sess.username)) {
+      return json(res, 403, { error: 'Password change required', mustChangePassword: true });
+    }
 
     // Panel users CRUD
     if (urlPath === '/api/panel/users' && req.method === 'GET')  return apiPanelUsers(req, res);

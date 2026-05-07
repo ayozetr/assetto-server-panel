@@ -65,7 +65,14 @@ cd assetto-dashboard
 nvm use 20.20.2
 npm install
 cp .env.example .env   # fill in your server paths
-npm start
+npm start              # automatically pre-builds dist/ via esbuild then runs server.js
+```
+
+The first time you run `npm start`, esbuild transpiles `src/*.jsx` to `dist/*.js`. Subsequent starts re-build (it takes ~20 ms — much cheaper than transpiling in the browser on every page load like before).
+
+To rebuild manually after editing JSX without restarting the server:
+```bash
+npm run build
 ```
 
 Open `http://<server-ip>:3000` in your browser.
@@ -118,7 +125,7 @@ What the panel does **not** defend against:
 
 ## Tech stack
 
-- **Frontend:** React 18 + Babel Standalone (no build step)
+- **Frontend:** React 18 (production CDN) + esbuild build step transpiling JSX → plain JS at startup
 - **Backend:** Node.js native HTTP (no Express)
 - **Database:** SQLite via `better-sqlite3`
 - **Mod extraction:** `node-stream-zip`, `node-unrar-js`, `node-7z`

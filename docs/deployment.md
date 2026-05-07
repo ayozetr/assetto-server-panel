@@ -19,6 +19,7 @@ After=network.target
 Type=simple
 User=<your-user>
 WorkingDirectory=/path/to/assetto-dashboard
+ExecStartPre=/home/<your-user>/.nvm/versions/node/v20.20.2/bin/node build.js
 ExecStart=/home/<your-user>/.nvm/versions/node/v20.20.2/bin/node server.js
 Restart=on-failure
 RestartSec=5
@@ -28,6 +29,8 @@ TimeoutStopSec=15    # matches the server's 10 s force-exit guard
 [Install]
 WantedBy=multi-user.target
 ```
+
+> **`ExecStartPre=node build.js`** — the panel ships JSX in `src/` that needs to be transpiled to plain JS in `dist/` before the server starts serving it. esbuild does this in ~20 ms. If you start the server via `npm start` instead, the `prestart` script in `package.json` runs the same step automatically; either form works.
 
 ### 2. Enable and start
 

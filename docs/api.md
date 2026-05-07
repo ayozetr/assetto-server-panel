@@ -66,6 +66,12 @@ Resets `mustChangePassword` to `false` on success.
 
 ---
 
+### Request tracing
+
+Every request is tagged with an `X-Request-Id` header in the response. If the client sends one (e.g. set by Cloudflare), the panel honours it; otherwise the panel mints a short hex id. Server-side log lines include this id so you can correlate UI errors with backend logs by reading the response header.
+
+---
+
 ### CSRF & Origin checks
 
 All `POST`/`PUT`/`DELETE`/`PATCH` requests require either a missing `Origin`/`Referer` header (when the proxy strips it) **or** a value whose `host` matches the request `Host` header. Cross-origin requests are rejected with `403 { error: 'Cross-origin request blocked' }`.

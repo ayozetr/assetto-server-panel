@@ -2341,8 +2341,23 @@ function handler(req, res) {
     return respond(res, 405, 'text/plain', 'Method Not Allowed');
   }
 
-  const filePath = path.resolve(ROOT, urlPath === '/' ? 'index.html' : '.' + urlPath);
-  if (!filePath.startsWith(ROOT + path.sep) && filePath !== path.join(ROOT, 'index.html')) {
+  // Static files: allow-list of public roots only. Blocks /.env, /assetto.db,
+  // /.git, /server.js, /node_modules, /package.json, /tools, etc.
+  const STATIC_ALLOWED_FILES = new Set([
+    '/index.html',
+    '/sw.js',
+    '/manifest.webmanifest',
+  ]);
+  const STATIC_ALLOWED_PREFIXES = ['/src/'];
+  const requested = urlPath === '/' ? '/index.html' : urlPath;
+  const isAllowed = STATIC_ALLOWED_FILES.has(requested)
+    || STATIC_ALLOWED_PREFIXES.some(p => requested.startsWith(p));
+  if (!isAllowed) {
+    return respond(res, 404, 'text/plain', '404 Not Found');
+  }
+
+  const filePath = path.resolve(ROOT, '.' + requested);
+  if (!filePath.startsWith(ROOT + path.sep)) {
     return respond(res, 403, 'text/plain', '403 Forbidden');
   }
 

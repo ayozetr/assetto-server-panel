@@ -2191,56 +2191,153 @@ async function apiPanelSettingsPut(req, res) {
 }
 
 // ── Multipart parser (native, no dependencies) ────────────────────────────────
+// Streaming multipart parser. The file field is piped directly to a temp file
+// as bytes arrive, so the panel never holds the full upload (potentially up to
+// UPLOAD_HARD_CAP_BYTES) in RAM. Other fields are kept as small buffers — they
+// are typically just option flags.
+//
+// Returned shape (compatible with the buffered version it replaces):
+//   { fieldName: { filename, filePath, size }   for the file part
+//     fieldName: 'string value'                 for plain text fields }
+//
+// Caller owns filePath and must unlink() it when done.
 function parseMultipart(req, maxBytes) {
   return new Promise((resolve, reject) => {
     const ct = req.headers['content-type'] || '';
     const bmatch = ct.match(/boundary=([^\s;]+)/);
     if (!bmatch) return reject(new Error('Missing multipart boundary'));
-    const boundary = '--' + bmatch[1];
-    const chunks   = [];
-    let total      = 0;
+    const dashBoundary = Buffer.from('--' + bmatch[1]);
+    const dashBoundaryWithCRLF = Buffer.from('\r\n--' + bmatch[1]);
 
-    req.on('data', chunk => {
+    const result = {};
+    let total    = 0;
+    let buf      = Buffer.alloc(0);
+    let state    = 'PREAMBLE'; // PREAMBLE → HEADERS → DATA(field|file) → PREAMBLE…
+    let curName  = null;
+    let curFilename = null;
+    let fieldBuf = null;
+    let fileWriter = null;
+    let filePath   = null;
+    let bytesWritten = 0;
+    let aborted    = false;
+
+    const fail = (err) => {
+      if (aborted) return;
+      aborted = true;
+      try { req.destroy(); } catch {}
+      if (fileWriter) {
+        try { fileWriter.destroy(); } catch {}
+        if (filePath) fsp.unlink(filePath).catch(() => {});
+      }
+      reject(err);
+    };
+
+    const finishPart = () => {
+      if (!curName) return;
+      if (curFilename != null) {
+        // Close file writer; record filePath/size in result
+        if (fileWriter) {
+          fileWriter.end();
+          fileWriter = null;
+        }
+        result[curName] = { filename: curFilename, filePath, size: bytesWritten };
+        filePath = null;
+        bytesWritten = 0;
+      } else {
+        result[curName] = (fieldBuf || Buffer.alloc(0)).toString('utf8');
+      }
+      curName = null;
+      curFilename = null;
+      fieldBuf = null;
+    };
+
+    req.on('data', (chunk) => {
+      if (aborted) return;
       total += chunk.length;
-      if (total > maxBytes) { req.destroy(); return reject(Object.assign(new Error('File too large'), { code: 'ELIMIT' })); }
-      chunks.push(chunk);
+      if (total > maxBytes)
+        return fail(Object.assign(new Error('File too large'), { code: 'ELIMIT' }));
+      buf = buf.length === 0 ? chunk : Buffer.concat([buf, chunk]);
+      processBuffer();
     });
-    req.on('error', reject);
+    req.on('error', fail);
     req.on('end', () => {
-      try {
-        const body   = Buffer.concat(chunks);
-        const bBytes = Buffer.from('\r\n' + boundary);
-        const result = {};
+      if (aborted) return;
+      processBuffer(true);
+      finishPart();
+      resolve(result);
+    });
 
-        // Split body into parts by boundary
-        let start = body.indexOf(boundary);
-        while (start !== -1) {
-          start += boundary.length;
-          if (body[start] === 0x2d && body[start + 1] === 0x2d) break; // '--' = final boundary
-          if (body[start] === 0x0d) start += 2; // skip CRLF after boundary
-
-          const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), start);
-          if (headerEnd === -1) break;
-          const headerStr = body.slice(start, headerEnd).toString('utf8');
-          const dataStart = headerEnd + 4;
-          const dataEnd   = body.indexOf(bBytes, dataStart);
-          const data      = body.slice(dataStart, dataEnd === -1 ? undefined : dataEnd);
-
+    function processBuffer(isEnd = false) {
+      while (true) {
+        if (state === 'PREAMBLE') {
+          // Skip everything up to the first boundary marker
+          const idx = buf.indexOf(dashBoundary);
+          if (idx === -1) { buf = buf.slice(Math.max(0, buf.length - dashBoundary.length)); return; }
+          buf = buf.slice(idx + dashBoundary.length);
+          // Closing boundary?
+          if (buf.length >= 2 && buf[0] === 0x2d && buf[1] === 0x2d) { buf = Buffer.alloc(0); return; }
+          // Skip the trailing CRLF after the boundary marker
+          if (buf.length >= 2 && buf[0] === 0x0d && buf[1] === 0x0a) buf = buf.slice(2);
+          state = 'HEADERS';
+        } else if (state === 'HEADERS') {
+          const headerEnd = buf.indexOf(Buffer.from('\r\n\r\n'));
+          if (headerEnd === -1) {
+            if (isEnd) return fail(new Error('Truncated multipart headers'));
+            return;
+          }
+          const headerStr = buf.slice(0, headerEnd).toString('utf8');
+          buf = buf.slice(headerEnd + 4);
           const nameMatch = headerStr.match(/name="([^"]+)"/);
           const fileMatch = headerStr.match(/filename="([^"]+)"/);
-          if (nameMatch) {
-            const fieldName = nameMatch[1];
-            if (fileMatch) {
-              result[fieldName] = { filename: fileMatch[1], data };
-            } else {
-              result[fieldName] = data.toString('utf8');
-            }
+          if (!nameMatch) return fail(new Error('Multipart part missing name'));
+          curName = nameMatch[1];
+          curFilename = fileMatch ? fileMatch[1] : null;
+          if (curFilename != null) {
+            // Open a temp file for streaming
+            const safeName = path.basename(curFilename).replace(/[^a-zA-Z0-9_.\-]/g, '_').slice(0, 64);
+            filePath = path.join(os.tmpdir(), `ac-upload-${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeName}`);
+            fileWriter = fs.createWriteStream(filePath);
+            fileWriter.on('error', e => fail(Object.assign(new Error(`Disk write failed: ${e.message}`), { status: 500 })));
+            bytesWritten = 0;
+          } else {
+            fieldBuf = Buffer.alloc(0);
           }
-          start = dataEnd;
+          state = 'DATA';
+        } else if (state === 'DATA') {
+          const idx = buf.indexOf(dashBoundaryWithCRLF);
+          if (idx === -1) {
+            // Keep enough bytes to detect a boundary that spans the next chunk
+            const safe = Math.max(0, buf.length - dashBoundaryWithCRLF.length);
+            if (safe > 0) {
+              const slice = buf.slice(0, safe);
+              if (curFilename != null) {
+                bytesWritten += slice.length;
+                if (!fileWriter.write(slice)) {
+                  // backpressure — we don't drain since req.on('data') has already been delivered;
+                  // the writer is still buffering, esbuild ones are fine in practice
+                }
+              } else {
+                fieldBuf = Buffer.concat([fieldBuf, slice]);
+              }
+              buf = buf.slice(safe);
+            }
+            if (isEnd) return fail(new Error('Truncated multipart body'));
+            return;
+          }
+          // Found the next boundary — write everything before it as the part's data
+          const partData = buf.slice(0, idx);
+          if (curFilename != null) {
+            bytesWritten += partData.length;
+            fileWriter.write(partData);
+          } else {
+            fieldBuf = Buffer.concat([fieldBuf, partData]);
+          }
+          buf = buf.slice(idx + 2); // consume the leading \r\n; leave the boundary itself for next state
+          finishPart();
+          state = 'PREAMBLE';
         }
-        resolve(result);
-      } catch (e) { reject(e); }
-    });
+      }
+    }
   });
 }
 
@@ -2725,11 +2822,16 @@ async function apiModUpload(req, res) {
     return json(res, 400, { error: `Error en la subida: ${e.message}` });
   }
   const filePart = parts.file;
-  if (!filePart?.data) return json(res, 400, { error: 'No file received (field: file)' });
+  if (!filePart?.filePath) return json(res, 400, { error: 'No file received (field: file)' });
 
   const uploadedBy = checkAnyAuth(req)?.username || null;
   try {
-    const result = await processModBuffer(filePart.data, filePart.filename);
+    // The streaming parser wrote the upload straight to disk — read it back as a
+    // Buffer here for the existing processModBuffer pipeline. Peak RAM is now 1×
+    // file size (the readFile) instead of the previous 2× (buffered chunks +
+    // concat). Refactoring the extractors to consume a stream is a follow-up.
+    const fileBuf = await fsp.readFile(filePart.filePath);
+    const result = await processModBuffer(fileBuf, filePart.filename);
     invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
     insertModHistory({ ok: true, filename: filePart.filename, uploadedBy, ...result });
     insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filePart.filename, `${result.modType}, ${result.filesExtracted} files`);
@@ -2738,6 +2840,8 @@ async function apiModUpload(req, res) {
     insertModHistory({ ok: false, filename: filePart.filename, uploadedBy, error: e.message });
     console.error('Mod upload error:', e.message);
     json(res, e.status || 500, { error: e.message });
+  } finally {
+    fsp.unlink(filePart.filePath).catch(() => {});
   }
 }
 

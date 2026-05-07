@@ -466,6 +466,9 @@ function AppInner(props) {
           setServer(s => ({ ...s, slots: config.maxClients }));
           setSessionCfg(s => ({ ...s, slots: config.maxClients }));
         }
+        if (d.rejected && d.rejected.length) {
+          toast.push(`${t('common.warn') || 'Warning'}: rejected fields: ${d.rejected.join(', ')}`, 'warn');
+        }
         if (d.restartError) toast.push(`${t('toast.config_saved')} · ${d.restartError}`, 'warn');
         else if (d.restarted) toast.push(t('toast.config_saved_restarted') || t('toast.config_saved'), 'success');
         else toast.push(t('toast.config_saved'), 'success');

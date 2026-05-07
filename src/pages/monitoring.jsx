@@ -463,6 +463,7 @@ function PageLogs({ server }) {
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState('all');
   const [logs, setLogs] = useState([]);
+  const [confirmClear, setConfirmClear] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -529,11 +530,7 @@ function PageLogs({ server }) {
           <button className="btn btn-sm" onClick={() => setPaused(p => !p)}>
             {paused ? <><I2.IconPlay size={11}/> {t('log.play')}</> : <><I2.IconStop size={11}/> {t('log.pause')}</>}
           </button>
-          <button className="btn btn-sm" onClick={() => {
-            if (window.confirm(t('log.clear_confirm'))) {
-              setLogs([]);
-            }
-          }}>
+          <button className="btn btn-sm" onClick={() => setConfirmClear(true)}>
             <I2.IconTrash size={11}/> {t('log.clear')}
           </button>
           <button className="btn btn-sm" onClick={() => {
@@ -559,6 +556,14 @@ function PageLogs({ server }) {
           </div>
         ))}
       </div>
+      {confirmClear && window.AppPagesSettings?.ConfirmModal && (
+        <window.AppPagesSettings.ConfirmModal
+          title={t('log.clear')}
+          message={t('log.clear_confirm')}
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={() => { setLogs([]); setConfirmClear(false); }}
+        />
+      )}
     </>
   );
 }

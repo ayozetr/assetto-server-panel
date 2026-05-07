@@ -1061,24 +1061,30 @@ async function apiConfigUpdate(req, res) {
     const ini  = parseINI(raw);
     const s    = ini['SERVER'] = ini['SERVER'] || {};
 
-    if (body.name        !== undefined) s['NAME']                    = sanitizeIniText(body.name).slice(0, 255);
-    if (body.welcome     !== undefined) s['WELCOME_MESSAGE']         = sanitizeIniText(body.welcome).slice(0, 255);
-    if (body.password    !== undefined) s['PASSWORD']                = sanitizeIniPassword(body.password).slice(0, 64);
-    if (body.adminPass   !== undefined) s['ADMIN_PASSWORD']          = sanitizeIniPassword(body.adminPass).slice(0, 64);
-    if (body.tcp         !== undefined) { const p = validPort(body.tcp);         if (p) s['TCP_PORT']                = String(p); }
-    if (body.udp         !== undefined) { const p = validPort(body.udp);         if (p) s['UDP_PORT']                = String(p); }
-    if (body.http        !== undefined) { const p = validPort(body.http);        if (p) s['HTTP_PORT']               = String(p); }
-    if (body.tickrate    !== undefined) { const v = clampInt(body.tickrate,1,300); if (v) s['CLIENT_SEND_INTERVAL_HZ'] = String(v); }
-    if (body.maxClients  !== undefined) { const v = clampInt(body.maxClients,1,200); if (v) s['MAX_CLIENTS']          = String(v); }
-    if (body.publicLobby !== undefined) s['REGISTER_TO_LOBBY']      = body.publicLobby ? '1' : '0';
-    if (body.fuelRate    !== undefined) { const v = clampInt(body.fuelRate,0,200);  if (v !== null) s['FUEL_RATE']     = String(v); }
-    if (body.damage      !== undefined) { const v = clampInt(body.damage,0,200);    if (v !== null) s['DAMAGE_MULTIPLIER'] = String(v); }
-    if (body.tyreWear    !== undefined) { const v = clampInt(body.tyreWear,0,200);  if (v !== null) s['TYRE_WEAR_RATE'] = String(v); }
-    if (body.abs         !== undefined) { const v = clampInt(body.abs,0,2);         if (v !== null) s['ABS_ALLOWED']    = String(v); }
-    if (body.tc          !== undefined) { const v = clampInt(body.tc,0,2);          if (v !== null) s['TC_ALLOWED']     = String(v); }
-    if (body.autoclutch  !== undefined) s['AUTOCLUTCH_ALLOWED']      = body.autoclutch ? '1' : '0';
-    if (body.stability   !== undefined) s['STABILITY_ALLOWED']       = body.stability  ? '1' : '0';
-    if (body.whitelist   !== undefined) s['WELCOME_WHITELIST_ENABLED']= body.whitelist  ? '1' : '0';
+    // Track which fields were applied vs rejected (failed validation) so the UI
+    // can flag the bad inputs instead of guessing why a save "didn't take".
+    const applied  = [];
+    const rejected = [];
+    const set = (key, ok, name) => { if (ok) applied.push(name); else if (name) rejected.push(name); };
+
+    if (body.name        !== undefined) { s['NAME']                    = sanitizeIniText(body.name).slice(0, 255);     applied.push('name'); }
+    if (body.welcome     !== undefined) { s['WELCOME_MESSAGE']         = sanitizeIniText(body.welcome).slice(0, 255);  applied.push('welcome'); }
+    if (body.password    !== undefined) { s['PASSWORD']                = sanitizeIniPassword(body.password).slice(0, 64);  applied.push('password'); }
+    if (body.adminPass   !== undefined) { s['ADMIN_PASSWORD']          = sanitizeIniPassword(body.adminPass).slice(0, 64); applied.push('adminPass'); }
+    if (body.tcp         !== undefined) { const p = validPort(body.tcp);         set('TCP_PORT',  p && (s['TCP_PORT']                = String(p)),  'tcp'); }
+    if (body.udp         !== undefined) { const p = validPort(body.udp);         set('UDP_PORT',  p && (s['UDP_PORT']                = String(p)),  'udp'); }
+    if (body.http        !== undefined) { const p = validPort(body.http);        set('HTTP_PORT', p && (s['HTTP_PORT']               = String(p)),  'http'); }
+    if (body.tickrate    !== undefined) { const v = clampInt(body.tickrate,1,300);   set('TICKRATE',   v && (s['CLIENT_SEND_INTERVAL_HZ'] = String(v)), 'tickrate'); }
+    if (body.maxClients  !== undefined) { const v = clampInt(body.maxClients,1,200); set('MAX_CLIENTS',v && (s['MAX_CLIENTS']          = String(v)),  'maxClients'); }
+    if (body.publicLobby !== undefined) { s['REGISTER_TO_LOBBY']      = body.publicLobby ? '1' : '0'; applied.push('publicLobby'); }
+    if (body.fuelRate    !== undefined) { const v = clampInt(body.fuelRate,0,200);   set('FUEL_RATE',  v !== null && (s['FUEL_RATE']     = String(v)), 'fuelRate'); }
+    if (body.damage      !== undefined) { const v = clampInt(body.damage,0,200);     set('DAMAGE',     v !== null && (s['DAMAGE_MULTIPLIER'] = String(v)), 'damage'); }
+    if (body.tyreWear    !== undefined) { const v = clampInt(body.tyreWear,0,200);   set('TYRE_WEAR',  v !== null && (s['TYRE_WEAR_RATE'] = String(v)), 'tyreWear'); }
+    if (body.abs         !== undefined) { const v = clampInt(body.abs,0,2);          set('ABS',        v !== null && (s['ABS_ALLOWED']    = String(v)), 'abs'); }
+    if (body.tc          !== undefined) { const v = clampInt(body.tc,0,2);           set('TC',         v !== null && (s['TC_ALLOWED']     = String(v)), 'tc'); }
+    if (body.autoclutch  !== undefined) { s['AUTOCLUTCH_ALLOWED']      = body.autoclutch ? '1' : '0'; applied.push('autoclutch'); }
+    if (body.stability   !== undefined) { s['STABILITY_ALLOWED']       = body.stability  ? '1' : '0'; applied.push('stability'); }
+    if (body.whitelist   !== undefined) { s['WELCOME_WHITELIST_ENABLED']= body.whitelist  ? '1' : '0'; applied.push('whitelist'); }
 
     await fsp.copyFile(AC_CFG_FILE, AC_CFG_FILE + '.bak');
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
@@ -1100,7 +1106,7 @@ async function apiConfigUpdate(req, res) {
         }
       }
     }
-    json(res, 200, { ok: true, restarted, restartError });
+    json(res, 200, { ok: true, restarted, restartError, applied, rejected });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -2504,6 +2510,25 @@ async function processModBuffer(buffer, filename) {
 // ── Chunked upload ─────────────────────────────────────────────────────────────
 const CHUNK_TMP_DIR    = path.join(os.tmpdir(), 'ac-upload-chunks');
 const _chunkAssembling = new Set(); // per-uploadId lock to prevent double-assembly
+// Per-user state: at most one active upload at a time. A new uploadId from the
+// same user is rejected until the current one finishes or stales out (no chunks
+// for STALE_MS). Cleared on success/failure of the assembly.
+const _userUploads = new Map(); // username -> { uploadId, lastChunkAt }
+const USER_UPLOAD_STALE_MS = 5 * 60 * 1000;
+function noteUserUpload(username, uploadId) {
+  _userUploads.set(username, { uploadId, lastChunkAt: Date.now() });
+}
+function clearUserUpload(username) { _userUploads.delete(username); }
+function userHasOtherUploadActive(username, uploadId) {
+  const entry = _userUploads.get(username);
+  if (!entry) return false;
+  if (entry.uploadId === uploadId) return false;
+  if (Date.now() - entry.lastChunkAt > USER_UPLOAD_STALE_MS) {
+    _userUploads.delete(username);
+    return false;
+  }
+  return true;
+}
 
 async function cleanupOldChunks() {
   try {
@@ -2553,6 +2578,9 @@ async function apiModUploadChunk(req, res) {
     return json(res, 400, { error: 'Invalid chunk parameters' });
   if (totalChunks > MAX_TOTAL_CHUNKS)
     return json(res, 400, { error: `totalChunks > ${MAX_TOTAL_CHUNKS}` });
+  if (userHasOtherUploadActive(uploadedBy, uploadId))
+    return json(res, 429, { error: 'You already have an upload in progress — wait for it to finish or 5 min' });
+  noteUserUpload(uploadedBy, uploadId);
   if (chunkIndex >= totalChunks)
     return json(res, 400, { error: 'chunkIndex out of range' });
 
@@ -2589,12 +2617,14 @@ async function apiModUploadChunk(req, res) {
       invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
       insertModHistory({ ok: true, filename, uploadedBy, ...result });
       insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
+      clearUserUpload(uploadedBy);
       json(res, 200, { ok: true, done: true, ...result });
     } finally {
       _chunkAssembling.delete(uploadId);
     }
   } catch (e) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+    clearUserUpload(uploadedBy);
     insertModHistory({ ok: false, filename, uploadedBy, error: e.message });
     console.error('Chunk upload error:', e.message);
     json(res, e.status || 500, { error: e.message });

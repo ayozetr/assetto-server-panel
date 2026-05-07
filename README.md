@@ -95,6 +95,27 @@ in the SQLite DB and log in normally.
 
 ---
 
+## Threat model
+
+This is a **single-tenant admin tool**, not a multi-tenant web app. Trust assumptions:
+
+- **Authenticated users are trusted to operate the AC server.** Every logged-in user can upload mods, which extract files into the AC content directory and run inside the AC server process. There is **no sandbox** between mods and the host — a malicious mod can do anything `acServer` can do.
+- **Admins are fully trusted.** Admin role can change passwords, delete users, edit `server_cfg.ini`, restart the AC process, and download the SQLite DB.
+- **Do not expose the panel to the public internet without HTTPS and credentialled access.** Do not give panel accounts to anyone you would not give shell access to the host. Always set `TRUST_PROXY=1` when behind Cloudflare/Tunnel/reverse-proxy so rate limits and audit logs see real client IPs.
+- **The audit log is best-effort.** Any admin can call `DELETE FROM audit_log` directly on `assetto.db`. Keep external backups (`/api/admin/backup` endpoint or scheduled `cp`) if you need tamper-evident history.
+
+What the panel **does** defend against:
+- Anonymous attackers (CSRF, brute-force on login, path traversal, INI injection, decompression bombs, malformed archives).
+- Compromised non-admin accounts (cannot read AC server passwords, cannot wipe history, cannot list/manage users).
+- Stolen old SW caches (network-first navigation strategy ensures security fixes propagate without manual cache bumps).
+
+What the panel does **not** defend against:
+- Malicious mods (no sandboxing — admins are responsible for vetting upload sources).
+- A compromised admin account (full control by design).
+- Filesystem access via the host shell or other services.
+
+---
+
 ## Tech stack
 
 - **Frontend:** React 18 + Babel Standalone (no build step)

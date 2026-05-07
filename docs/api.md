@@ -440,6 +440,29 @@ Verify the audit hash chain locally with `node tools/verify-audit.js path/to/ass
 
 ---
 
+### `GET /api/admin/metrics`
+Prometheus exposition format (`text/plain; version=0.0.4`). Each metric is a snapshot — no rate counters are kept across scrapes.
+
+**Auth required:** yes (admin)
+
+Exposed:
+- `panel_uptime_seconds`, `panel_memory_rss_bytes`
+- `panel_sessions_total`, `panel_panel_users_total`, `panel_audit_log_total`, `panel_login_attempts_total`, `panel_laps_total`, `panel_mod_history_total`
+- `panel_sse_clients`, `panel_active_uploads`, `panel_server_action_in_flight`
+- `panel_sweeper_last_run_seconds{sweeper="..."}` and `panel_sweeper_last_removed_total{sweeper="..."}`
+- `ac_server_up`, `ac_server_uptime_seconds`
+
+Scrape from a sidecar with cookie auth, or use `ADMIN_TOKEN` if you've set it.
+
+---
+
+### Offline data caching (PWA)
+The Service Worker caches successful GETs for `/api/cars`, `/api/tracks`, `/api/config`, `/api/results`, `/api/players/history`. When the network is unreachable, it serves the last cached response and tags it with `X-AC-Cache: stale-offline`. Other endpoints return `503` with `{ "error": "Offline" }`.
+
+The frontend listens for the browser's `online`/`offline` events and shows a banner while offline.
+
+---
+
 ## Server control
 
 All server control endpoints require admin.

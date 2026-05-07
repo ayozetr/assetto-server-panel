@@ -1,0 +1,149 @@
+Assetto Server Panel — License
+Copyright (c) 2026 Sample Driver Reyes ("ayozetr")
+
+This software is offered under a source-available, noncommercial license.
+By copying, modifying, deploying, or otherwise using the Software ("the
+Panel"), you accept the terms below. If you do not accept the terms, you
+must not use the Panel.
+
+
+1. NONCOMMERCIAL GRANT
+
+The author grants you a worldwide, royalty-free, non-exclusive,
+non-transferable license to:
+
+  (a) run the Panel on your own systems for any Noncommercial purpose;
+  (b) copy and redistribute the Panel, in source or compiled form, for any
+      Noncommercial purpose;
+  (c) modify the Panel and distribute Modified Versions, provided you keep
+      this license and the copyright notice intact, clearly mark substantive
+      changes, and apply this same license to your distribution.
+
+
+2. WHAT IS NONCOMMERCIAL
+
+"Noncommercial" means the Panel is not used for, or in support of,
+commercial advantage or monetary compensation, directly or indirectly. The
+following uses are Noncommercial:
+
+  - Personal hobby use on a private machine.
+  - Use by individuals for private leagues, friend groups, or amateur
+    clubs that do not charge participation fees beyond shared hosting
+    costs.
+  - Educational and research use.
+
+The following uses are NOT Noncommercial and require a separate, written
+commercial license from the author:
+
+  - Operating game servers publicly advertised through commercial
+    directories (the Kunos public-server list, Content Manager featured
+    lobbies, comparable third-party listings) where the operation is part
+    of a paid product, paid event, paid league entry, or any context where
+    money flows in connection with the server.
+  - Use by a for-profit organization in the course of its business,
+    whether or not the organization charges its end-users.
+  - Bundling, embedding, hosting, or redistributing the Panel as part of
+    a paid service, a SaaS offering, or any product sold or licensed for
+    revenue.
+  - Use whose primary intent is to generate revenue (subscriptions,
+    advertising, sponsorships, paid access, donations actively solicited
+    as a funding model).
+
+To request a commercial license, contact:  ayozetr@proton.me
+
+
+3. ATTRIBUTION
+
+Every copy and every Modified Version you distribute must keep:
+
+  (a) this license text in a file named LICENSE at the repository root;
+  (b) the original copyright notice;
+  (c) a clearly visible reference to the upstream repository when
+      reasonably possible.
+
+The "Powered by ayozetr" credit rendered in the panel's sidebar footer
+may be removed only by users operating under Noncommercial terms; any
+other use must keep the credit unless the commercial license expressly
+authorizes its removal.
+
+
+4. NO PATENT GRANT
+
+This license does not grant any rights in patents. Any patent that would
+otherwise be infringed by use of the Panel must be licensed separately
+from its holder.
+
+
+5. DISCLAIMER OF WARRANTY
+
+THE PANEL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND ABSENCE OF
+SECURITY DEFECTS.
+
+At the time of each tagged release, the author makes a good-faith effort
+to ensure that no security vulnerabilities are knowingly present in the
+published code. The author makes NO ONGOING WARRANTY about:
+
+  - vulnerabilities discovered after a release is published;
+  - the security of any specific deployment, network, or operating
+    system on which the Panel is installed;
+  - the suitability of the Panel for any particular environment or
+    workload.
+
+Users are solely responsible for keeping their installations up to date,
+for the security of the systems on which the Panel runs, and for the
+data the Panel handles on their behalf.
+
+
+6. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL THE
+AUTHOR BE LIABLE TO YOU FOR ANY DAMAGES — INCLUDING WITHOUT LIMITATION
+DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR EXEMPLARY
+DAMAGES, LOSS OF DATA, LOSS OF REVENUE, BUSINESS INTERRUPTION, OR
+DAMAGE TO REPUTATION — ARISING FROM OR RELATED TO YOUR USE OF, OR
+INABILITY TO USE, THE PANEL, EVEN IF THE AUTHOR HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES, AND REGARDLESS OF THE LEGAL THEORY ON WHICH
+THE CLAIM IS BASED.
+
+
+7. THIRD-PARTY COMPONENTS
+
+The Panel depends on third-party libraries (React, Babel, better-sqlite3,
+node-stream-zip, node-unrar-js, node-7z, 7zip-bin, dotenv, esbuild) and
+calls into the Assetto Corsa dedicated server. These components are
+governed by their own licenses; this license does not grant any rights
+to them. The author makes no warranty about the third-party components
+and is not liable for issues originating in them.
+
+
+8. TERMINATION
+
+This license terminates automatically if you fail to comply with any of
+its terms. Upon termination you must cease all use of the Panel and
+destroy or remove all copies. Clauses 5 (Disclaimer of Warranty), 6
+(Limitation of Liability), and 7 (Third-Party Components) survive
+termination.
+
+
+9. NO ENDORSEMENT
+
+The author and the name "ayozetr" are not affiliated with or endorsed
+by Kunos Simulazioni, Assetto Corsa, or any related rights holder.
+
+
+10. GOVERNING LAW
+
+This license is governed by the laws of Spain, without regard to its
+conflict-of-laws provisions. Any dispute arising under or in connection
+with this license is subject to the exclusive jurisdiction of the
+competent courts of Spain.
+
+
+CONTACT
+
+Commercial licensing requests, security disclosures, and any other
+questions regarding this license:
+
+  ayozetr@proton.me

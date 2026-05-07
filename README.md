@@ -5,8 +5,8 @@
 
   ![Node.js](https://img.shields.io/badge/Node.js-20.20.2-339933?logo=node.js&logoColor=white)
   ![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white)
-  ![No build step](https://img.shields.io/badge/build-none-lightgrey)
-  ![License](https://img.shields.io/badge/license-MIT-blue)
+  ![Build](https://img.shields.io/badge/build-esbuild-FFCF00?logo=esbuild)
+  ![License](https://img.shields.io/badge/license-Noncommercial-orange)
 </div>
 
 ---
@@ -109,7 +109,7 @@ This is a **single-tenant admin tool**, not a multi-tenant web app. Trust assump
 - **Authenticated users are trusted to operate the AC server.** Every logged-in user can upload mods, which extract files into the AC content directory and run inside the AC server process. There is **no sandbox** between mods and the host — a malicious mod can do anything `acServer` can do.
 - **Admins are fully trusted.** Admin role can change passwords, delete users, edit `server_cfg.ini`, restart the AC process, and download the SQLite DB.
 - **Do not expose the panel to the public internet without HTTPS and credentialled access.** Do not give panel accounts to anyone you would not give shell access to the host. Always set `TRUST_PROXY=1` when behind Cloudflare/Tunnel/reverse-proxy so rate limits and audit logs see real client IPs.
-- **The audit log is best-effort.** Any admin can call `DELETE FROM audit_log` directly on `assetto.db`. Keep external backups (`/api/admin/backup` endpoint or scheduled `cp`) if you need tamper-evident history.
+- **The audit log is hash-chained but deletable.** Each row stores a SHA-256 of the previous row's hash, so silent edits are detectable with `node tools/verify-audit.js` against an external backup. Anyone with shell access to `assetto.db` can still wipe rows entirely — keep periodic backups via `/api/admin/backup` if you need provable history.
 
 What the panel **does** defend against:
 - Anonymous attackers (CSRF, brute-force on login, path traversal, INI injection, decompression bombs, malformed archives).
@@ -130,3 +130,23 @@ What the panel does **not** defend against:
 - **Database:** SQLite via `better-sqlite3`
 - **Mod extraction:** `node-stream-zip`, `node-unrar-js`, `node-7z`
 - **Real-time logs:** Server-Sent Events (SSE)
+
+---
+
+## License
+
+Source-available, **noncommercial**. The full text is in [`LICENSE`](LICENSE).
+
+Short version:
+
+- **Free for personal, hobby, friend-group, private-league, and educational use.**
+- **Commercial use is prohibited without a separate written agreement.**
+  Commercial means: running the panel on game servers advertised through commercial directories (the Kunos public-server list, Content Manager featured lobbies, etc.) where money flows in connection with the server; for-profit business use; bundling into a paid product or SaaS; revenue-driven deployments (subscriptions, ads, paid access).
+- **You may modify and redistribute** for noncommercial purposes, keeping this license, the copyright notice, and a reference to the upstream repository intact.
+- The Panel is provided **AS IS**, without warranty. The author makes a good-faith effort that each tagged release is free of *known* vulnerabilities at the time of publication, but assumes no liability for vulnerabilities discovered later or for any damages arising from use of the Panel. See `LICENSE` sections 5 and 6 for the full disclaimer.
+
+For a commercial license, security disclosure, or any other licensing question, contact: **`ayozetr@proton.me`**
+
+The author and the project are **not affiliated with or endorsed by Kunos Simulazioni** or any related rights holder.
+
+For responsible disclosure of security issues, see [`SECURITY.md`](SECURITY.md).

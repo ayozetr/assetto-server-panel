@@ -665,7 +665,7 @@ function PageProfile({ user, setUser }) {
       const r = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: user.name, currentPassword: currentPw, newPassword: newPw }),
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
       });
       const d = await r.json();
       if (d.ok) {

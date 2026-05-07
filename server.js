@@ -1712,14 +1712,23 @@ function apiAuthMe(req, res) {
 
 async function apiAuthChangePassword(req, res) {
   try {
+    // Require a valid session — username is derived from it, not from the body
+    const sess = getSession(req);
+    if (!sess) return json(res, 401, { error: 'Unauthorized' });
+
+    const ip = req.socket?.remoteAddress || '';
+    if (!checkLoginRateLimit(ip))
+      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
+
     const body = await readBody(req);
-    const { username, currentPassword, newPassword } = body;
-    if (!username || !currentPassword || !newPassword)
+    const { currentPassword, newPassword } = body;
+    if (!currentPassword || !newPassword)
       return json(res, 400, { error: 'All fields are required' });
     if (newPassword.length < 8)
       return json(res, 400, { error: 'Password must be at least 8 characters' });
     if (!db) return json(res, 503, { error: 'Database unavailable' });
 
+    const username = sess.username;
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
     if (!user) return json(res, 404, { error: 'User not found' });
 
@@ -1730,6 +1739,8 @@ async function apiAuthChangePassword(req, res) {
     db.prepare('UPDATE panel_users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE username = ?')
       .run(hashPassword(newPassword, newSalt), newSalt, username);
 
+    _loginAttempts.delete(ip);
+    insertAuditLog(username, 'user.update', username, 'self password change');
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
 }

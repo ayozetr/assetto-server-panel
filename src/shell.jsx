@@ -19,7 +19,7 @@ function ToastProvider({ children }) {
   return (
     <ToastCtx.Provider value={{ push }}>
       {children}
-      <div className="toast-wrap">
+      <div className="toast-wrap" role="status" aria-live="polite">
         {list.map(t => (
           <div key={t.id} className={`toast ${t.kind}`}>
             {t.kind === 'success' && <I.IconCheck size={14}/>}
@@ -97,6 +97,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
                 onClick={() => !disabled && navigate(item.id)}
                 disabled={disabled}
                 title={disabled ? t('sidebar.admin_only') : ''}
+                aria-current={page === item.id ? 'page' : undefined}
               >
                 <span className="nav-icon"><Icon size={15}/></span>
                 {item.label}
@@ -295,6 +296,8 @@ function Login({ onLogin }) {
               <button
                 type="button"
                 onClick={() => setShowPass(v => !v)}
+                aria-label={showPass ? 'Hide password' : 'Show password'}
+                title={showPass ? 'Hide' : 'Show'}
                 style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
               >
                 {showPass ? <I.IconEyeOff size={15}/> : <I.IconEye size={15}/>}
@@ -376,6 +379,8 @@ function ForcePasswordChange({ user, onDone, onLogout }) {
             <div style={{position:'relative'}}>
               <input className="input" type={show ? 'text' : 'password'} value={confirm} onChange={e=>setConfirm(e.target.value)} style={{paddingRight: 36}}/>
               <button type="button" onClick={() => setShow(v => !v)}
+                aria-label={show ? 'Hide password' : 'Show password'}
+                title={show ? 'Hide' : 'Show'}
                 style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}>
                 {show ? <I.IconEyeOff size={15}/> : <I.IconEye size={15}/>}
               </button>

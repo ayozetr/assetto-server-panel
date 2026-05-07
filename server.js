@@ -9,11 +9,17 @@ const crypto        = require('crypto');
 const { spawn }     = require('child_process');
 
 // ── Mod extraction libraries (loaded lazily to avoid startup errors if missing) ─
+// Each format has an optional dependency. We log a clear banner at startup if a
+// library is missing so ops can see "RAR support disabled" before users hit a 500.
 let StreamZip, Unrar, sevenZ, sevenBin;
-try { StreamZip = require('node-stream-zip'); } catch {}
-try { Unrar    = require('node-unrar-js');   } catch {}
-try { sevenZ   = require('node-7z');         } catch {}
-try { sevenBin = require('7zip-bin');        } catch {}
+const _missingExtractors = [];
+try { StreamZip = require('node-stream-zip'); } catch { _missingExtractors.push('zip (node-stream-zip)'); }
+try { Unrar    = require('node-unrar-js');   } catch { _missingExtractors.push('rar (node-unrar-js)'); }
+try { sevenZ   = require('node-7z');         } catch { _missingExtractors.push('7z (node-7z)'); }
+try { sevenBin = require('7zip-bin');        } catch { _missingExtractors.push('7z binary (7zip-bin)'); }
+if (_missingExtractors.length) {
+  console.warn(`  Mod extraction limited — missing: ${_missingExtractors.join(', ')}. Run "npm install" to enable.`);
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const HOST         = process.env.HOST              || '0.0.0.0';
@@ -249,6 +255,12 @@ try {
       logged_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_audit_logged_at ON audit_log(logged_at);
+
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      ip       TEXT PRIMARY KEY,
+      count    INTEGER NOT NULL,
+      reset_at INTEGER NOT NULL
+    );
   `);
   // Schema migrations (safe to run on every start)
   try { db.exec(`ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`); } catch {}
@@ -571,8 +583,15 @@ function formatName(id) {
 
 // AC ui_*.json files often contain raw newlines/tabs inside string values (invalid JSON).
 // Replacing all control chars with spaces makes it valid everywhere (tokens + string values).
-function parseLooseJson(raw) {
-  return JSON.parse(raw.replace(/[\x00-\x1f]/g, ' '));
+function parseLooseJson(raw, ctx) {
+  try {
+    return JSON.parse(raw.replace(/[\x00-\x1f]/g, ' '));
+  } catch (e) {
+    // Surface broken metadata so unrecognised mods can be debugged. The caller
+    // wraps this in try/catch and falls back, so logging here is informational.
+    if (ctx) console.warn(`  parseLooseJson failed for ${ctx}: ${e.message}`);
+    throw e;
+  }
 }
 
 function parseTrackLength(raw) {
@@ -1261,8 +1280,8 @@ async function apiCars(res) {
 
         // ui_car.json: AC content first, kunos assets as fallback
         let ui = {};
-        try { ui = parseLooseJson(await fsp.readFile(path.join(acUiDir, 'ui_car.json'), 'utf8')); } catch {
-          try { ui = parseLooseJson(await fsp.readFile(path.join(knUiDir, 'ui_car.json'), 'utf8')); } catch {}
+        try { ui = parseLooseJson(await fsp.readFile(path.join(acUiDir, 'ui_car.json'), 'utf8'), `car/${id}`); } catch {
+          try { ui = parseLooseJson(await fsp.readFile(path.join(knUiDir, 'ui_car.json'), 'utf8'), `kunos-car/${id}`); } catch {}
         }
 
         // skins: AC content first, kunos assets as fallback
@@ -1902,19 +1921,45 @@ async function apiServerReload(req, res) {
 }
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-// In-memory token bucket per (kind, ip). Login keeps a 5/15min lockout so brute
-// force is meaningfully slowed; lighter limits guard write endpoints from accidental
-// hammering or scripted abuse.
-const _loginAttempts = new Map(); // ip → { count, resetAt } — login + change-password
+// Login attempts persist to SQLite so a brute-forcer cannot reset by triggering
+// a server restart. Other rate buckets (mod uploads, server control) stay in
+// memory — those are operational throttles, not a security boundary.
+const _loginAttempts = new Map(); // memory cache to avoid hitting DB on every request when the IP is well-behaved
 const _rateBuckets   = new Map(); // `${kind}|${ip}` → { count, resetAt }
+function _loadLoginAttempt(ip) {
+  if (_loginAttempts.has(ip)) return _loginAttempts.get(ip);
+  if (!db) return null;
+  try {
+    const row = db.prepare('SELECT count, reset_at FROM login_attempts WHERE ip = ?').get(ip);
+    if (!row) return null;
+    const e = { count: row.count, resetAt: row.reset_at };
+    _loginAttempts.set(ip, e);
+    return e;
+  } catch { return null; }
+}
+function _saveLoginAttempt(ip, e) {
+  _loginAttempts.set(ip, e);
+  if (!db) return;
+  try {
+    db.prepare(`INSERT INTO login_attempts (ip, count, reset_at) VALUES (?, ?, ?)
+      ON CONFLICT(ip) DO UPDATE SET count = excluded.count, reset_at = excluded.reset_at`)
+      .run(ip, e.count, e.resetAt);
+  } catch {}
+}
+function _clearLoginAttempt(ip) {
+  _loginAttempts.delete(ip);
+  if (!db) return;
+  try { db.prepare('DELETE FROM login_attempts WHERE ip = ?').run(ip); } catch {}
+}
 function checkLoginRateLimit(ip) {
   const now = Date.now();
-  const e   = _loginAttempts.get(ip);
+  const e   = _loadLoginAttempt(ip);
   if (e && now < e.resetAt) {
     if (e.count >= 5) return false;
     e.count++;
+    _saveLoginAttempt(ip, e);
   } else {
-    _loginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    _saveLoginAttempt(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
   }
   return true;
 }
@@ -1970,7 +2015,7 @@ async function apiAuthLogin(req, res) {
         .run(hashPasswordScrypt(password, user.salt), username); } catch {}
     }
 
-    _loginAttempts.delete(ip); // reset on success
+    _clearLoginAttempt(ip); // reset on success
     const token = createSession(username, user.role);
     res.setHeader('Set-Cookie', sessionCookieHeader(token));
     json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1 } });
@@ -2020,7 +2065,7 @@ async function apiAuthChangePassword(req, res) {
     db.prepare('UPDATE panel_users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE username = ?')
       .run(hashPassword(newPassword, newSalt), newSalt, username);
 
-    _loginAttempts.delete(ip);
+    _clearLoginAttempt(ip);
     insertAuditLog(username, 'user.update', username, 'self password change');
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
@@ -2867,6 +2912,14 @@ function sweepAuditLog() {
 }
 sweepAuditLog();
 setInterval(sweepAuditLog, 24 * 60 * 60 * 1000);
+
+// Drop expired login_attempts every 30 min so the table doesn't grow unbounded
+function sweepLoginAttempts() {
+  if (!db) return;
+  try { db.prepare('DELETE FROM login_attempts WHERE reset_at < ?').run(Date.now()); } catch {}
+}
+sweepLoginAttempts();
+setInterval(sweepLoginAttempts, 30 * 60 * 1000);
 
 const server = http.createServer(handler);
 

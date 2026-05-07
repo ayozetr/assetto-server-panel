@@ -692,7 +692,7 @@ function PageProfile({ user, setUser }) {
     setFormError('');
     if (!currentPw || !newPw || !confirmPw) { setFormError(t('profile.err_req')); return; }
     if (newPw !== confirmPw) { setFormError(t('profile.err_match')); return; }
-    if (newPw.length < 8) { setFormError(t('profile.err_len')); return; }
+    if (!window.passesPwPolicy(newPw)) { setFormError(t('profile.err_len')); return; }
     if (newPw === currentPw) { setFormError(t('profile.err_diff')); return; }
     setSaving(true);
     try {
@@ -853,6 +853,7 @@ const ACTION_ICONS = {
   'user.update':    '👤✎',
   'user.delete':    '👤-',
   'whitelist.add':  '✓',
+  'admin.backup':   '⬇',
 };
 const ACTION_COLOR = {
   'server.start':   'var(--green,#22c55e)',
@@ -867,6 +868,7 @@ const ACTION_COLOR = {
   'user.update':    'var(--text-muted)',
   'user.delete':    'var(--red)',
   'whitelist.add':  'var(--green,#22c55e)',
+  'admin.backup':   'var(--text-muted)',
 };
 
 function PageAudit() {
@@ -921,9 +923,14 @@ function PageAudit() {
           <h1 className="page-title">{t('audit.title')}</h1>
           <p className="page-sub">{t('audit.sub')}</p>
         </div>
-        <button className="btn" onClick={load} style={{marginTop:4}}>
-          <I5.IconReload size={13}/> {t('common.refresh')}
-        </button>
+        <div className="row" style={{gap: 6, marginTop: 4}}>
+          <a className="btn" href="/api/admin/backup" download>
+            <I5.IconDownload size={13}/> {t('audit.backup') || 'Download DB'}
+          </a>
+          <button className="btn" onClick={load}>
+            <I5.IconReload size={13}/> {t('common.refresh')}
+          </button>
+        </div>
       </div>
 
       <div className="card" style={{padding:0,overflow:'hidden'}}>

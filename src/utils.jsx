@@ -13,6 +13,18 @@ const _NATION_ISO2 = {
   WAL:'gb',
 };
 
+// Mirrors server-side passwordPolicyError(): ≥12 chars OR ≥8 with three of
+// {lowercase, UPPERCASE, digit, symbol}. Server is authoritative — this is for
+// instant client feedback only.
+function passesPwPolicy(pw) {
+  if (typeof pw !== 'string' || pw.length > 128) return false;
+  if (pw.length >= 12) return true;
+  if (pw.length < 8) return false;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(pw)).length;
+  return classes >= 3;
+}
+window.passesPwPolicy = passesPwPolicy;
+
 window.AppUtils = {
   fmtMs: (ms) => {
     if (ms == null || ms < 0) return '—';
@@ -26,4 +38,5 @@ window.AppUtils = {
     const iso2 = _NATION_ISO2[nation3.toUpperCase()];
     return iso2 ? `https://flagcdn.com/16x12/${iso2}.png` : null;
   },
+  passesPwPolicy,
 };

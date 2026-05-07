@@ -387,7 +387,18 @@ Return audit log entries in reverse chronological order, with cursor pagination.
 }
 ```
 
-Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`.
+Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`, `admin.backup`.
+
+A daily sweeper deletes entries older than `AUDIT_RETENTION_DAYS` (env, default 365).
+
+---
+
+### `GET /api/admin/backup`
+Stream a consistent snapshot of `assetto.db` produced via SQLite `VACUUM INTO`. Response is `application/octet-stream` with `Content-Disposition: attachment`.
+
+**Auth required:** yes (admin)
+
+Useful for periodic backups before risky operations (mass user changes, password resets) or before an upgrade.
 
 ---
 

@@ -287,6 +287,24 @@ function verifyPassword(password, salt, stored) {
     return safeHexEqual(candidate, stored);
   } catch { return false; }
 }
+// Server-side password policy. Returns null when accepted, otherwise a human
+// readable error message. Mirror this in the UI for nicer feedback, but the
+// check here is the authoritative gate.
+function passwordPolicyError(pw) {
+  if (typeof pw !== 'string') return 'Password must be a string';
+  if (pw.length < 12) {
+    // Allow ≥8 chars only when the password mixes at least three character classes
+    if (pw.length < 8) return 'Password must be at least 8 characters';
+    const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(pw)).length;
+    if (classes < 3) return 'Short passwords (8–11 chars) need a mix of lowercase, UPPERCASE, digits and a symbol';
+  }
+  if (pw.length > 128) return 'Password must be at most 128 characters';
+  // Reject the most obvious sentinels
+  const banned = new Set(['password', 'qwerty12', 'admin1234', 'admin1234!', '12345678', 'changeme', 'letmein!']);
+  if (banned.has(pw.toLowerCase())) return 'This password is too common — choose something different';
+  return null;
+}
+
 function safeHexEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
   try {
@@ -1981,8 +1999,8 @@ async function apiAuthChangePassword(req, res) {
     const { currentPassword, newPassword } = body;
     if (!currentPassword || !newPassword)
       return json(res, 400, { error: 'All fields are required' });
-    if (newPassword.length < 8)
-      return json(res, 400, { error: 'Password must be at least 8 characters' });
+    const policyErr = passwordPolicyError(newPassword);
+    if (policyErr) return json(res, 400, { error: policyErr });
     if (!db) return json(res, 503, { error: 'Database unavailable' });
 
     const username = sess.username;
@@ -2023,7 +2041,10 @@ async function apiPanelUserCreate(req, res) {
     if (!username || !password) return json(res, 400, { error: 'Username and password are required' });
     if (typeof username !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(username))
       return json(res, 400, { error: 'Username must be 1–64 chars: letters, numbers, _ and - only' });
-    if (password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
+    {
+      const policyErr = passwordPolicyError(password);
+      if (policyErr) return json(res, 400, { error: policyErr });
+    }
     // Reject unknown roles instead of silently coercing — caller intent stays explicit
     if (role !== undefined && role !== 'admin' && role !== 'user')
       return json(res, 400, { error: 'role must be "admin" or "user"' });
@@ -2052,7 +2073,9 @@ async function apiPanelUserUpdate(req, res, username) {
       db.prepare('UPDATE panel_users SET role = ? WHERE username = ?').run(body.role, username);
       changes.push(`role=${body.role}`);
     }
-    if (body.password && body.password.length >= 8) {
+    if (body.password) {
+      const policyErr = passwordPolicyError(body.password);
+      if (policyErr) return json(res, 400, { error: policyErr });
       const s = crypto.randomBytes(32).toString('hex');
       db.prepare('UPDATE panel_users SET password_hash = ?, salt = ? WHERE username = ?')
         .run(hashPassword(body.password, s), s, username);
@@ -2295,6 +2318,34 @@ function insertAuditLog(actor, action, target = '', detail = '') {
   try {
     db.prepare('INSERT INTO audit_log (actor, action, target, detail) VALUES (?, ?, ?, ?)').run(actor, action, target, detail);
   } catch {}
+}
+
+// Admin: download a consistent DB snapshot via SQLite VACUUM INTO. Streams the
+// resulting file as `assetto-YYYY-MM-DD.db`, then deletes the temp copy.
+async function apiAdminBackup(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 503, { error: 'Database unavailable' });
+  const stamp = new Date().toISOString().slice(0, 10);
+  const tmpPath = path.join(os.tmpdir(), `assetto-backup-${stamp}-${crypto.randomBytes(4).toString('hex')}.db`);
+  try {
+    await fsp.unlink(tmpPath).catch(() => {});
+    db.prepare(`VACUUM INTO ?`).run(tmpPath);
+    const stat = await fsp.stat(tmpPath);
+    res.writeHead(200, {
+      'Content-Type':  'application/octet-stream',
+      'Content-Length': stat.size,
+      'Content-Disposition': `attachment; filename="assetto-${stamp}.db"`,
+      'Cache-Control': 'no-store',
+    });
+    const stream = fs.createReadStream(tmpPath);
+    stream.pipe(res);
+    stream.on('close', () => { fsp.unlink(tmpPath).catch(() => {}); });
+    stream.on('error', () => { fsp.unlink(tmpPath).catch(() => {}); });
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'admin.backup', `${stat.size} bytes`);
+  } catch (e) {
+    await fsp.unlink(tmpPath).catch(() => {});
+    json(res, 500, { error: e.message });
+  }
 }
 
 function apiAuditGet(req, res) {
@@ -2652,6 +2703,7 @@ function handler(req, res) {
     if (urlPath === '/api/mods/history'      && req.method === 'GET')    return apiModHistoryGet(res);
     if (urlPath === '/api/mods/history'      && req.method === 'DELETE') return apiModHistoryDelete(req, res);
     if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
+    if (urlPath === '/api/admin/backup'      && req.method === 'GET')    return apiAdminBackup(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));
@@ -2740,6 +2792,21 @@ startResultsWatcher();
 loadLogFileIntoBuffer();
 cleanupOldChunks();
 setInterval(cleanupOldChunks, 60 * 60 * 1000); // sweep abandoned chunk dirs every hour
+
+// Audit log retention: keep entries for AUDIT_RETENTION_DAYS (env, default 365),
+// sweep daily. Without this the table grows unbounded forever.
+const AUDIT_RETENTION_DAYS = Math.max(1, parseInt(process.env.AUDIT_RETENTION_DAYS, 10) || 365);
+function sweepAuditLog() {
+  if (!db) return;
+  try {
+    const cutoff = new Date(Date.now() - AUDIT_RETENTION_DAYS * 86400 * 1000)
+      .toISOString().replace('T', ' ').slice(0, 19);
+    const r = db.prepare('DELETE FROM audit_log WHERE logged_at < ?').run(cutoff);
+    if (r.changes > 0) console.log(`  Audit sweep: removed ${r.changes} entries older than ${AUDIT_RETENTION_DAYS}d`);
+  } catch (e) { console.error('  Audit sweep failed:', e.message); }
+}
+sweepAuditLog();
+setInterval(sweepAuditLog, 24 * 60 * 60 * 1000);
 
 const server = http.createServer(handler);
 

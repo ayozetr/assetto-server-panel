@@ -332,7 +332,7 @@ function ForcePasswordChange({ user, onDone, onLogout }) {
     setErr('');
     if (!curPw || !newPw || !confirm)             return setErr(t('profile.err_req'));
     if (newPw !== confirm)                         return setErr(t('profile.err_match'));
-    if (newPw.length < 8)                          return setErr(t('profile.err_len'));
+    if (!window.passesPwPolicy(newPw))             return setErr(t('profile.err_len'));
     if (newPw === curPw)                           return setErr(t('profile.err_diff'));
     setBusy(true);
     try {

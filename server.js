@@ -251,8 +251,35 @@ try {
 }
 
 // ── Auth helpers ─────────────────────────────────────────────────────────────
-function hashPassword(password, salt) {
+// Stored hash format: "scrypt$<hex>" (current) or bare hex (legacy pbkdf2).
+// Legacy hashes are upgraded in-place on the next successful login.
+function hashPasswordScrypt(password, salt) {
+  return 'scrypt$' + crypto.scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex');
+}
+function hashPasswordPbkdf2(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+function hashPassword(password, salt) {
+  return hashPasswordScrypt(password, salt);
+}
+function verifyPassword(password, salt, stored) {
+  if (typeof stored !== 'string' || !stored) return false;
+  try {
+    if (stored.startsWith('scrypt$')) {
+      const expected = stored.slice(7);
+      const candidate = crypto.scryptSync(password, salt, 64).toString('hex');
+      return safeHexEqual(candidate, expected);
+    }
+    // Legacy pbkdf2 (bare hex)
+    const candidate = hashPasswordPbkdf2(password, salt);
+    return safeHexEqual(candidate, stored);
+  } catch { return false; }
+}
+function safeHexEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+  } catch { return false; }
 }
 
 function seedDefaultUsers() {
@@ -1686,8 +1713,14 @@ async function apiAuthLogin(req, res) {
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
     if (!user) return json(res, 401, { error: 'Invalid username or password' });
 
-    const hash = hashPassword(password, user.salt);
-    if (hash !== user.password_hash) return json(res, 401, { error: 'Invalid username or password' });
+    if (!verifyPassword(password, user.salt, user.password_hash))
+      return json(res, 401, { error: 'Invalid username or password' });
+
+    // Lazy upgrade: re-hash legacy pbkdf2 entries with scrypt on successful login
+    if (!user.password_hash.startsWith('scrypt$')) {
+      try { db.prepare('UPDATE panel_users SET password_hash = ? WHERE username = ?')
+        .run(hashPasswordScrypt(password, user.salt), username); } catch {}
+    }
 
     _loginAttempts.delete(ip); // reset on success
     const token = createSession(username, user.role);
@@ -1732,7 +1765,7 @@ async function apiAuthChangePassword(req, res) {
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
     if (!user) return json(res, 404, { error: 'User not found' });
 
-    if (hashPassword(currentPassword, user.salt) !== user.password_hash)
+    if (!verifyPassword(currentPassword, user.salt, user.password_hash))
       return json(res, 401, { error: 'Current password is incorrect' });
 
     const newSalt = crypto.randomBytes(32).toString('hex');

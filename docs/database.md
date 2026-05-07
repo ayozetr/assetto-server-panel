@@ -15,8 +15,8 @@ Panel login accounts.
 | Column | Type | Description |
 |--------|------|-------------|
 | `username` | TEXT PK | Login username (1–64 chars: letters, numbers, `_`, `-`) |
-| `password_hash` | TEXT | bcrypt hash |
-| `salt` | TEXT | Random salt |
+| `password_hash` | TEXT | scrypt hash (`scrypt$<hex>`). Legacy PBKDF2-SHA512 hashes (bare hex) are still verified and lazily upgraded to scrypt on next successful login. |
+| `salt` | TEXT | 32-byte random salt, hex-encoded |
 | `role` | TEXT | `admin` or `user` |
 | `created_at` | TEXT | Creation timestamp |
 | `must_change_password` | INTEGER | `1` = user must change password on next login |

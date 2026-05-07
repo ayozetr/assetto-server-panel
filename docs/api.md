@@ -408,6 +408,38 @@ Useful for periodic backups before risky operations (mass user changes, password
 
 ---
 
+### `GET /api/admin/stats`
+Internal status snapshot for ops debugging. Returns Node version + uptime + RSS memory, sweeper timestamps and last-removed counters, in-flight counters (active uploads, pending chunk dirs, SSE clients, server-control mutex), and table sizes.
+
+**Auth required:** yes (admin)
+
+```json
+{
+  "nodeVersion": "v20.20.2",
+  "uptimeSec": 12345,
+  "memoryMb": 78,
+  "auditRetentionDays": 365,
+  "trustProxy": true,
+  "serverActionInFlight": false,
+  "activeUploads": 0,
+  "pendingChunkDirs": 0,
+  "sseClients": 1,
+  "sweepers": {
+    "audit":  { "lastRunAt": 1778195408412, "lastRemoved": 0 },
+    "login":  { "lastRunAt": 1778195408412, "lastRemoved": 3 },
+    "chunks": { "lastRunAt": 1778195408415, "lastRemoved": 0 }
+  },
+  "counts": {
+    "sessions": 2, "audit_log": 137, "login_attempts": 0,
+    "panel_users": 2, "laps": 4521, "mod_history": 18
+  }
+}
+```
+
+Verify the audit hash chain locally with `node tools/verify-audit.js path/to/assetto.db` (downloadable via `/api/admin/backup`).
+
+---
+
 ## Server control
 
 All server control endpoints require admin.

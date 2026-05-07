@@ -1106,12 +1106,32 @@ function apiResults(req, res) {
   try {
     const qs    = new URLSearchParams(req.url.split('?')[1] || '');
     const limit = Math.min(Math.max(parseInt(qs.get('limit')) || 500, 1), 5000);
-    const rows = db.prepare(`
+    // Optional server-side filters — push down to SQL so the client doesn't
+    // have to round-trip thousands of rows just to filter in the browser.
+    const track  = (qs.get('track')  || '').slice(0, 64);
+    const car    = (qs.get('car')    || '').slice(0, 64);
+    const driver = (qs.get('driver') || '').slice(0, 64);
+    const from   = (qs.get('from')   || '').slice(0, 10); // YYYY-MM-DD
+    const to     = (qs.get('to')     || '').slice(0, 10);
+    const validOnly = qs.get('validOnly') === '1';
+
+    const where = [];
+    const args  = [];
+    if (track)     { where.push('track = ?');         args.push(track); }
+    if (car)       { where.push('car = ?');           args.push(car); }
+    if (driver)    { where.push('driver_guid = ?');   args.push(driver); }
+    if (from)      { where.push('session_date >= ?'); args.push(from); }
+    if (to)        { where.push('session_date <= ?'); args.push(to); }
+    if (validOnly) { where.push('valid = 1'); }
+    args.push(limit);
+    const sql = `
       SELECT id, driver_name, driver_guid, car, track, track_config, ms, s1, s2, s3, cuts, valid, session_date
       FROM laps
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY ms ASC
       LIMIT ?
-    `).all(limit);
+    `;
+    const rows = db.prepare(sql).all(...args);
 
     const laps = rows.map(r => ({
       id:     r.id,
@@ -1975,11 +1995,15 @@ async function apiPanelUserCreate(req, res) {
     if (typeof username !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(username))
       return json(res, 400, { error: 'Username must be 1–64 chars: letters, numbers, _ and - only' });
     if (password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
+    // Reject unknown roles instead of silently coercing — caller intent stays explicit
+    if (role !== undefined && role !== 'admin' && role !== 'user')
+      return json(res, 400, { error: 'role must be "admin" or "user"' });
     if (!db) return json(res, 503, { error: 'Database unavailable' });
-    const exists = db.prepare('SELECT 1 FROM panel_users WHERE username = ?').get(username);
+    // Case-insensitive uniqueness — 'admin' and 'Admin' must not coexist
+    const exists = db.prepare('SELECT 1 FROM panel_users WHERE LOWER(username) = LOWER(?)').get(username);
     if (exists) return json(res, 409, { error: 'Username already exists' });
     const salt = crypto.randomBytes(32).toString('hex');
-    const finalRole = role === 'admin' ? 'admin' : 'user';
+    const finalRole = role || 'user';
     db.prepare('INSERT INTO panel_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?)')
       .run(username, hashPassword(password, salt), salt, finalRole);
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.create', username, finalRole);
@@ -2246,12 +2270,19 @@ function insertAuditLog(actor, action, target = '', detail = '') {
 
 function apiAuditGet(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  if (!db) return json(res, 200, []);
+  if (!db) return json(res, 200, { rows: [], hasMore: false });
+  const qs     = new URLSearchParams(req.url.split('?')[1] || '');
+  const limit  = Math.min(Math.max(parseInt(qs.get('limit')) || 50, 1), 500);
+  const before = parseInt(qs.get('before')); // cursor: id strictly less than this
+  const where  = isFinite(before) && before > 0 ? 'WHERE id < ?' : '';
+  const params = isFinite(before) && before > 0 ? [before, limit + 1] : [limit + 1];
   const rows = db.prepare(`
     SELECT id, actor, action, target, detail, logged_at
-    FROM audit_log ORDER BY id DESC LIMIT 200
-  `).all();
-  json(res, 200, rows);
+    FROM audit_log ${where} ORDER BY id DESC LIMIT ?
+  `).all(...params);
+  const hasMore = rows.length > limit;
+  if (hasMore) rows.pop();
+  json(res, 200, { rows, hasMore, nextCursor: hasMore ? rows[rows.length - 1].id : null });
 }
 
 function apiModHistoryGet(res) {

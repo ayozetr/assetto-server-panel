@@ -874,14 +874,38 @@ function PageAudit() {
   const I5   = window.AppIcons;
   const [rows,    setRows]    = useStateC([]);
   const [loading, setLoading] = useStateC(true);
+  const [loadingMore, setLoadingMore] = useStateC(false);
+  const [hasMore, setHasMore] = useStateC(false);
+  const [nextCursor, setNextCursor] = useStateC(null);
 
   const load = () => {
     setLoading(true);
-    fetch('/api/audit')
+    fetch('/api/audit?limit=50')
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setRows(d); })
+      .then(d => {
+        // Backwards-compatible: response is { rows, hasMore, nextCursor } now,
+        // but old callers / older server might still return a bare array.
+        if (Array.isArray(d)) { setRows(d); setHasMore(false); setNextCursor(null); }
+        else if (d && Array.isArray(d.rows)) { setRows(d.rows); setHasMore(!!d.hasMore); setNextCursor(d.nextCursor); }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    fetch(`/api/audit?limit=50&before=${nextCursor}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d && Array.isArray(d.rows)) {
+          setRows(prev => [...prev, ...d.rows]);
+          setHasMore(!!d.hasMore);
+          setNextCursor(d.nextCursor);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
   };
 
   useEffectC(load, []);
@@ -939,6 +963,13 @@ function PageAudit() {
               ))}
             </tbody>
           </table>
+        )}
+        {hasMore && !loading && (
+          <div style={{padding:12, textAlign:'center', borderTop:'1px solid var(--border)'}}>
+            <button className="btn" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? t('common.loading') : (t('audit.load_more') || 'Load more')}
+            </button>
+          </div>
         )}
       </div>
     </>

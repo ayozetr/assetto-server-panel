@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const http          = require('http');
 const fs            = require('fs');
+const { AsyncLocalStorage } = require('async_hooks');
 const fsp           = fs.promises;
 const path          = require('path');
 const os            = require('os');
@@ -19,6 +20,30 @@ try { sevenZ   = require('node-7z');         } catch { _missingExtractors.push('
 try { sevenBin = require('7zip-bin');        } catch { _missingExtractors.push('7z binary (7zip-bin)'); }
 if (_missingExtractors.length) {
   console.warn(`  Mod extraction limited — missing: ${_missingExtractors.join(', ')}. Run "npm install" to enable.`);
+}
+
+// ── Logging ──────────────────────────────────────────────────────────────────
+// Each HTTP request runs inside an AsyncLocalStorage scope holding a short
+// request id, surfaced as the `X-Request-Id` response header. log.info / .warn /
+// .error pick up that id automatically — no extra parameter to thread through.
+// Outside a request scope (startup, sweepers, AC spawn callbacks…) the id is
+// omitted and the line still gets a timestamp + level.
+const _reqContext = new AsyncLocalStorage();
+function _logEmit(level, args) {
+  const ctx    = _reqContext.getStore();
+  const ts     = new Date().toISOString();
+  const prefix = ctx?.reqId ? `${ts} ${level} [${ctx.reqId}]` : `${ts} ${level}`;
+  const stream = (level === 'ERROR' || level === 'WARN') ? console.error : console.log;
+  stream(prefix, ...args);
+}
+const log = {
+  info:  (...args) => _logEmit('INFO',  args),
+  warn:  (...args) => _logEmit('WARN',  args),
+  error: (...args) => _logEmit('ERROR', args),
+};
+function newRequestId() {
+  // 8 hex chars is plenty for in-process correlation — collisions are not security-relevant
+  return require('crypto').randomBytes(4).toString('hex');
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -1751,7 +1776,7 @@ function checkBinary() {
 function spawnAC() {
   return new Promise((resolve) => {
     const err = checkBinary();
-    if (err) { console.error('[AC] spawn error:', err); _acRunSince = null; return resolve({ ok: false, error: err }); }
+    if (err) { log.error('[AC] spawn error:', err); _acRunSince = null; return resolve({ ok: false, error: err }); }
     let logStream = null;
     try {
       fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true });
@@ -1781,7 +1806,7 @@ function spawnAC() {
       child.once('error', e => {
         if (settled) return;
         settled = true;
-        console.error('[AC] spawn error:', e.message);
+        log.error('[AC] spawn error:', e.message);
         if (lineBuf) { appendLog(lineBuf); lineBuf = ''; }
         closeLog();
         acChild = null;
@@ -1805,7 +1830,7 @@ function spawnAC() {
         else resolve({ ok: false, error: 'Proceso no continuó tras arrancar' });
       }, 500);
     } catch (e) {
-      console.error('[AC] spawn exception:', e.message);
+      log.error('[AC] spawn exception:', e.message);
       closeLog();
       acChild = null;
       resolve({ ok: false, error: e.message });
@@ -2795,7 +2820,7 @@ async function apiModUploadChunk(req, res) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
     clearUserUpload(uploadedBy);
     insertModHistory({ ok: false, filename, uploadedBy, error: e.message });
-    console.error('Chunk upload error:', e.message);
+    log.error('chunk upload failed:', e.message);
     json(res, e.status || 500, { error: e.message });
   }
 }
@@ -2838,7 +2863,7 @@ async function apiModUpload(req, res) {
     json(res, 200, { ok: true, ...result });
   } catch (e) {
     insertModHistory({ ok: false, filename: filePart.filename, uploadedBy, error: e.message });
-    console.error('Mod upload error:', e.message);
+    log.error('mod upload failed:', e.message);
     json(res, e.status || 500, { error: e.message });
   } finally {
     fsp.unlink(filePart.filePath).catch(() => {});
@@ -3028,7 +3053,13 @@ function sweepLoginAttempts() {
 sweepLoginAttempts();
 setInterval(sweepLoginAttempts, 30 * 60 * 1000);
 
-const server = http.createServer(handler);
+const server = http.createServer((req, res) => {
+  // Honour an upstream X-Request-Id (e.g. from Cloudflare) to keep correlation
+  // across the proxy → panel → AC server hops; otherwise mint a fresh one.
+  const reqId = (req.headers['x-request-id'] || '').slice(0, 64) || newRequestId();
+  res.setHeader('X-Request-Id', reqId);
+  _reqContext.run({ reqId }, () => handler(req, res));
+});
 
 server.listen(PORT, HOST, () => {
   const ip   = getNetworkIP();

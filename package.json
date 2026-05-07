@@ -4,7 +4,7 @@
   "private": true,
   "description": "Panel de administración web para servidores Assetto Corsa",
   "license": "SEE LICENSE IN LICENSE",
-  "author": "Sample Driver Reyes <ayozetr@proton.me>",
+  "author": "Ayoze Torres Rodríguez <ayozetr@proton.me>",
   "homepage": "https://github.com/ayozetr/assetto-dashboard",
   "repository": { "type": "git", "url": "https://github.com/ayozetr/assetto-dashboard.git" },
   "engines": { "node": ">=20" },

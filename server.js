@@ -1003,22 +1003,31 @@ function getACUptime() {
 }
 
 // ── Log parser ────────────────────────────────────────────────────────────────
+// Heuristic log line parser. AC server output is unstructured English text, so
+// classification is best-effort: word-boundary regex matches narrow the false
+// positive rate, but if AC ever changes its strings or runs in another language
+// the worst case is "info" tag/level — never a crash. The frontend filters by
+// these levels so accuracy isn't load-bearing.
+const _LVL_ERROR   = /\b(error|exception|fatal|fail(ed|ure)?)\b/i;
+const _LVL_WARN    = /\b(warn(ing)?|deprecated|skipped|missing)\b/i;
+const _LVL_OK      = /\b(connected|joined|lap completed|validated|best lap|ok|success)\b/i;
+const _TAG_BRACKET = /\[([A-Z_0-9]{2,12})\]/;
+const _TAG_HTTP    = /^(PAGE:|Serve |GET |POST |HEAD )/;
+const _TAG_CFG     = /^(REQ|\{)/;
+const _TIME        = /(\d{2}:\d{2}:\d{2})/;
+
 function parseLine(raw, id) {
-  const l = raw.toLowerCase();
-  const lvl = /\berror\b/.test(l)                                           ? 'error'
-            : /\bwarn/.test(l)                                              ? 'warn'
-            : /lap completed|validated|best lap|steam.*ok|connection.*ok/.test(l) ? 'ok'
-            : /connected|new connection|driver.*joined/.test(l)            ? 'ok'
+  const lvl = _LVL_ERROR.test(raw) ? 'error'
+            : _LVL_WARN.test(raw)  ? 'warn'
+            : _LVL_OK.test(raw)    ? 'ok'
             : 'info';
-  const tm  = raw.match(/\[([A-Z_0-9]{2,12})\]/);
-  const tag = tm                              ? tm[1]
-            : /^PAGE:|^Serve /.test(raw)      ? 'HTTP'
-            : /^REQ/.test(raw)               ? 'CFG'
-            : /^{/.test(raw.trim())          ? 'CFG'
+  const tm  = raw.match(_TAG_BRACKET);
+  const tag = tm                          ? tm[1]
+            : _TAG_HTTP.test(raw)         ? 'HTTP'
+            : _TAG_CFG.test(raw.trim())   ? 'CFG'
             : 'SRV';
-  const timeMatch = raw.match(/(\d{2}:\d{2}:\d{2})/);
-  const time = timeMatch ? timeMatch[1] : '';
-  return { id, time, lvl, tag, msg: raw };
+  const timeMatch = raw.match(_TIME);
+  return { id, time: timeMatch ? timeMatch[1] : '', lvl, tag, msg: raw };
 }
 
 // ── API handlers ──────────────────────────────────────────────────────────────
@@ -2511,6 +2520,37 @@ function insertAuditLog(actor, action, target = '', detail = '') {
   } catch (e) { log.warn('audit log insert failed:', e.message); }
 }
 
+// Admin: panel internals snapshot for ops debugging. Returns sweeper status,
+// table sizes, and current in-flight counters. Useful when "is the panel still
+// alive?" can't be answered from the UI alone.
+async function apiAdminStats(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  const counts = {};
+  if (db) {
+    try { counts.sessions       = db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n; } catch {}
+    try { counts.audit_log      = db.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n; } catch {}
+    try { counts.login_attempts = db.prepare('SELECT COUNT(*) AS n FROM login_attempts').get().n; } catch {}
+    try { counts.panel_users    = db.prepare('SELECT COUNT(*) AS n FROM panel_users').get().n; } catch {}
+    try { counts.laps           = db.prepare('SELECT COUNT(*) AS n FROM laps').get().n; } catch {}
+    try { counts.mod_history    = db.prepare('SELECT COUNT(*) AS n FROM mod_history').get().n; } catch {}
+  }
+  let chunkDirs = 0;
+  try { chunkDirs = (await fsp.readdir(CHUNK_TMP_DIR).catch(() => [])).length; } catch {}
+  json(res, 200, {
+    nodeVersion:        process.version,
+    uptimeSec:          Math.floor(process.uptime()),
+    memoryMb:           Math.round(process.memoryUsage().rss / 1024 / 1024),
+    auditRetentionDays: AUDIT_RETENTION_DAYS,
+    trustProxy:         TRUST_PROXY,
+    serverActionInFlight: _serverActionInFlight,
+    activeUploads:      _userUploads.size,
+    pendingChunkDirs:   chunkDirs,
+    sseClients:         sseClients.size,
+    sweepers:           _sweeperState,
+    counts,
+  });
+}
+
 // Admin: download a consistent DB snapshot via SQLite VACUUM INTO. Streams the
 // resulting file as `assetto-YYYY-MM-DD.db`, then deletes the temp copy.
 async function apiAdminBackup(req, res) {
@@ -2720,16 +2760,20 @@ function userHasOtherUploadActive(username, uploadId) {
 }
 
 async function cleanupOldChunks() {
+  let removed = 0;
   try {
     const entries = await fsp.readdir(CHUNK_TMP_DIR).catch(() => []);
     const now = Date.now();
     for (const entry of entries) {
       const dir = path.join(CHUNK_TMP_DIR, entry);
       const stat = await fsp.stat(dir).catch(() => null);
-      if (stat && now - stat.mtimeMs > 2 * 60 * 60 * 1000)
+      if (stat && now - stat.mtimeMs > 2 * 60 * 60 * 1000) {
         await fsp.rm(dir, { recursive: true }).catch(() => {});
+        removed++;
+      }
     }
   } catch {}
+  _sweeperState.chunks = { lastRunAt: Date.now(), lastRemoved: removed };
 }
 
 async function apiModUploadChunk(req, res) {
@@ -2956,6 +3000,7 @@ function handler(req, res) {
     if (urlPath === '/api/mods/history'      && req.method === 'DELETE') return apiModHistoryDelete(req, res);
     if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
     if (urlPath === '/api/admin/backup'      && req.method === 'GET')    return apiAdminBackup(req, res);
+    if (urlPath === '/api/admin/stats'       && req.method === 'GET')    return apiAdminStats(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));
     if (panelUserM && req.method === 'DELETE') return apiPanelUserDelete(req, res, decodeURIComponent(panelUserM[1]));
@@ -3060,6 +3105,14 @@ loadLogFileIntoBuffer();
 cleanupOldChunks();
 setInterval(cleanupOldChunks, 60 * 60 * 1000); // sweep abandoned chunk dirs every hour
 
+// Sweeper status counters surfaced via /api/admin/stats so ops can see whether
+// the background tasks are firing in prod without grepping logs.
+const _sweeperState = {
+  audit:  { lastRunAt: null, lastRemoved: 0 },
+  login:  { lastRunAt: null, lastRemoved: 0 },
+  chunks: { lastRunAt: null, lastRemoved: 0 },
+};
+
 // Audit log retention: keep entries for AUDIT_RETENTION_DAYS (env, default 365),
 // sweep daily. Without this the table grows unbounded forever.
 const AUDIT_RETENTION_DAYS = Math.max(1, parseInt(process.env.AUDIT_RETENTION_DAYS, 10) || 365);
@@ -3069,8 +3122,9 @@ function sweepAuditLog() {
     const cutoff = new Date(Date.now() - AUDIT_RETENTION_DAYS * 86400 * 1000)
       .toISOString().replace('T', ' ').slice(0, 19);
     const r = db.prepare('DELETE FROM audit_log WHERE logged_at < ?').run(cutoff);
-    if (r.changes > 0) console.log(`  Audit sweep: removed ${r.changes} entries older than ${AUDIT_RETENTION_DAYS}d`);
-  } catch (e) { console.error('  Audit sweep failed:', e.message); }
+    _sweeperState.audit = { lastRunAt: Date.now(), lastRemoved: r.changes };
+    if (r.changes > 0) log.info(`audit sweep: removed ${r.changes} entries older than ${AUDIT_RETENTION_DAYS}d`);
+  } catch (e) { log.warn('audit sweep failed:', e.message); }
 }
 sweepAuditLog();
 setInterval(sweepAuditLog, 24 * 60 * 60 * 1000);
@@ -3078,7 +3132,10 @@ setInterval(sweepAuditLog, 24 * 60 * 60 * 1000);
 // Drop expired login_attempts every 30 min so the table doesn't grow unbounded
 function sweepLoginAttempts() {
   if (!db) return;
-  try { db.prepare('DELETE FROM login_attempts WHERE reset_at < ?').run(Date.now()); } catch {}
+  try {
+    const r = db.prepare('DELETE FROM login_attempts WHERE reset_at < ?').run(Date.now());
+    _sweeperState.login = { lastRunAt: Date.now(), lastRemoved: r.changes };
+  } catch {}
 }
 sweepLoginAttempts();
 setInterval(sweepLoginAttempts, 30 * 60 * 1000);

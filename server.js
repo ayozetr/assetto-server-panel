@@ -2186,6 +2186,11 @@ function apiModHistoryDelete(req, res) {
   json(res, 200, { ok: true });
 }
 
+// Decompression bomb caps: refuse archives that look pathological before we touch disk
+const MAX_ARCHIVE_ENTRIES   = 50_000;                 // total entries
+const MAX_ARCHIVE_TOTAL_B   = 5 * 1024 * 1024 * 1024; // 5 GB extracted total
+const MAX_ARCHIVE_ENTRY_B   = 2 * 1024 * 1024 * 1024; // 2 GB single file
+
 async function processModBuffer(buffer, filename) {
   const ext = path.extname(filename).toLowerCase();
   if (!['.zip', '.rar', '.7z'].includes(ext))
@@ -2195,6 +2200,9 @@ async function processModBuffer(buffer, filename) {
   try {
     archive = await extractArchive(buffer, ext);
     const entries = archive.entries;
+
+    if (entries.length > MAX_ARCHIVE_ENTRIES)
+      throw Object.assign(new Error(`Archive has too many entries (${entries.length} > ${MAX_ARCHIVE_ENTRIES})`), { status: 413 });
 
     const dummyRoot = path.join(os.tmpdir(), 'ac-slip-check');
     for (const e of entries) {
@@ -2253,6 +2261,7 @@ async function processModBuffer(buffer, filename) {
     await fsp.mkdir(destDir, { recursive: true });
 
     let filesExtracted = 0;
+    let totalBytes     = 0;
     for (const entry of entries) {
       const normalName = entry.name.replace(/\\/g, '/');
       if (!normalName.startsWith(modRoot + '/')) continue;
@@ -2264,9 +2273,17 @@ async function processModBuffer(buffer, filename) {
       const fileExt = path.extname(normalName).toLowerCase();
       if (!ALLOWED_MOD_EXTS.has(fileExt)) continue;
       const destFile = path.join(destDir, normalName.slice(modRoot.length + 1));
-      if (!destFile.startsWith(destDir + path.sep)) continue;
+      // Resolve and re-check against the real destDir. Abort on any escape — never silently skip
+      // (a partial install with one slip entry omitted is still dangerous if a future fix forgets).
+      if (!destFile.startsWith(destDir + path.sep))
+        throw Object.assign(new Error(`Zip-Slip path rejected: ${entry.name}`), { status: 400 });
       const data = await entry.getData();
       if (!data) continue;
+      if (data.length > MAX_ARCHIVE_ENTRY_B)
+        throw Object.assign(new Error(`Entry too large: ${normalName} (${data.length} bytes)`), { status: 413 });
+      totalBytes += data.length;
+      if (totalBytes > MAX_ARCHIVE_TOTAL_B)
+        throw Object.assign(new Error(`Archive expands beyond size cap (${MAX_ARCHIVE_TOTAL_B} bytes)`), { status: 413 });
       await fsp.mkdir(path.dirname(destFile), { recursive: true });
       await fsp.writeFile(destFile, data);
       filesExtracted++;

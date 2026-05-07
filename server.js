@@ -463,12 +463,13 @@ function setSecurityHeaders(req, res) {
   // Lock down browser features the panel never uses
   res.setHeader('Permissions-Policy',
     'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
-  // Content Security Policy. 'unsafe-eval' is needed for Babel-standalone (in-browser
-  // JSX transpile); after a build step migrates JSX to plain JS (see TASKS §4.46),
-  // this directive can be dropped.
+  // Content Security Policy. Babel-standalone needs both 'unsafe-eval' (Function/eval
+  // calls) AND 'unsafe-inline' (it injects each transpiled `<script type=text/babel>`
+  // back into the DOM as a fresh inline <script> element). Both directives can be
+  // dropped after the build-step migration (TASKS §4.46) ships precompiled bundles.
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' https://unpkg.com",
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: https:",

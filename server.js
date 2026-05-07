@@ -1643,40 +1643,56 @@ async function killAC() {
   return { ok: true };
 }
 
+// Serializes server.start / .stop / .restart so rapid clicks cannot spawn
+// duplicate processes or null-set acChild while a spawn is mid-flight.
+let _serverActionInFlight = false;
+async function withServerActionLock(req, res, fn) {
+  if (_serverActionInFlight) return json(res, 409, { error: 'Another server action is in progress' });
+  _serverActionInFlight = true;
+  try { return await fn(); }
+  finally { _serverActionInFlight = false; }
+}
+
 async function apiServerStart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  if (acChild && !acChild.killed) return json(res, 409, { error: 'Server is already running' });
-  if (await findACPid())          return json(res, 409, { error: 'Server is already running' });
-  const { running } = await getACInfo();
-  if (running) return json(res, 409, { error: 'Server is already running' });
+  return withServerActionLock(req, res, async () => {
+    if (acChild && !acChild.killed) return json(res, 409, { error: 'Server is already running' });
+    if (await findACPid())          return json(res, 409, { error: 'Server is already running' });
+    const { running } = await getACInfo();
+    if (running) return json(res, 409, { error: 'Server is already running' });
 
-  const r = await spawnAC();
-  if (!r.ok) return json(res, 500, { error: r.error || 'Failed to start server' });
-  await waitForACUp(8000);
-  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.start');
-  json(res, 200, { ok: true });
+    const r = await spawnAC();
+    if (!r.ok) return json(res, 500, { error: r.error || 'Failed to start server' });
+    await waitForACUp(8000);
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.start');
+    json(res, 200, { ok: true });
+  });
 }
 
 async function apiServerStop(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  const r = await killAC();
-  if (!r.ok) return json(res, 500, { error: r.error || 'Failed to stop server' });
-  await waitForACDown(6000);
-  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.stop');
-  json(res, 200, { ok: true });
+  return withServerActionLock(req, res, async () => {
+    const r = await killAC();
+    if (!r.ok) return json(res, 500, { error: r.error || 'Failed to stop server' });
+    await waitForACDown(6000);
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.stop');
+    json(res, 200, { ok: true });
+  });
 }
 
 async function apiServerRestart(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  const k = await killAC();
-  if (!k.ok) return json(res, 500, { error: k.error || 'Failed to stop server' });
-  await waitForACDown(6000);
-  await sleep(500);
-  const s = await spawnAC();
-  if (!s.ok) return json(res, 500, { error: s.error || 'Failed to start server' });
-  await waitForACUp(10000);
-  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.restart');
-  json(res, 200, { ok: true });
+  return withServerActionLock(req, res, async () => {
+    const k = await killAC();
+    if (!k.ok) return json(res, 500, { error: k.error || 'Failed to stop server' });
+    await waitForACDown(6000);
+    await sleep(500);
+    const s = await spawnAC();
+    if (!s.ok) return json(res, 500, { error: s.error || 'Failed to start server' });
+    await waitForACUp(10000);
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.restart');
+    json(res, 200, { ok: true });
+  });
 }
 
 // acServer no soporta SIGHUP para recargar config: el "reload" es un restart

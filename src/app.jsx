@@ -189,12 +189,15 @@ function App() {
       .catch(() => {});
   }, [!!user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll /api/metrics every 4s
+  // Poll /api/metrics every 4s — only while authenticated
   uE(() => {
+    if (!user) return;
     const poll = () => {
       fetch('/api/metrics')
         .then(r => r.json())
         .then(d => {
+          // Guard against error responses (401, 500, etc.) which lack the metrics shape
+          if (!d || d.error || !d.ram) return;
           failCount.current = 0;
           setBackendDown(false);
           setServer(s => ({
@@ -219,7 +222,7 @@ function App() {
     poll();
     const id = setInterval(poll, 4000);
     return () => clearInterval(id);
-  }, []);
+  }, [!!user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };
 

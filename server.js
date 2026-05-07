@@ -942,18 +942,18 @@ function apiConfig(req, res) {
       welcome:     s['WELCOME_MESSAGE']          || '',
       password:    isAdmin ? (s['PASSWORD']         || '') : '',
       adminPass:   isAdmin ? (s['ADMIN_PASSWORD']   || '') : '',
-      tcp:         parseInt(s['TCP_PORT'])       || 9600,
-      udp:         parseInt(s['UDP_PORT'])       || 9600,
-      http:        parseInt(s['HTTP_PORT'])      || 8081,
-      tickrate:    parseInt(s['CLIENT_SEND_INTERVAL_HZ']) || 18,
-      maxClients:  parseInt(s['MAX_CLIENTS'])    || 0,
+      tcp:         intOr(s['TCP_PORT'],                 9600),
+      udp:         intOr(s['UDP_PORT'],                 9600),
+      http:        intOr(s['HTTP_PORT'],                8081),
+      tickrate:    intOr(s['CLIENT_SEND_INTERVAL_HZ'],  18),
+      maxClients:  intOr(s['MAX_CLIENTS'],              0),
       publicLobby: s['REGISTER_TO_LOBBY'] === '1',
       whitelist:   s['WELCOME_WHITELIST_ENABLED'] === '1',
-      fuelRate:    parseInt(s['FUEL_RATE'])      || 100,
-      damage:      parseInt(s['DAMAGE_MULTIPLIER']) || 100,
-      tyreWear:    parseInt(s['TYRE_WEAR_RATE']) || 100,
-      abs:         parseInt(s['ABS_ALLOWED'])    || 0,
-      tc:          parseInt(s['TC_ALLOWED'])     || 0,
+      fuelRate:    intOr(s['FUEL_RATE'],                100),
+      damage:      intOr(s['DAMAGE_MULTIPLIER'],        100),
+      tyreWear:    intOr(s['TYRE_WEAR_RATE'],           100),
+      abs:         intOr(s['ABS_ALLOWED'],              0),
+      tc:          intOr(s['TC_ALLOWED'],               0),
       autoclutch:  s['AUTOCLUTCH_ALLOWED'] === '1',
       stability:   s['STABILITY_ALLOWED']  === '1',
       track:       s['TRACK']              || '',
@@ -965,6 +965,8 @@ function apiConfig(req, res) {
 
 function validPort(v) { const n = parseInt(v); return n >= 1 && n <= 65535 ? n : null; }
 function clampInt(v, lo, hi) { const n = parseInt(v); return isNaN(n) ? null : Math.max(lo, Math.min(hi, n)); }
+// parseInt with explicit fallback. `parseInt('0') || N` returns N — wrong for legitimate 0.
+function intOr(v, fallback) { const n = parseInt(v); return isNaN(n) ? fallback : n; }
 
 async function apiConfigUpdate(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });

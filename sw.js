@@ -6,7 +6,8 @@
 //   - cross-origin (CDN)    : stale-while-revalidate
 //   - same-origin static    : stale-while-revalidate
 
-const CACHE_NAME  = 'ac-panel-v14';
+// Bump on every behaviour change so old caches are dropped at activate-time.
+const CACHE_NAME  = 'ac-panel-v15';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -65,8 +66,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Never intercept chunk uploads — SW's fetch(request) corrupts large POST bodies
+  // Never intercept uploads — SW's fetch(request) can corrupt large POST bodies.
+  // The chunk endpoint is the documented offender (docs/troubleshooting.md), but
+  // the multipart `/api/mods/upload` carries the same risk for big archives.
   if (url.pathname === '/api/mods/upload/chunk') return;
+  if (url.pathname === '/api/mods/upload')       return;
 
   // Selected GETs are cached for offline read-only browsing (PWA mode). The
   // cache is updated on every successful network response; if the network is
@@ -77,19 +81,22 @@ self.addEventListener('fetch', (event) => {
     && url.pathname.startsWith(API_PREFIX)
     && OFFLINE_API_PATHS.includes(url.pathname);
 
-  // Always go network-first for API calls (real-time data)
+  // Always go network-first for API calls (real-time data).
+  // Cache key uses the Request object (full URL incl. query string) so filtered
+  // endpoints — `/api/results?driver=alice` vs `?driver=bob` — keep distinct
+  // offline copies instead of clobbering each other under the same pathname.
   if (url.pathname.startsWith(API_PREFIX)) {
     event.respondWith((async () => {
       try {
         const res = await fetch(request);
         if (isOfflineable && res.ok) {
           const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(url.pathname, clone)).catch(() => {});
+          caches.open(CACHE_NAME).then((c) => c.put(request, clone)).catch(() => {});
         }
         return res;
       } catch {
         if (isOfflineable) {
-          const cached = await caches.match(url.pathname);
+          const cached = await caches.match(request);
           if (cached) {
             const headers = new Headers(cached.headers);
             headers.set('X-AC-Cache', 'stale-offline');

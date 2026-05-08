@@ -73,7 +73,7 @@ Cloudflare and other reverse proxies often block large binary POST bodies before
 
 ## "JSON invalid" or "Offline" error during chunked upload
 
-The service worker may be intercepting the chunk upload request. Make sure you are running an up-to-date version of the panel — older versions had a bug where the SW corrupted large POST bodies. After updating, open DevTools → Application → Service Workers and click **Unregister**, then hard-reload the page (`Ctrl+Shift+R`).
+The service worker may be intercepting the upload request. Make sure you are running an up-to-date version of the panel — older versions had a bug where the SW corrupted large POST bodies. Both `/api/mods/upload/chunk` and `/api/mods/upload` are now skipped by the SW so neither single multipart nor chunked uploads pass through it. After updating, open DevTools → Application → Service Workers and click **Unregister**, then hard-reload the page (`Ctrl+Shift+R`).
 
 ---
 
@@ -111,7 +111,7 @@ npm run build
 
 ## Changes after update don't appear
 
-This used to require a hard reload. Since SW v12 the panel uses **network-first for navigation** — `index.html` always comes from the network when reachable, so security and UI fixes propagate without manual cache busts. If you still see a stale UI:
+This used to require a hard reload. Since SW v12 the panel uses **network-first for navigation** — `index.html` always comes from the network when reachable, so security and UI fixes propagate without manual cache busts. Bumping `CACHE_NAME` (`ac-panel-v15` at the time of writing) on every behaviour change drops the old offline cache at activate-time. If you still see a stale UI:
 
 1. The browser may still be running the old SW. Reload twice — the first reload activates the new SW, the second uses it.
 2. Confirm the server is actually up to date (`git log -1` and `systemctl status assetto-dashboard`).

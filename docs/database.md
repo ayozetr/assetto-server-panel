@@ -134,9 +134,14 @@ Tamper-evident record of every admin action.
 | `detail` | TEXT | Extra context (e.g. player display name) |
 | `logged_at` | TEXT | Timestamp of the action |
 | `prev_hash` | TEXT | SHA-256 of the previous row's `row_hash` (empty for the first row) |
-| `row_hash` | TEXT | `sha256(prev_hash + "|" + logged_at + "|" + actor + "|" + action + "|" + target + "|" + detail)` |
+| `row_hash` | TEXT | Per-row SHA-256 (canonicalization depends on `chain_version`, see below) |
+| `chain_version` | INTEGER | `1` for current rows, `0` for legacy rows written before the format upgrade |
 
-Each row chains into the next via `prev_hash`/`row_hash`. Editing or deleting an intermediate row breaks every subsequent hash. Verify the chain locally with:
+Each row chains into the next via `prev_hash`/`row_hash`. Editing or deleting an intermediate row breaks every subsequent hash.
+
+**Canonicalization.** New rows (`chain_version = 1`) hash `JSON.stringify([1, prev_hash, logged_at, actor, action, target, detail])` so element boundaries are explicit. Legacy rows (`chain_version = 0`) used `${prev_hash}|${logged_at}|${actor}|${action}|${target}|${detail}` — that format had a separator-collision weakness when fields contained `|`, so it is no longer written. The verifier reads `chain_version` to pick the correct algorithm per row, which means existing chains continue to validate without rewriting history.
+
+Verify the chain locally with:
 
 ```bash
 node tools/verify-audit.js path/to/assetto.db

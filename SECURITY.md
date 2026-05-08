@@ -43,13 +43,14 @@ The author makes a good-faith effort that each tagged release is free of *known*
 
 ## Hardening features that are already in place
 
-- `scrypt` password hashing with constant-time compare; legacy PBKDF2 hashes are upgraded on the next successful login.
-- `HttpOnly; SameSite=Strict` session cookies; CSRF rejected by an `Origin`/`Referer` check on every unsafe HTTP method.
+- `scrypt` password hashing with constant-time compare; cost parameters pinned in a `SCRYPT_PARAMS` constant and passed explicitly to both hash and verify so the comparison never silently relies on Node's defaults. Legacy PBKDF2 hashes are upgraded on the next successful login.
+- `ADMIN_TOKEN` header (when configured) is compared in constant time via `crypto.timingSafeEqual` to avoid byte-by-byte timing leaks.
+- `HttpOnly; SameSite=Strict` session cookies; the `Secure` flag is appended automatically when the request arrived over HTTPS (direct or via `X-Forwarded-Proto: https`). CSRF rejected by an `Origin`/`Referer` check on every unsafe HTTP method.
 - CSP without `unsafe-eval`/`unsafe-inline` for scripts, plus `Permissions-Policy`, `X-Frame-Options: DENY`, `Referrer-Policy`, and HSTS when proxied via HTTPS.
 - Static-file allow-list — only `/dist/`, `/src/assets/`, `/src/styles.css`, `/index.html`, `/sw.js`, and `/manifest.webmanifest` are reachable as static.
 - INI value sanitisation, archive entry-count and aggregate-size caps, strict zip-slip abort, streaming multipart upload to disk.
-- Per-IP rate limits on login, change-password, server start/stop/restart, config writes, mod uploads. Login lockouts persist across restarts.
-- Audit log with hash-chained rows (tamper-evident); verify with `node tools/verify-audit.js`.
-- Forced password change for the seeded admin until a new password is set, enforced server-side on every authenticated route.
+- Per-IP rate limits on login, change-password, server start/stop/restart, config writes, mod uploads. Login lockouts persist across restarts. Per-user concurrent SSE log-stream cap (6 connections) so an authenticated client cannot pin unlimited file descriptors.
+- Audit log with hash-chained rows (tamper-evident); rows are canonicalised as `JSON.stringify([chain_version, prev, ts, actor, action, target, detail])` so a `|` in a field cannot collide with a different field assignment. Legacy `|`-joined rows still validate via `chain_version = 0`. Verify with `node tools/verify-audit.js`.
+- Forced password change for the seeded admin until a new password is set, enforced server-side on every authenticated route. The panel refuses to delete or demote the last remaining admin so an operator cannot accidentally lock everyone out.
 
 If you are deploying the Panel in production, please also read [`README.md`](README.md), the [deployment guide](docs/deployment.md), and [`TASKS.md`](TASKS.md) (the audit backlog — local-only) if you have a copy.

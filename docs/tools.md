@@ -3,15 +3,17 @@
 The `tools/` folder contains:
 
 - Two **Python scripts** for managing the bundled Kunos asset previews that the dashboard uses as fallbacks when a car or track has no thumbnails in the AC content directory.
-- One **Node script** for verifying the integrity of the audit log hash chain.
+- Three **Node scripts**: one verifies the integrity of the audit log hash chain, two report coverage gaps (i18n keys and CSS class selectors) against the source tree.
 
 ## Requirements
 
-Both scripts require Python 3 and the [Pillow](https://pillow.readthedocs.io/) image library:
+The Python scripts require Python 3 and the [Pillow](https://pillow.readthedocs.io/) image library:
 
 ```bash
 pip install Pillow
 ```
+
+The Node scripts use only built-in modules and `better-sqlite3` (already installed by `npm install`); no extra dependencies needed.
 
 ---
 
@@ -70,7 +72,7 @@ The script will ask for:
 
 ## verify-audit.js
 
-Walks the `audit_log` table in a SQLite snapshot and verifies the SHA-256 hash chain. Each row's `row_hash` is recomputed from `prev_hash | logged_at | actor | action | target | detail` — a tampered or deleted row breaks every subsequent hash and the verifier reports the first break.
+Walks the `audit_log` table in a SQLite snapshot and verifies the SHA-256 hash chain. The verifier reads each row's `chain_version` to pick the right canonicalization — current rows (`v1`) are hashed as `JSON.stringify([1, prev_hash, logged_at, actor, action, target, detail])`; legacy rows (`v0`) use the older `|`-joined form. A tampered or deleted row breaks every subsequent hash and the verifier reports the first break.
 
 ```bash
 node tools/verify-audit.js path/to/assetto.db
@@ -79,3 +81,34 @@ node tools/verify-audit.js path/to/assetto.db
 Defaults to `./assetto.db` if no path is given. Exits `0` on a clean chain, `1` on the first break.
 
 Pair this with the periodic `/api/admin/backup` download to detect tampering by comparing chains across snapshots — once a row is hashed in, you cannot edit `detail` (or any other column) without breaking every later row.
+
+---
+
+## i18n-coverage.js
+
+Cross-references `t('key')` calls in `src/` against the per-language dictionaries in `src/i18n.jsx` and reports gaps in both directions:
+
+- **Missing** — keys used in code but never translated (per language).
+- **Orphaned** — keys defined in a dictionary but never referenced in code.
+
+```bash
+node tools/i18n-coverage.js                # text report
+node tools/i18n-coverage.js --verbose      # full lists, not capped
+node tools/i18n-coverage.js --format=json  # machine-readable
+```
+
+Exits `0` when every language is fully covered, `1` if any key is missing — useful as a CI guard against translation drift.
+
+---
+
+## css-coverage.js
+
+Heuristic dead-selector report for `src/styles.css`. Parses class selectors out of the stylesheet, then greps the JSX/HTML for class names referenced via `className=…`, `classList.add/toggle(...)`, and the common DOM query helpers (`querySelector`, `closest`, `getElementsByClassName`). Selectors with zero references are listed as candidates.
+
+```bash
+node tools/css-coverage.js
+node tools/css-coverage.js --verbose
+node tools/css-coverage.js --format=json
+```
+
+Output is informational only (always exits `0`). Treat candidates as a starting point for review, not a removal list — the script does not understand classes built at runtime by string concatenation outside template literals.

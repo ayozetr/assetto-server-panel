@@ -117,6 +117,8 @@ Server-Sent Events stream. Pushes an `init` event with the full current buffer, 
 
 **Auth required:** yes
 
+**Per-user concurrency cap:** at most 6 simultaneous SSE connections per username. The 7th returns `429 { error: "Too many concurrent log streams for this user — close other tabs and retry" }`. The cap covers normal usage (a few tabs, a phone, an ops dashboard) while preventing an authenticated client from pinning unlimited file descriptors and heartbeat timers.
+
 ```
 event: init
 data: [...]

@@ -5,8 +5,8 @@
 The panel uses a session-based authentication system backed by SQLite.
 
 1. The user submits their username and password.
-2. The server looks up the user in the `panel_users` table and verifies the password using **scrypt** (`N=16384, r=8, p=1`, 64-byte output) with a constant-time compare. Legacy hashes (PBKDF2-SHA512 from older deployments) are still accepted and lazily upgraded to scrypt on the next successful login.
-3. If valid, a session token is generated, stored in the `sessions` table with a 7-day expiry, and set as an `HttpOnly` cookie named `sid` (`SameSite=Strict; Path=/`).
+2. The server looks up the user in the `panel_users` table and verifies the password using **scrypt** with a constant-time compare. Cost parameters are pinned in the `SCRYPT_PARAMS` constant (`N=16384, r=8, p=1`, 64-byte output) and passed explicitly to both hash and verify, so the comparison never silently relies on Node's defaults. Legacy hashes (PBKDF2-SHA512 from older deployments) are still accepted and lazily upgraded to scrypt on the next successful login.
+3. If valid, a session token is generated, stored in the `sessions` table with a 7-day expiry, and set as an `HttpOnly` cookie named `sid` (`SameSite=Strict; Path=/`). The `Secure` flag is appended automatically when the request arrived over HTTPS (direct or via `X-Forwarded-Proto: https`).
 4. The browser sends the cookie automatically with every API request.
 5. On logout, the token is deleted from the database immediately and the cookie is cleared.
 
@@ -66,7 +66,7 @@ Then log in normally and use the **Reset password** flow.
 Admins can manage panel users from the **Users** page:
 
 - **Create** a new user with a username, password and role — username must be 1–64 characters: letters, numbers, `_` and `-` only
-- **Change role** between `admin` and `user`
+- **Change role** between `admin` and `user` (the panel refuses to demote the last remaining admin — this would leave the panel with no admin and no recoverable login)
 - **Reset password** for any user
 - **Delete** a user (cannot delete yourself; the panel also refuses to delete the last remaining admin)
 

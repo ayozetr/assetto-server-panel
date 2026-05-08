@@ -1658,7 +1658,6 @@ async function apiWhitelistAdd(req, res) {
     try { raw = await fsp.readFile(AC_WHITELIST, 'utf8'); } catch {}
     const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
     if (ids.includes(guid)) {
-      const actor = checkAnyAuth(req)?.username || 'unknown';
       return json(res, 200, { ok: true, alreadyPresent: true, total: ids.length });
     }
     ids.push(guid);
@@ -3117,7 +3116,23 @@ function handler(req, res) {
     if (err) {
       return respond(res, err.code === 'ENOENT' ? 404 : 500, 'text/plain', `${err.code} — ${urlPath}`);
     }
-    // Rotate up to N timestamped backups of server_cfg.ini before each save. Without
+    // Smart Cache-Control: long for /dist/ JS and /src/assets/ images (rare changes,
+    // network-first SW handles the few that matter); short for index.html / sw.js so
+    // updates propagate quickly; no-store for /api/ already handled by `respond()`'s
+    // default. Lets Cloudflare cache the heavy stuff and saves bandwidth.
+    const mime = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+    let cache = 'no-store';
+    if (requested.startsWith('/dist/'))            cache = 'public, max-age=600';
+    else if (requested.startsWith('/src/assets/')) cache = 'public, max-age=86400, immutable';
+    else if (requested === '/src/styles.css')      cache = 'public, max-age=600';
+    else if (requested === '/manifest.webmanifest')cache = 'public, max-age=3600';
+    else if (requested === '/sw.js')               cache = 'no-cache';
+    else if (requested === '/index.html')          cache = 'no-cache';
+    respond(res, 200, mime, data, { 'Cache-Control': cache });
+  });
+}
+
+// Rotate up to N timestamped backups of server_cfg.ini before each save. Without
 // rotation, a single .bak file is overwritten on every save — two bad saves in
 // a row would lose the last good config. We keep the legacy .bak for backwards
 // compat and add per-day timestamped copies (or per-save when run multiple times
@@ -3141,22 +3156,6 @@ async function rotateConfigBackup() {
       await fsp.unlink(path.join(dir, drop)).catch(() => {});
     }
   } catch (e) { log.warn('config backup rotation failed:', e.message); }
-}
-
-// Smart Cache-Control: long for /dist/ JS and /src/assets/ images (rare changes,
-    // network-first SW handles the few that matter); short for index.html / sw.js so
-    // updates propagate quickly; no-store for /api/ already handled by `respond()`'s
-    // default. Lets Cloudflare cache the heavy stuff and saves bandwidth.
-    const mime = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
-    let cache = 'no-store';
-    if (requested.startsWith('/dist/'))            cache = 'public, max-age=600';
-    else if (requested.startsWith('/src/assets/')) cache = 'public, max-age=86400, immutable';
-    else if (requested === '/src/styles.css')      cache = 'public, max-age=600';
-    else if (requested === '/manifest.webmanifest')cache = 'public, max-age=3600';
-    else if (requested === '/sw.js')               cache = 'no-cache';
-    else if (requested === '/index.html')          cache = 'no-cache';
-    respond(res, 200, mime, data, { 'Cache-Control': cache });
-  });
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────

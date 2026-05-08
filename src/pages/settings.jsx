@@ -193,7 +193,6 @@ function PasswordField({ value, onChange, disabled, placeholder }) {
 
 function PageConfig({ config, setConfig, isAdmin, onSave }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
-  const toast  = window.AppShell.useToast();
   const [dirty,  setDirty]  = useStateC(false);
   const [saving, setSaving] = useStateC(false);
   const set = (k, v) => { setConfig(c => ({...c, [k]: v})); setDirty(true); };

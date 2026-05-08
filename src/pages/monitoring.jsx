@@ -1,5 +1,5 @@
 // Pages: Dashboard, Players, Logs
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useRef } = React;
 const I2 = window.AppIcons;
 
 // Dashboard

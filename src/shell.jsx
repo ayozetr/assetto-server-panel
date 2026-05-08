@@ -1,5 +1,5 @@
 // Sidebar + Topbar + Toast system + Login screen
-const { useState, useEffect, useRef, useMemo, createContext, useContext } = React;
+const { useState, useRef, createContext, useContext } = React;
 const I = window.AppIcons;
 
 // ──────────────────────────────────────────────────────

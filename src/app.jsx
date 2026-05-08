@@ -1,5 +1,5 @@
 // Main App: state orchestration + routing
-const { useState: uS, useEffect: uE, useMemo: uM, useRef: uR } = React;
+const { useState: uS, useEffect: uE, useRef: uR } = React;
 
 // Global fetch interceptor — when any /api/ call returns 401 the session is gone
 // (expired or revoked). Dispatch a custom event so App can clear user state and
@@ -52,7 +52,7 @@ class AppErrorBoundary extends React.Component {
 }
 
 function App() {
-  const { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast } = window.AppShell;
+  const { Login, ForcePasswordChange, ToastProvider } = window.AppShell;
 
   const [theme, setTheme] = uS(() => localStorage.getItem('ac-theme') || 'light');
   const [user,  setUser]  = uS(() => {
@@ -240,8 +240,6 @@ function App() {
 
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };
 
-  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
-
   if (!user) return <Login onLogin={setUser}/>;
 
   // Block the rest of the panel until the user clears the must_change_password flag.
@@ -268,7 +266,8 @@ function App() {
         pastPlayers={pastPlayers}
         lapTimes={lapTimes}
         users={users} setUsers={setUsers}
-        cars={cars} tracks={tracks}
+        cars={cars} setCars={setCars}
+        tracks={tracks} setTracks={setTracks}
         sessionCfg={sessionCfg} setSessionCfg={setSessionCfg}
         config={config} setConfig={setConfig}
         osInfo={osInfo}
@@ -292,7 +291,7 @@ function AppInner(props) {
   const {
     user, page, setPage, theme, setTheme,
     server, setServer, players, setPlayers, pastPlayers,
-    lapTimes, users, setUsers, cars, tracks,
+    lapTimes, users, setUsers, cars, setCars, tracks, setTracks,
     sessionCfg, setSessionCfg, config, setConfig, setUser, osInfo,
     dataLoaded, backendDown,
   } = props;
@@ -468,7 +467,7 @@ function AppInner(props) {
   const refreshContent = React.useCallback(() => {
     fetch('/api/cars').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setCars(d); }).catch(() => {});
     fetch('/api/tracks').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setTracks(d); }).catch(() => {});
-  }, []);
+  }, [setCars, setTracks]);
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;

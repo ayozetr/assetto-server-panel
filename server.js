@@ -151,8 +151,19 @@ function deleteSession(token) {
   _sessionsMemory.delete(token);
 }
 
-function sessionCookieHeader(token) {
-  return `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL / 1000}`;
+// True when the request arrived over TLS, either directly or via a trusted proxy
+// that set X-Forwarded-Proto. Browsers refuse Secure cookies on plain HTTP, so
+// we only attach the flag when the connection is actually encrypted — otherwise
+// dev/local installations would silently lose the cookie.
+function requestIsHttps(req) {
+  if (req?.connection?.encrypted) return true;
+  const proto = (req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return proto === 'https';
+}
+
+function sessionCookieHeader(token, isHttps) {
+  return `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL / 1000}`
+    + (isHttps ? '; Secure' : '');
 }
 
 function checkAdminAuth(req) {
@@ -160,7 +171,13 @@ function checkAdminAuth(req) {
   if (sess?.role === 'admin' && !userMustChangePassword(sess.username)) return true;
   if (!ADMIN_TOKEN) return false;
   const h = req.headers['x-admin-token'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '';
-  return h === ADMIN_TOKEN;
+  // Constant-time compare so the header is not a timing oracle for ADMIN_TOKEN.
+  // Length must match for timingSafeEqual; mismatched length is a non-secret
+  // upper bound on the token, so the early return is fine.
+  if (!h || h.length !== ADMIN_TOKEN.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(h), Buffer.from(ADMIN_TOKEN));
+  } catch { return false; }
 }
 
 function checkAnyAuth(req) {
@@ -289,8 +306,9 @@ try {
   `);
   // Schema migrations (safe to run on every start)
   try { db.exec(`ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE audit_log ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ''`); } catch {}
-  try { db.exec(`ALTER TABLE audit_log ADD COLUMN row_hash  TEXT NOT NULL DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN prev_hash     TEXT    NOT NULL DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN row_hash      TEXT    NOT NULL DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN chain_version INTEGER NOT NULL DEFAULT 0`); } catch {}
 
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
@@ -304,8 +322,15 @@ try {
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 // Stored hash format: "scrypt$<hex>" (current) or bare hex (legacy pbkdf2).
 // Legacy hashes are upgraded in-place on the next successful login.
+//
+// Both hash and verify must use IDENTICAL scrypt parameters; relying on Node's
+// defaults to "happen to match" is brittle (if a future Node release bumps the
+// defaults, every existing password silently fails to verify). Pin the cost
+// explicitly in one constant and pass it to both code paths.
+const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 };
+const SCRYPT_KEYLEN = 64;
 function hashPasswordScrypt(password, salt) {
-  return 'scrypt$' + crypto.scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex');
+  return 'scrypt$' + crypto.scryptSync(password, salt, SCRYPT_KEYLEN, SCRYPT_PARAMS).toString('hex');
 }
 function hashPasswordPbkdf2(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
@@ -318,7 +343,7 @@ function verifyPassword(password, salt, stored) {
   try {
     if (stored.startsWith('scrypt$')) {
       const expected = stored.slice(7);
-      const candidate = crypto.scryptSync(password, salt, 64).toString('hex');
+      const candidate = crypto.scryptSync(password, salt, SCRYPT_KEYLEN, SCRYPT_PARAMS).toString('hex');
       return safeHexEqual(candidate, expected);
     }
     // Legacy pbkdf2 (bare hex)
@@ -549,9 +574,7 @@ function setSecurityHeaders(req, res) {
     "object-src 'none'",
   ].join('; '));
   // HSTS only when the connection actually arrived over HTTPS (or via a TLS-terminating proxy).
-  const proto = (req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
-  const isHttps = req?.connection?.encrypted || proto === 'https';
-  if (isHttps) {
+  if (requestIsHttps(req)) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 }
@@ -1053,7 +1076,24 @@ function apiLogs(req, res) {
   json(res, 200, { lines: logBuffer.slice(-n) });
 }
 
+// Per-user concurrent SSE connection cap. Without this an authenticated user can
+// open arbitrarily many `/api/logs/stream` connections (one per browser tab × N
+// tabs × N devices) and pin file descriptors + heartbeat timers. Six is generous
+// for normal usage (a few tabs, a phone, an ops dashboard) and well below any
+// reasonable fd budget.
+const _sseByUser = new Map(); // username -> Set<res>
+const SSE_PER_USER_CAP = 6;
+
 function apiLogsStream(req, res) {
+  // Router has already gated /api/* on a valid session, so getSession(req) is
+  // expected to return one. Fall back to '' for the (impossible) no-session
+  // case so the cap still applies in aggregate.
+  const user = getSession(req)?.username || '';
+  const userSet = _sseByUser.get(user) || new Set();
+  if (userSet.size >= SSE_PER_USER_CAP) {
+    return json(res, 429, { error: 'Too many concurrent log streams for this user — close other tabs and retry' });
+  }
+
   res.writeHead(200, {
     'Content-Type':  'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -1062,10 +1102,21 @@ function apiLogsStream(req, res) {
   });
   res.write(`event: init\ndata: ${JSON.stringify(logBuffer)}\n\n`);
   sseClients.add(res);
+  userSet.add(res);
+  _sseByUser.set(user, userSet);
+
   const heartbeat = setInterval(() => {
     try { res.write(': ping\n\n'); } catch { clearInterval(heartbeat); }
   }, 25000);
-  req.on('close', () => { sseClients.delete(res); clearInterval(heartbeat); });
+  req.on('close', () => {
+    sseClients.delete(res);
+    const set = _sseByUser.get(user);
+    if (set) {
+      set.delete(res);
+      if (set.size === 0) _sseByUser.delete(user);
+    }
+    clearInterval(heartbeat);
+  });
 }
 
 function apiConfig(req, res) {
@@ -2052,7 +2103,7 @@ async function apiAuthLogin(req, res) {
 
     _clearLoginAttempt(ip); // reset on success
     const token = createSession(username, user.role);
-    res.setHeader('Set-Cookie', sessionCookieHeader(token));
+    res.setHeader('Set-Cookie', sessionCookieHeader(token, requestIsHttps(req)));
     json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1 } });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -2060,15 +2111,28 @@ async function apiAuthLogin(req, res) {
 function apiAuthLogout(req, res) {
   const token = readCookie(req, 'sid');
   if (token) deleteSession(token);
-  res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  // Mirror the Secure flag on the clearing cookie. Some browsers refuse to
+  // overwrite a Secure cookie via a non-Secure Set-Cookie response, so the
+  // expired sid would linger in the jar.
+  const secure = requestIsHttps(req) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
   json(res, 200, { ok: true });
 }
 
 function apiAuthMe(req, res) {
   const sess = getSession(req);
   if (!sess) return json(res, 401, { error: 'Not authenticated' });
-  const row = db?.prepare('SELECT must_change_password FROM panel_users WHERE username = ?').get(sess.username);
-  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: row?.must_change_password === 1 });
+  // db can be null when SQLite init failed at startup. Guard the lookup so the
+  // request returns a sensible payload instead of crashing the handler with
+  // "Cannot read properties of undefined (reading 'get')".
+  let mustChange = false;
+  if (db) {
+    try {
+      const row = db.prepare('SELECT must_change_password FROM panel_users WHERE username = ?').get(sess.username);
+      mustChange = row?.must_change_password === 1;
+    } catch {}
+  }
+  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: mustChange });
 }
 
 async function apiAuthChangePassword(req, res) {
@@ -2156,6 +2220,13 @@ async function apiPanelUserUpdate(req, res, username) {
     if (!user) return json(res, 404, { error: 'User not found' });
     const changes = [];
     if (body.role !== undefined && (body.role === 'admin' || body.role === 'user')) {
+      // Refuse to demote the last admin — mirrors apiPanelUserDelete. Without
+      // this guard an admin could promote themselves out of the role and lock
+      // the panel for everyone (no admin = no recoverable login).
+      if (body.role === 'user' && user.role === 'admin') {
+        const adminCount = db.prepare(`SELECT COUNT(*) AS n FROM panel_users WHERE role = 'admin'`).get().n;
+        if (adminCount <= 1) return json(res, 400, { error: 'Cannot demote the last admin' });
+      }
       db.prepare('UPDATE panel_users SET role = ? WHERE username = ?').run(body.role, username);
       changes.push(`role=${body.role}`);
     }
@@ -2497,11 +2568,19 @@ function insertModHistory(entry) {
 }
 
 // Hash-chain the audit log for tamper-evidence. Each row's row_hash =
-// sha256(prev_hash || logged_at || actor || action || target || detail).
+// sha256(JSON.stringify([chain_version, prev, logged_at, actor, action, target, detail])).
 // `tools/verify-audit.js` (or any consumer) can walk the table and recompute the
 // chain — a tampered or deleted row breaks every subsequent hash. This does not
 // prevent deletion (any admin with DB access can DROP), but it does prevent silent
 // edits and lets external backups detect tampering by comparing chains.
+//
+// Chain versions:
+//   0 — legacy `${prev}|${loggedAt}|${actor}|${action}|${target}|${detail}` (still
+//       verified by the tool but no longer written; vulnerable to a separator-shift
+//       collision when a field contained `|`).
+//   1 — current. JSON.stringify of the field array; element boundaries are explicit
+//       so a `|` inside detail/target cannot collide with a different field assignment.
+const AUDIT_CHAIN_VERSION = 1;
 function insertAuditLog(actor, action, target = '', detail = '') {
   if (!db) return;
   try {
@@ -2509,11 +2588,11 @@ function insertAuditLog(actor, action, target = '', detail = '') {
       const last = db.prepare('SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1').get();
       const prev = last?.row_hash || '';
       const loggedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-      const data = `${prev}|${loggedAt}|${actor}|${action}|${target}|${detail}`;
+      const data = JSON.stringify([AUDIT_CHAIN_VERSION, prev, loggedAt, actor, action, target, detail]);
       const rowHash = crypto.createHash('sha256').update(data).digest('hex');
       db.prepare(
-        'INSERT INTO audit_log (actor, action, target, detail, logged_at, prev_hash, row_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(actor, action, target, detail, loggedAt, prev, rowHash);
+        'INSERT INTO audit_log (actor, action, target, detail, logged_at, prev_hash, row_hash, chain_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(actor, action, target, detail, loggedAt, prev, rowHash, AUDIT_CHAIN_VERSION);
     });
     tx();
   } catch (e) { log.warn('audit log insert failed:', e.message); }

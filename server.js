@@ -1116,6 +1116,24 @@ function parseLine(raw, id) {
 async function apiMetrics(res) {
   try {
     const [cpu, ram, acInfo, publicIp] = await Promise.all([getCPU(), Promise.resolve(getRAM()), getACInfo(), getPublicIp()]);
+    // Connected-player count, sourced in priority: UDP plugin (knows by GUID
+    // from NEW_CONNECTION) → /JSON|0 IsConnected flags → unknown (-1).
+    // Surfaced here so the Dashboard KPI can poll once and stay in sync with
+    // the Players Online list.
+    let players = -1;
+    const live = udpGetLivePlayers();
+    if (live && Array.isArray(live)) {
+      players = live.length;
+    } else if (acInfo.running) {
+      const list = await acFetchJson('/JSON%7C0');
+      if (list && Array.isArray(list.Cars)) {
+        players = list.Cars.filter(c => c && c.IsConnected).length;
+      } else {
+        players = 0;
+      }
+    } else {
+      players = 0;
+    }
     json(res, 200, {
       cpu, ram,
       running:   acInfo.running,
@@ -1125,6 +1143,7 @@ async function apiMetrics(res) {
       osInfo:    getOSInfo(),
       publicIp,
       httpPort:  AC_HTTP_PORT,
+      players,
     });
   } catch (e) { json(res, 500, { error: e.message }); }
 }

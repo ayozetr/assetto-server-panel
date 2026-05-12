@@ -252,6 +252,7 @@ function App() {
             liveTrack: d.liveTrack || null,
             publicIp:  d.publicIp  || s.publicIp,
             httpPort:  d.httpPort  || s.httpPort,
+            players:   Number.isInteger(d.players) && d.players >= 0 ? d.players : s.players,
           }));
           if (d.osInfo) setOsInfo(d.osInfo);
         })

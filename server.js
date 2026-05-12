@@ -4098,7 +4098,12 @@ function shutdown() {
   console.log('\n  Shutting down…');
   server.close(() => {
     cleanupOldChunks().finally(() => {
-      if (acChild && !acChild.killed) acChild.kill('SIGTERM');
+      // Intentionally NOT killing acChild — acServer is independent of the
+      // dashboard's lifecycle (kicking everyone every time we redeploy the
+      // panel was driving operators crazy). After a Node restart the new
+      // process re-adopts the running acServer via findACPid(). If an
+      // operator actually wants to stop AC they hit the panel's stop button.
+      try { if (acChild && acChild.unref) acChild.unref(); } catch {}
       process.exit(0);
     });
   });

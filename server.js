@@ -2248,13 +2248,13 @@ function udpStartListener(listenHostPort, sendCommandsToPort) {
     log.info(`[UDP] listening on ${listenHost}:${listenPort}, commands → 127.0.0.1:${sendCommandsToPort}`);
     // Pull a snapshot in case acServer was already running when we booted.
     udpSendCommand(ACSP.GET_SESSION_INFO, Buffer.from([0xFF, 0xFF]));
-    // NB: we intentionally don't blast GET_CAR_INFO across every slot — the
-    // CAR_INFO field layout on this Go acServer build is not yet pinned
-    // (different from NEW_CONNECTION) and parsing the response into the
-    // cars map clobbered live driver state with garbage. NEW_CONNECTION
-    // events cover the join path, and the self-healing GET_CAR_INFO on
-    // unknown-car_id is kept only for diagnostic logs (state is not
-    // populated until the CAR_INFO parser is verified against a hex dump).
+    // Repopulate the cars map for every slot — important after a dashboard
+    // restart while drivers are still connected (acServer does not re-emit
+    // NEW_CONNECTION for them, so without this burst their next LAP_COMPLETED
+    // would arrive for an unknown car_id and get dropped). 64 covers every
+    // possible MAX_CLIENTS value; empty slots return CAR_INFO with
+    // isConnected=0 and are ignored by the parser.
+    for (let i = 0; i < 64; i++) udpSendCommand(ACSP.GET_CAR_INFO, Buffer.from([i]));
   });
 }
 
@@ -2435,13 +2435,41 @@ function udpParseEvent(buf) {
     }
 
     case ACSP.CAR_INFO: {
-      // CAR_INFO field layout NOT yet pinned for this Go acServer build —
-      // the response shape differs from NEW_CONNECTION enough that parsing
-      // it identically clobbered the live cars map with garbage strings.
-      // Until we have a hex dump of a real CAR_INFO response, log the raw
-      // bytes only and DO NOT touch state.cars. NEW_CONNECTION covers the
-      // join path so live operation is unaffected.
-      log.info(`[UDP] CAR_INFO (raw, parser disabled) len=${buf.length} hex=${buf.slice(0, Math.min(buf.length, 120)).toString('hex')}`);
+      // Field layout decoded from a real packet of this Go acServer build:
+      //   ev (1) → car_id (1) → isConnected (1)
+      //   → model utf32 → skin utf32 → name utf32 (often empty) → guid utf32
+      // Key difference vs NEW_CONNECTION on the same binary: here EVERY
+      // string is utf32, including car_model + car_skin which NEW_CONNECTION
+      // packs as utf8. Trailing bytes after guid are ignored.
+      const carId = buf[off++];
+      const isConnected = !!buf[off++];
+      const model = readUtf32Str(buf, off); off = model.next;
+      const skin  = readUtf32Str(buf, off); off = skin.next;
+      const name  = readUtf32Str(buf, off); off = name.next;
+      const guid  = readUtf32Str(buf, off); off = guid.next;
+      if (!isConnected) break;
+      // Sanity-check the guid before touching state — a parser drift would
+      // otherwise replace a known JOIN entry with garbage.
+      if (!/^\d{17}$/.test(guid.value)) {
+        log.warn(`[UDP] CAR_INFO car_id=${carId} parsed bad guid='${guid.value}' — skipping populate`);
+        break;
+      }
+      const existing = udpState.cars.get(carId) || {};
+      udpState.cars.set(carId, {
+        carId,
+        // CAR_INFO often replies with an empty name; preserve whatever the
+        // NEW_CONNECTION path put there if we already had it.
+        name:    name.value || existing.name || '',
+        team:    '',
+        guid:    guid.value,
+        model:   model.value,
+        skin:    skin.value,
+        joinedAt: existing.joinedAt || Date.now(),
+        bestLap:  existing.bestLap || 0,
+        lastLap:  existing.lastLap || 0,
+        lapsCount: existing.lapsCount || 0,
+      });
+      log.info(`[UDP] CAR_INFO car_id=${carId} ${name.value || '(unnamed)'} (${guid.value}) model=${model.value}`);
       break;
     }
 

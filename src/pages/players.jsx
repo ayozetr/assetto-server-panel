@@ -125,7 +125,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
       fetch('/api/players')
         .then(r => r.json())
         .then(d => {
-          if (d && d.length) setPlayers(d);
+          if (Array.isArray(d)) setPlayers(d);
         })
         .catch(() => {});
     };

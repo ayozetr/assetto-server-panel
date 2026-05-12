@@ -271,6 +271,22 @@ function App() {
     return () => clearInterval(id);
   }, [!!user]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Poll /api/players every 5 s — the Dashboard's "Players online" card reads
+  // this app-level state. Without a global poll the list stayed empty even
+  // though the KPI (server.players, from /api/metrics) was correct.
+  uE(() => {
+    if (!user) return;
+    const load = () => {
+      fetch('/api/players')
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { if (Array.isArray(d)) setPlayers(d); })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, [!!user]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };
 
   if (!user) return <Login onLogin={setUser}/>;

@@ -24,13 +24,16 @@ ExecStart=/home/<your-user>/.nvm/versions/node/v20.20.2/bin/node server.js
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=/path/to/assetto-dashboard/.env
-TimeoutStopSec=15    # matches the server's 10 s force-exit guard
+TimeoutStopSec=15      # matches the server's 10 s force-exit guard
+KillMode=process       # only signal the panel — acServer keeps running across panel redeploys
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 > **`ExecStartPre=node build.js`** — the panel ships JSX in `src/` that needs to be transpiled to plain JS in `dist/` before the server starts serving it. esbuild does this in ~20 ms. If you start the server via `npm start` instead, the `prestart` script in `package.json` runs the same step automatically; either form works.
+
+> **`KillMode=process`** is important: without it systemd kills the entire cgroup on `systemctl restart`, which takes `acServer` down with the panel and kicks every connected driver every time you redeploy. With `KillMode=process` systemd only signals the Node process; `acServer` (which the panel may have spawned as a child) keeps running and the new panel re-adopts it on startup via `pidof acServer`.
 
 ### 2. Enable and start
 

@@ -2435,12 +2435,10 @@ function udpParseEvent(buf) {
     }
 
     case ACSP.CAR_INFO: {
-      // Field layout decoded from a real packet of this Go acServer build:
-      //   ev (1) → car_id (1) → isConnected (1)
-      //   → model utf32 → skin utf32 → name utf32 (often empty) → guid utf32
-      // Key difference vs NEW_CONNECTION on the same binary: here EVERY
-      // string is utf32, including car_model + car_skin which NEW_CONNECTION
-      // packs as utf8. Trailing bytes after guid are ignored.
+      // TEMP debug — dump full hex of every CAR_INFO so we can compare the
+      // self-healing response (where I decoded the layout) against the
+      // bootstrap GET_CAR_INFO responses (where the parser still fails).
+      log.info(`[UDP-DBG-CARINFO] len=${buf.length} hex=${buf.toString('hex')}`);
       const carId = buf[off++];
       const isConnected = !!buf[off++];
       const model = readUtf32Str(buf, off); off = model.next;

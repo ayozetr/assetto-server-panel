@@ -6,8 +6,15 @@ const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB, useRef: u
 const I3 = window.AppIcons;
 
 // ── Car modal ─────────────────────────────────────────────────────────────────
-function CarModal({ car, count, onAdd, onRemove, onClose, t }) {
-  const [skinIdx, setSkinIdx] = useStateB(0);
+function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
+  // Preselect the skin the admin previously chose for this car (if any) so
+  // reopening the modal doesn't lose context.
+  const initialIdx = useMemoB(() => {
+    if (!currentSkin || !car.skins) return 0;
+    const i = car.skins.indexOf(currentSkin);
+    return i >= 0 ? i : 0;
+  }, [currentSkin, car.skins]);
+  const [skinIdx, setSkinIdx] = useStateB(initialIdx);
 
   useEffectB(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -156,7 +163,11 @@ function CarModal({ car, count, onAdd, onRemove, onClose, t }) {
             }}>
               {count}
             </div>
-            <button className="btn btn-primary btn-sm" onClick={onAdd} title={t('cars.modal.btn_add_slot')}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => onAdd(hasSkins ? car.skins[skinIdx] : null)}
+              title={t('cars.modal.btn_add_slot')}
+            >
               <I3.IconPlus size={12}/> {count === 0 ? t('cars.modal.btn_add') : t('cars.modal.btn_add_more')}
             </button>
           </div>
@@ -271,13 +282,26 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
     return true;
   }), [cars, brand, query, showKunos]);
 
-  const addCar = (id) => setSessionCfg(cfg => ({ ...cfg, carIds: [...cfg.carIds, id] }));
+  const addCar = (id, skin) => setSessionCfg(cfg => {
+    // Persist the chosen skin (single per car id — same car across multiple
+    // slots shares one default skin) so apiSessionApply can propagate it to
+    // every [CAR_n] block in entry_list.ini.
+    const nextSkins = { ...(cfg.carSkins || {}) };
+    if (skin) nextSkins[id] = skin; else delete nextSkins[id];
+    return { ...cfg, carIds: [...cfg.carIds, id], carSkins: nextSkins };
+  });
   const removeCar = (id) => setSessionCfg(cfg => {
     const idx = cfg.carIds.lastIndexOf(id);
     if (idx === -1) return cfg;
     const next = [...cfg.carIds];
     next.splice(idx, 1);
-    return { ...cfg, carIds: next };
+    // Drop the skin entry when no slots of this car remain.
+    let nextSkins = cfg.carSkins;
+    if (!next.includes(id) && nextSkins && id in nextSkins) {
+      nextSkins = { ...nextSkins };
+      delete nextSkins[id];
+    }
+    return { ...cfg, carIds: next, carSkins: nextSkins };
   });
   const carCount = (id) => sessionCfg.carIds.filter(x => x === id).length;
 
@@ -380,7 +404,8 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
         <CarModal
           car={modalCar}
           count={carCount(modalCar.id)}
-          onAdd={() => addCar(modalCar.id)}
+          currentSkin={(sessionCfg.carSkins || {})[modalCar.id] || null}
+          onAdd={(skin) => addCar(modalCar.id, skin)}
           onRemove={() => removeCar(modalCar.id)}
           onClose={() => setModalCar(null)}
           t={t}

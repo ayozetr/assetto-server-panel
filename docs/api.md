@@ -284,6 +284,7 @@ Write the *Session* page state to `server_cfg.ini`. Auto-restarts the AC server 
 | `trackId` | `[SERVER].TRACK` | |
 | `layout`  | `[SERVER].CONFIG_TRACK` | |
 | `cars`    | `[SERVER].CARS` *and* a regenerated `entry_list.ini` | one `[CAR_n]` slot per car, cycled to fill `MAX_CLIENTS` |
+| `carSkins` | `[CAR_n].SKIN` per slot, keyed by `MODEL` | optional `{ "<carId>": "<skinName>" }` map; skin defaults to `"Base"` when no entry; skin names are validated against the same allowlist used for skin previews |
 | `slots`   | `[SERVER].MAX_CLIENTS` | |
 | `practiceEnabled` / `qualifyEnabled` / `raceEnabled` | `[PRACTICE]` / `[QUALIFY]` / `[RACE]` section presence | when `false` the whole section is removed; reject if all three end up `false` |
 | `practiceTime` / `qualifyTime` / `raceLaps` | `[PRACTICE].TIME` / `[QUALIFY].TIME` / `[RACE].LAPS` | ignored for sessions being disabled this turn |

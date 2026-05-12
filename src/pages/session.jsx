@@ -161,25 +161,42 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 <div className="empty" style={{padding: '28px 20px'}}>
                   {t('sess.no_cars')}
                 </div>
-              ) : selectedCars.map(({car: c, cnt}) => (
+              ) : selectedCars.map(({car: c, cnt}) => {
+                // Prefer the admin-chosen skin's preview over the generic
+                // first-skin thumbnail so the row visually reflects what'll
+                // land in entry_list.ini.
+                const chosenSkin = (sessionCfg.carSkins || {})[c.id];
+                const thumbSrc   = chosenSkin
+                  ? `/api/content/cars/${encodeURIComponent(c.id)}/skins/${encodeURIComponent(chosenSkin)}/preview`
+                  : c.thumb;
+                return (
                 <div key={c.id} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)'}}>
                   <div style={{width: 36, height: 22, borderRadius: 3, overflow:'hidden', background: 'var(--bg-3)', flexShrink: 0}}>
-                    {c.thumb && <img src={c.thumb} style={{width:'100%', height:'100%', objectFit:'cover'}}
+                    {thumbSrc && <img src={thumbSrc} style={{width:'100%', height:'100%', objectFit:'cover'}}
                       onError={e => { e.target.style.display='none'; }}/>}
                   </div>
                   <div style={{flex: 1, minWidth: 0}}>
                     <div style={{fontSize: 12.5, fontWeight: 500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{c.name}</div>
-                    <div className="muted" style={{fontSize: 11}}>{c.brand}</div>
+                    <div className="muted" style={{fontSize: 11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                      {chosenSkin
+                        ? <>{c.brand} · <span style={{color:'var(--text)'}}>{t('sess.skin')}: {chosenSkin}</span></>
+                        : c.brand}
+                    </div>
                   </div>
                   {cnt > 1 && (
                     <span className="badge" style={{fontSize:10, fontWeight:600, background:'color-mix(in srgb, var(--red) 12%, transparent)', color:'var(--red)', border:'1px solid var(--red)'}}>×{cnt}</span>
                   )}
                   <button className="icon-btn" style={{width: 24, height: 24}}
-                    onClick={() => setSessionCfg(s => ({...s, carIds: s.carIds.filter(x => x !== c.id)}))}>
+                    onClick={() => setSessionCfg(s => {
+                      const nextSkins = { ...(s.carSkins || {}) };
+                      delete nextSkins[c.id];
+                      return {...s, carIds: s.carIds.filter(x => x !== c.id), carSkins: nextSkins};
+                    })}>
                     <I3S.IconX size={12}/>
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

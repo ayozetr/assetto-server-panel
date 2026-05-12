@@ -116,6 +116,7 @@ function App() {
     airTemp: 18,
     penalties: true,
     carIds: [],
+    carSkins: {},
   });
 
   const [config, setConfig] = uS({
@@ -178,6 +179,7 @@ function App() {
           return {
             ...s,
             ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
+            ...(d.carSkins && typeof d.carSkins === 'object' ? { carSkins: d.carSkins } : {}),
             ...(d.maxClients ? { slots: d.maxClients } : {}),
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
@@ -408,6 +410,7 @@ function AppInner(props) {
           return {
             ...s,
             ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
+            ...(d.carSkins && typeof d.carSkins === 'object' ? { carSkins: d.carSkins } : {}),
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
             ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
@@ -438,6 +441,7 @@ function AppInner(props) {
         trackId:         sessionCfg.trackId,
         layout:          sessionCfg.layout || '',
         cars:            sessionCfg.carIds,
+        carSkins:        sessionCfg.carSkins || {},
         slots:           sessionCfg.slots,
         practiceEnabled: sessionCfg.practiceEnabled,
         qualifyEnabled:  sessionCfg.qualifyEnabled,

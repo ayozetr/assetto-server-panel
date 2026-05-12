@@ -1155,6 +1155,23 @@ function apiConfig(req, res) {
     const q   = ini['QUALIFY']   || null;
     const r0  = ini['RACE']      || null;
     const w   = ini['WEATHER_0'] || {};
+    // entry_list.ini is the source of truth for per-car skin assignments —
+    // each [CAR_n] block has a MODEL + SKIN, so we walk it to rebuild the
+    // model→skin map the Session page restores on F5. First skin wins per
+    // model since the panel UI exposes a single skin per car id.
+    const ENTRY_LIST = path.join(path.dirname(AC_CFG_FILE), 'entry_list.ini');
+    let carSkins = {};
+    try {
+      const entry = parseINI(fs.readFileSync(ENTRY_LIST, 'utf8'));
+      for (const [section, kv] of Object.entries(entry)) {
+        if (!/^CAR_\d+$/.test(section)) continue;
+        const model = kv['MODEL'];
+        const skin  = kv['SKIN'];
+        if (model && skin && skin !== 'Base' && !(model in carSkins)) {
+          carSkins[model] = skin;
+        }
+      }
+    } catch {}
     json(res, 200, {
       name:        s['NAME']                    || '',
       welcome:     s['WELCOME_MESSAGE']          || '',
@@ -1177,6 +1194,7 @@ function apiConfig(req, res) {
       track:       s['TRACK']              || '',
       trackConfig: s['CONFIG_TRACK']       || '',
       cars:        (s['CARS'] || '').split(';').filter(Boolean),
+      carSkins,
       // Per-session-type values. Each section can be physically present or
       // missing — `*Enabled` flags reflect that so the Session page can
       // restore the per-row toggles. When a section is absent we still
@@ -1856,16 +1874,19 @@ const AC_WEATHER_PRESETS = new Set([
 
 // Regenerate entry_list.ini so every [CAR_n].MODEL is present in SERVER.CARS.
 // One block per joinable slot, models cycled to fill up to `slotCount`.
-// Caller is responsible for already having validated `cars` via isValidContentId.
-async function writeEntryList(cars, slotCount) {
+// Caller is responsible for already having validated `cars` via isValidContentId
+// and `carSkins` values via isValidSkinName.
+async function writeEntryList(cars, slotCount, carSkins = {}) {
   const ENTRY_LIST = path.join(path.dirname(AC_CFG_FILE), 'entry_list.ini');
   const slots = Math.max(1, Math.min(200, slotCount | 0));
   const blocks = [];
   for (let i = 0; i < slots; i++) {
+    const model = cars[i % cars.length];
+    const skin  = (carSkins && carSkins[model]) || 'Base';
     blocks.push(
       `[CAR_${i}]\n` +
-      `MODEL=${cars[i % cars.length]}\n` +
-      `SKIN=Base\n` +
+      `MODEL=${model}\n` +
+      `SKIN=${skin}\n` +
       `SPECTATOR_MODE=0\n` +
       `DRIVERNAME=\n` +
       `TEAM=\n` +
@@ -2004,7 +2025,18 @@ async function apiSessionApply(req, res) {
     if (Array.isArray(body.cars) && body.cars.length) {
       const clean = body.cars.filter(isValidContentId);
       if (clean.length) {
-        await writeEntryList(clean, intOr(s['MAX_CLIENTS'], clean.length));
+        // Sanitise carSkins → only string values that pass the skin-name
+        // allowlist make it through. Anything else is silently dropped so a
+        // forged payload can't slip a path traversal into the entry list.
+        const cleanSkins = {};
+        if (body.carSkins && typeof body.carSkins === 'object') {
+          for (const [id, skin] of Object.entries(body.carSkins)) {
+            if (isValidContentId(id) && typeof skin === 'string' && isValidSkinName(skin)) {
+              cleanSkins[id] = skin;
+            }
+          }
+        }
+        await writeEntryList(clean, intOr(s['MAX_CLIENTS'], clean.length), cleanSkins);
       }
     }
 

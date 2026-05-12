@@ -50,9 +50,9 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
       if (!raw) return '';
       const [trackId, layoutId] = raw.includes('/') ? raw.split('/') : raw.split('-');
       const tk = (tracks || []).find(t => t && t.id === trackId);
-      if (!tk) return layoutId ? `${trackId} ${layoutId}` : trackId;
+      if (!tk) return layoutId ? `${trackId} (${layoutId})` : trackId;
       const layoutName = layoutId && tk.layoutDetails && tk.layoutDetails[layoutId] && tk.layoutDetails[layoutId].name;
-      return layoutName ? `${tk.name} ${layoutName}` : tk.name;
+      return layoutName ? `${tk.name} (${layoutName})` : tk.name;
     };
     const stripPrefix = (s) => s
       .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+/i, '')

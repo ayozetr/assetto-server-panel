@@ -9,7 +9,8 @@ const fmtDelta = (ms) => {
   return sign + fmtMs(Math.abs(ms)).replace(/^0:/, '');
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE         = 50; // records view (best lap per driver+track)
+const PAGE_SIZE_ALL     = 10; // every-lap view — smaller because it lists raw rows
 
 function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
@@ -18,12 +19,12 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   const [validOnly, setValidOnly] = uSt(true);
   const [dateFrom, setDateFrom] = uSt('');
   const [dateTo,   setDateTo]   = uSt('');
-  const [view,     setView]     = uSt('records'); // records | compare
+  const [view,     setView]     = uSt('records'); // records | all | compare
   const [page,     setPage]     = uSt(1);
   const [selectedPlayers, setSelectedPlayers] = uSt([]);
 
-  // Reset to page 1 whenever filters change
-  uEt(() => { setPage(1); }, [trackId, carId, validOnly, dateFrom, dateTo]);
+  // Reset to page 1 whenever filters or view change
+  uEt(() => { setPage(1); }, [trackId, carId, validOnly, dateFrom, dateTo, view]);
 
   const allPlayers = uMt(() => Array.from(new Set(lapTimes.map(l => l.player))).sort(), [lapTimes]);
   // Build a single map for nickname lookup so the comparison view, tag chips
@@ -64,6 +65,13 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
   const paginated  = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Every-lap view (no dedupe). Sorted fastest-first so the leaderboard read
+  // matches the records view; pagination 10 per page since the table can be
+  // hundreds of rows on a busy server.
+  const allLaps      = uMt(() => filtered.slice().sort((a, b) => a.ms - b.ms), [filtered]);
+  const totalPagesAll = Math.max(1, Math.ceil(allLaps.length / PAGE_SIZE_ALL));
+  const paginatedAll  = allLaps.slice((page - 1) * PAGE_SIZE_ALL, page * PAGE_SIZE_ALL);
+
   const trackName = (id) => tracks.find(t => t.id === id)?.name || id;
   const carName   = (id) => cars.find(c => c.id === id)?.name   || id;
 
@@ -96,6 +104,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
       <div className="toolbar">
         <div className="segmented">
           <button className={view === 'records' ? 'active' : ''} onClick={()=>setView('records')}>{t('times.tab.records')}</button>
+          <button className={view === 'all'     ? 'active' : ''} onClick={()=>setView('all')}    >{t('times.tab.all')}</button>
           <button className={view === 'compare' ? 'active' : ''} onClick={()=>setView('compare')}>{t('times.tab.compare')}</button>
         </div>
         <button className="btn btn-sm right" onClick={exportCSV}>
@@ -214,6 +223,79 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
                   <span className="pagination-info">{t('times.page_of', { page, totalPages })}</span>
                   <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(p=>p+1)}>›</button>
                   <button className="btn btn-sm" disabled={page === totalPages} onClick={()=>setPage(totalPages)}>»</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {view === 'all' && (
+        <div className="card">
+          <div className="card-header">
+            <ITi.IconHistory size={14} style={{color:'var(--red)'}}/>
+            <div className="card-title">{t('times.all_laps')}</div>
+            {totalPagesAll > 1 && (
+              <span className="right muted" style={{fontSize: 11.5}}>
+                {t('times.page')} {page}/{totalPagesAll}
+              </span>
+            )}
+          </div>
+          {!lapTimesLoaded && lapTimes.length === 0 ? (
+            <div className="loading-row">
+              <div style={{width:18,height:18,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--red)',animation:'spin 0.8s linear infinite'}}></div>
+              {t('common.loading')}
+            </div>
+          ) : allLaps.length === 0 ? (
+            <div className="empty">{t('common.not_found')}</div>
+          ) : (
+            <>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{width: 50}}>#</th>
+                    <th>{t('times.col.driver')}</th>
+                    <th>{t('times.col.track')}</th>
+                    <th>{t('times.col.car')}</th>
+                    <th style={{width: 110}}>{t('times.col.time')}</th>
+                    <th style={{width: 90}}>S1</th>
+                    <th style={{width: 90}}>S2</th>
+                    <th style={{width: 90}}>S3</th>
+                    <th style={{width: 70}}>{t('times.col.valid')}</th>
+                    <th style={{width: 110}}>{t('times.col.date')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedAll.map((r, i) => {
+                    const globalIndex = (page - 1) * PAGE_SIZE_ALL + i;
+                    return (
+                      <tr key={r.id}>
+                        <td><div className={`player-pos ${globalIndex === 0 ? 'p1' : ''}`}>{globalIndex + 1}</div></td>
+                        <td className="player-name">{r.nickname ? `${r.nickname} (${r.player})` : r.player}</td>
+                        <td className="muted">{trackName(r.track)}</td>
+                        <td className="muted" style={{fontSize: 12}}>{carName(r.car)}</td>
+                        <td className="mono" style={{fontWeight: r.valid ? 600 : 400, color: r.valid ? undefined : 'var(--text-muted)'}}>{fmtMs(r.ms)}</td>
+                        <td className="mono muted">{fmtMs(r.s1)}</td>
+                        <td className="mono muted">{fmtMs(r.s2)}</td>
+                        <td className="mono muted">{fmtMs(r.s3)}</td>
+                        <td>
+                          {r.valid
+                            ? <span className="badge badge-green">{t('common.yes')}</span>
+                            : <span className="badge badge-amber">{t('common.no')}</span>}
+                        </td>
+                        <td className="mono muted" style={{fontSize: 12}}>{r.date}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {totalPagesAll > 1 && (
+                <div className="pagination">
+                  <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
+                  <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(p=>p-1)}>‹</button>
+                  <span className="pagination-info">{t('times.page_of', { page, totalPages: totalPagesAll })}</span>
+                  <button className="btn btn-sm" disabled={page === totalPagesAll} onClick={()=>setPage(p=>p+1)}>›</button>
+                  <button className="btn btn-sm" disabled={page === totalPagesAll} onClick={()=>setPage(totalPagesAll)}>»</button>
                 </div>
               )}
             </>

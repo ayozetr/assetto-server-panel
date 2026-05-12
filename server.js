@@ -1234,36 +1234,65 @@ async function apiConfigUpdate(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
-function apiPlayers(res) {
-  const req = http.get(
-    { hostname: '127.0.0.1', port: AC_HTTP_PORT, path: '/api/details', timeout: 2000 },
-    r => {
-      let data = '';
-      r.on('data', d => data += d);
-      r.on('end', () => {
-        try {
-          const raw = JSON.parse(data);
-          const players = (raw.cars || [])
-            .filter(c => c.Driver && c.Driver.Name)
-            .map(c => ({
-              id:     c.ID,
-              name:   c.Driver.Name,
-              steam:  c.Driver.Guid   || '',
-              nation: c.Driver.Nation || '',
-              carId:  c.CarInfo?.Model || '',
-              car:    formatName(c.CarInfo?.Model || ''),
-              bestMs: c.BestTime  || 0,
-              lastMs: c.Time      || 0,
-              laps:   c.NumLaps   || 0,
-              ping:   c.Driver?.Ping || 0,
-            }));
-          json(res, 200, players);
-        } catch { json(res, 200, []); }
-      });
-    }
-  );
-  req.on('error', () => json(res, 200, []));
-  req.setTimeout(2000, () => { req.destroy(); json(res, 200, []); });
+// Fetch+parse a JSON path from the AC HTTP API. Resolves null on connection
+// error, timeout, or non-JSON body — so callers can fall back without try/catch.
+function acFetchJson(path) {
+  return new Promise(resolve => {
+    const req = http.get(
+      { hostname: '127.0.0.1', port: AC_HTTP_PORT, path, timeout: 2000 },
+      r => {
+        let data = '';
+        r.on('data', d => data += d);
+        r.on('end', () => {
+          if (!data) return resolve(null);
+          try { resolve(JSON.parse(data)); } catch { resolve(null); }
+        });
+      }
+    );
+    req.on('error', () => resolve(null));
+    req.setTimeout(2000, () => { req.destroy(); resolve(null); });
+  });
+}
+
+async function apiPlayers(res) {
+  // Older acServer builds return a rich payload with lap stats, ping and GUID
+  // on /api/details. Current builds reply 200 with an empty body — so when
+  // /api/details yields nothing usable, fall back to /JSON|0 which still lists
+  // connected drivers (without lap stats / ping / GUID).
+  const det = await acFetchJson('/api/details');
+  if (det && Array.isArray(det.cars) && det.cars.some(c => c?.Driver?.Name)) {
+    return json(res, 200, det.cars
+      .filter(c => c.Driver && c.Driver.Name)
+      .map(c => ({
+        id:     c.ID,
+        name:   c.Driver.Name,
+        steam:  c.Driver.Guid   || '',
+        nation: c.Driver.Nation || '',
+        carId:  c.CarInfo?.Model || '',
+        car:    formatName(c.CarInfo?.Model || ''),
+        bestMs: c.BestTime  || 0,
+        lastMs: c.Time      || 0,
+        laps:   c.NumLaps   || 0,
+        ping:   c.Driver?.Ping || 0,
+      })));
+  }
+  const list = await acFetchJson('/JSON%7C0');
+  if (!list || !Array.isArray(list.Cars)) return json(res, 200, []);
+  return json(res, 200, list.Cars
+    .map((c, i) => ({ c, slot: i }))
+    .filter(({ c }) => c && c.IsConnected && c.DriverName)
+    .map(({ c, slot }) => ({
+      id:     slot,
+      name:   c.DriverName,
+      steam:  '',
+      nation: c.DriverNation || '',
+      carId:  c.Model || '',
+      car:    formatName(c.Model || ''),
+      bestMs: 0,
+      lastMs: 0,
+      laps:   0,
+      ping:   0,
+    })));
 }
 
 function apiResults(req, res) {

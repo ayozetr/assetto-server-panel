@@ -3948,9 +3948,37 @@ function handler(req, res) {
     else if (requested === '/manifest.webmanifest')cache = 'public, max-age=3600';
     else if (requested === '/sw.js')               cache = 'no-cache';
     else if (requested === '/index.html')          cache = 'no-cache';
+    // Rewrite index.html to append a cache-busting ?v=BUILD_VERSION to each
+    // /dist/*.js script source. Cloudflare aggressively upgrades the bundle
+    // max-age downstream regardless of origin's `no-cache`, so without
+    // versioned URLs a deploy can stay invisible for hours in browser caches.
+    // The query param is stripped on the server side (urlPath ignores it),
+    // so the same physical files keep serving — only the cache key changes.
+    if (requested === '/index.html') {
+      data = Buffer.from(
+        data.toString('utf8').replace(
+          /(src="(?:[^"]*\/)?dist\/[^"]+\.js)"/g,
+          `$1?v=${BUILD_VERSION}"`
+        ),
+        'utf8'
+      );
+    }
     respond(res, 200, mime, data, { 'Cache-Control': cache });
   });
 }
+
+// Build identity used to invalidate bundle URLs after every redeploy. mtime of
+// dist/app.js is stable across restarts of the same build (a `node build.js`
+// touches everything, so a fresh deploy refreshes BUILD_VERSION automatically)
+// and rolls forward on each restart of an updated tree.
+const BUILD_VERSION = (() => {
+  try {
+    const st = fs.statSync(path.join(ROOT, 'dist', 'app.js'));
+    return String(Math.floor(st.mtimeMs));
+  } catch {
+    return String(Date.now());
+  }
+})();
 
 // Rotate up to N timestamped backups of server_cfg.ini before each save. Without
 // rotation, a single .bak file is overwritten on every save — two bad saves in

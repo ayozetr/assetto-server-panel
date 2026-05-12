@@ -219,10 +219,15 @@ function App() {
       .then(d => { if (Array.isArray(d)) setPastPlayers(d); })
       .catch(() => {});
 
-    fetch('/api/panel/users')
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setUsers(d); })
-      .catch(() => {});
+    // Admin-only endpoint. Skipping it for non-admins prevents the 401
+    // response from tripping the global "session expired" interceptor and
+    // logging the user out a fraction of a second after they log in.
+    if (user.role === 'admin') {
+      fetch('/api/panel/users')
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d)) setUsers(d); })
+        .catch(() => {});
+    }
 
     fetch('/api/panel/settings')
       .then(r => r.json())

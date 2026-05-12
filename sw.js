@@ -7,7 +7,7 @@
 //   - same-origin static    : stale-while-revalidate
 
 // Bump on every behaviour change so old caches are dropped at activate-time.
-const CACHE_NAME  = 'ac-panel-v16';
+const CACHE_NAME  = 'ac-panel-v17';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -60,12 +60,20 @@ self.addEventListener('install', (event) => {
 
 // ── Activate: remove old caches ───────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // When a new SW version takes over, every open tab is still rendering
+    // the pre-upgrade JS. Asking each window client to navigate to itself
+    // forces a clean reload that picks up the fresh /dist/* bundles served
+    // by the new network-first strategy — no more "F5 leaves the page blank"
+    // because of a stale cached bundle paired with new HTML.
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const c of clients) {
+      try { c.navigate(c.url); } catch {}
+    }
+  })());
 });
 
 // ── Fetch: network-first for /api/, cache-first for static assets ─────────────
@@ -154,7 +162,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for local static files (serves cache, updates in background)
+  // /dist/ JS bundles: NETWORK-FIRST so an F5 after a code deploy always pulls
+  // the new build instead of serving a stale entry from the previous SW
+  // version. The cache is still populated so an offline navigation keeps the
+  // panel usable. Switched from stale-while-revalidate after observing blank
+  // pages on F5 when the old cached bundle didn't pair with the new HTML.
+  if (url.pathname.startsWith('/dist/')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        try {
+          const res = await fetch(request);
+          if (res.ok) cache.put(request, res.clone());
+          return res;
+        } catch {
+          const cached = await cache.match(request);
+          return cached || new Response('Offline', { status: 503 });
+        }
+      })
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for everything else local (icons, css, manifest).
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(request);

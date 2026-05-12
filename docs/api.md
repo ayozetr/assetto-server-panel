@@ -95,9 +95,12 @@ Live server metrics.
   "cpuName": "Intel Core i7-...",
   "publicIp": "1.2.3.4",
   "liveTrack": "loros",
-  "httpPort": 8081
+  "httpPort": 8081,
+  "players": 3
 }
 ```
+
+`players` is the count of currently connected drivers — sourced primarily from the UDP plugin's live cars map and fallback to `/JSON|0`'s `IsConnected` flags when the plugin has no data yet. The Dashboard KPI ("Players Online X/N") reads it directly so the panel polls metrics only and stays in sync without a separate `/api/players` request.
 
 ---
 

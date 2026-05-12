@@ -112,3 +112,19 @@ node tools/css-coverage.js --format=json
 ```
 
 Output is informational only (always exits `0`). Treat candidates as a starting point for review, not a removal list — the script does not understand classes built at runtime by string concatenation outside template literals.
+
+---
+
+## udp-synthetic-test.js
+
+Sends a scripted sequence of Kunos UDP plugin packets at the local dashboard so the listener can be exercised without a running `acServer`. Useful when developing the parser against a binary you don't have access to, or to reproduce edge cases (e.g. a duplicate `LAP_COMPLETED` that must be deduped by the runtime index).
+
+```bash
+# Default target: 127.0.0.1:12001 (panel's UDP_PLUGIN_ADDRESS)
+node tools/udp-synthetic-test.js
+
+# Custom port
+node tools/udp-synthetic-test.js 12005
+```
+
+The packet sequence covers `NEW_SESSION`, two `NEW_CONNECTION` joins, three `LAP_COMPLETED` events (the third intentionally duplicates the second to validate dedup) and a `CONNECTION_CLOSED`. After running, query `laps` and `players` in the DB to confirm exactly three lap rows landed and `total_laps` incremented correctly.

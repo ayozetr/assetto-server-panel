@@ -141,11 +141,29 @@ npm run build
 
 ## Changes after update don't appear
 
-This used to require a hard reload. Since SW v12 the panel uses **network-first for navigation** — `index.html` always comes from the network when reachable, so security and UI fixes propagate without manual cache busts. Bumping `CACHE_NAME` (`ac-panel-v15` at the time of writing) on every behaviour change drops the old offline cache at activate-time. If you still see a stale UI:
+The panel uses several layers to make sure a deploy reaches every browser without manual cache busting:
 
-1. The browser may still be running the old SW. Reload twice — the first reload activates the new SW, the second uses it.
-2. Confirm the server is actually up to date (`git log -1` and `systemctl status assetto-dashboard`).
+- **`updateViaCache: 'none'`** in the SW registration call — the browser bypasses its HTTP cache when checking `/sw.js` for updates, so a 4-hour `max-age` (Cloudflare's default downstream value) doesn't keep the old SW alive for hours.
+- **Cache-bust query strings** — `server.js` rewrites `index.html` on the fly to append `?v=BUILD_VERSION` (the mtime of `dist/app.js`) to every `dist/*.js` script src. After a deploy the version changes and every browser sees fresh URLs → guaranteed cache miss at every layer (browser, CDN, SW).
+- **Network-first for `/dist/`** in the SW — every JS bundle request goes to the network first; the cache is fallback for offline only. This prevents the classic "old JS paired with new HTML" mismatch.
+- **`clients.navigate(c.url)`** in the SW's activate hook — when a new SW version takes over, every open tab is reloaded automatically so the upgrade lands without users needing to close/reopen.
+- **CACHE_NAME bump** on every behaviour change so the activate hook deletes the previous cache.
+
+If you still see a stale UI:
+
+1. Confirm the server is actually up to date (`git log -1` and `systemctl status assetto-dashboard`).
+2. Hard reload once (Ctrl+Shift+R / Cmd+Shift+R) to bypass everything and seat the new SW.
 3. As a last resort, DevTools → Application → Service Workers → **Unregister**, then reload.
+
+---
+
+## F5 leaves the page blank but Ctrl+Shift+R works
+
+Symptom: regular reloads (`F5`) produce a blank page with `Uncaught ReferenceError: React is not defined` in the console; hard reload (`Ctrl+Shift+R`) renders normally.
+
+Cause: a Service Worker that intercepts cross-origin requests (React, ReactDOM, Google Fonts loaded from `unpkg.com` and `fonts.googleapis.com`). When the SW does `respondWith(fetch(request))` against a foreign origin, the call is governed by the page's CSP `connect-src` directive (not `script-src`). Since the panel ships with a strict `connect-src 'self'`, those fetches get blocked and React never loads → the rest of the bundles fail to mount → blank page. Hard reload bypasses the SW entirely so the browser's native `<script src=...>` honours `script-src` correctly and React loads.
+
+Fixed in SW v18+: the fetch handler returns early on `url.origin !== self.location.origin`, leaving cross-origin requests to the browser. If you're on an older self-hosted version with the bug, deploy the latest `sw.js` and bump `CACHE_NAME` to force activation.
 
 ---
 

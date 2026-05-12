@@ -112,6 +112,19 @@ NUM_THREADS=2
 
 > **Important:** `HTTP_PORT` must match `AC_HTTP_PORT` in your `.env` file. The dashboard uses this port to detect whether the server is running and to fetch live player data.
 
+### UDP plugin (live lap capture)
+
+Two extra lines enable live event streaming from `acServer` to the dashboard so laps land in the database the instant a driver crosses the finish line (instead of waiting for `acServer` to write the post-session JSON, which only happens at session end):
+
+```ini
+UDP_PLUGIN_LOCAL_PORT=12000
+UDP_PLUGIN_ADDRESS=127.0.0.1:12001
+```
+
+You **do not need to set these manually**. The first time an admin clicks "Apply" on the Session page, the panel detects `UDP_PLUGIN_LOCAL_PORT=0` (or an empty `UDP_PLUGIN_ADDRESS`) and writes the two lines automatically. The subsequent `acServer` restart picks them up and the dashboard's UDP listener binds on the matching port. From then on every `NEW_CONNECTION` / `LAP_COMPLETED` / `CONNECTION_CLOSED` event is consumed in real time.
+
+If you ever want to disable it, set `UDP_PLUGIN_LOCAL_PORT=0` and the panel falls back to the (slower) post-session JSON importer. The cross-source dedup index makes both paths safe to enable simultaneously.
+
 ### Entry list
 
 `~/ac_server/cfg/entry_list.ini` defines the car slots. One `[CAR_N]` block per slot:

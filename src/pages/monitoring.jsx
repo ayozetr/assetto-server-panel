@@ -13,7 +13,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const track          = tracks.find(t => t.id === liveTrackId) || tracks.find(t => t.id === sessionCfg.trackId) || tracks[0];
   const configDiffers  = server.status === 'running' && server.liveTrack && server.liveTrack !== sessionCfg.trackId;
   const configuredTrack = configDiffers ? (tracks.find(t => t.id === sessionCfg.trackId)?.name || sessionCfg.trackId) : null;
-  const carsCount = sessionCfg.carIds.length;
+  const carsCount = (sessionCfg.slots || []).length;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: ()=>{} };
 
   const joinUrl = server.publicIp ? `https://acstuff.club/s/q:race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';

@@ -149,6 +149,8 @@ In addition to the `[SERVER]` mapping, the response carries per-session values u
 | `weather`      | `[WEATHER_0].GRAPHICS` (e.g. `3_clear`) |
 | `airTemp`      | `[WEATHER_0].BASE_TEMPERATURE_AMBIENT` |
 | `penalties`    | inverse of `[SERVER].RACE_GAS_PENALTY_DISABLED` |
+| `slots`        | ordered array of `{ "id": "<carId>", "skin": "<skinName>"\|null }` parsed from each `[CAR_n]` block of `entry_list.ini`; preserves the grid layout so the Session page restores 1:1 on F5 |
+| `cars`         | deduplicated list of `[SERVER].CARS` ids (convenience — same set the running server allows) |
 
 ---
 
@@ -283,9 +285,8 @@ Write the *Session* page state to `server_cfg.ini`. Auto-restarts the AC server 
 | --- | --- | --- |
 | `trackId` | `[SERVER].TRACK` | |
 | `layout`  | `[SERVER].CONFIG_TRACK` | |
-| `cars`    | `[SERVER].CARS` *and* a regenerated `entry_list.ini` | one `[CAR_n]` slot per car, cycled to fill `MAX_CLIENTS` |
-| `carSkins` | `[CAR_n].SKIN` per slot, keyed by `MODEL` | optional `{ "<carId>": "<skinName>" }` map; skin defaults to `"Base"` when no entry; skin names are validated against the same allowlist used for skin previews |
-| `slots`   | `[SERVER].MAX_CLIENTS` | |
+| `slots`   | `entry_list.ini` *and* the deduplicated `[SERVER].CARS` list | ordered array of `{ "id": "<carId>", "skin": "<skinName>"\|null }`; each element becomes one `[CAR_n]` block (MODEL + SKIN). Cycled to fill `maxClients` when fewer slots are sent than there are grid positions. `skin: null` (or missing) maps to `SKIN=Base`. Ids and skin names go through `isValidContentId` / `isValidSkinName` validators; any invalid entry is dropped silently. |
+| `maxClients` | `[SERVER].MAX_CLIENTS` | integer 1..200; also caps how many `[CAR_n]` blocks `entry_list.ini` gets when the slot list is shorter |
 | `practiceEnabled` / `qualifyEnabled` / `raceEnabled` | `[PRACTICE]` / `[QUALIFY]` / `[RACE]` section presence | when `false` the whole section is removed; reject if all three end up `false` |
 | `practiceTime` / `qualifyTime` / `raceLaps` | `[PRACTICE].TIME` / `[QUALIFY].TIME` / `[RACE].LAPS` | ignored for sessions being disabled this turn |
 | `time`    | `[SERVER].SUN_ANGLE` | hour 0..23, written as `(h-13)·16` clamped to [-80,80] |

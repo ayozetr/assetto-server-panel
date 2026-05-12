@@ -9,17 +9,15 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [confirmApply, setConfirmApply] = useStateS(false);
   const track        = tracks.find(t => t.id === sessionCfg.trackId);
-  // Build unique car list with counts (preserves order of first appearance)
-  const selectedCars = useMemoS(() => {
-    const seen = new Map();
-    for (const id of sessionCfg.carIds) {
-      seen.set(id, (seen.get(id) || 0) + 1);
-    }
-    return Array.from(seen.entries()).map(([id, cnt]) => ({
-      car: cars.find(c => c.id === id) || { id, name: id, brand: '', thumb: null },
-      cnt,
-    }));
-  }, [sessionCfg.carIds, cars]);
+  // Resolve each slot to its car metadata so the list can render thumbs and
+  // brand info. We keep the ordering exactly as stored — each row = one slot.
+  const slots = sessionCfg.slots || [];
+  const slotCars = useMemoS(() =>
+    slots.map((slot, idx) => ({
+      idx,
+      slot,
+      car: cars.find(c => c.id === slot.id) || { id: slot.id, name: slot.id, brand: '', thumb: null },
+    })), [slots, cars]);
   const set = (k, v) => setSessionCfg(c => ({...c, [k]: v}));
 
   // Three session rows side-by-side — each is independent: enable toggle plus
@@ -73,7 +71,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               )}
               <div className="field" style={{marginTop: 4}}>
                 <label className="field-label">{t('sess.slots')}</label>
-                <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.slots} onChange={e => set('slots', Number(e.target.value))} disabled={!isAdmin} style={{maxWidth: 120}}/>
+                <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.maxClients} onChange={e => set('maxClients', Number(e.target.value))} disabled={!isAdmin} style={{maxWidth: 120}}/>
               </div>
             </div>
           </div>
@@ -154,23 +152,23 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
             <div className="card-header">
               <I3S.IconCar size={14} style={{color:'var(--red)'}}/>
               <div className="card-title">{t('sess.cars_title')}</div>
-              <span className="badge right">{sessionCfg.carIds.length} slots</span>
+              <span className="badge right">{slots.length} slots</span>
             </div>
             <div style={{maxHeight: 220, overflowY: 'auto'}}>
-              {selectedCars.length === 0 ? (
+              {slotCars.length === 0 ? (
                 <div className="empty" style={{padding: '28px 20px'}}>
                   {t('sess.no_cars')}
                 </div>
-              ) : selectedCars.map(({car: c, cnt}) => {
-                // Prefer the admin-chosen skin's preview over the generic
-                // first-skin thumbnail so the row visually reflects what'll
-                // land in entry_list.ini.
-                const chosenSkin = (sessionCfg.carSkins || {})[c.id];
+              ) : slotCars.map(({idx, slot, car: c}) => {
+                // One row per slot — same car appearing twice with different
+                // skins shows up as two distinct rows.
+                const chosenSkin = slot.skin;
                 const thumbSrc   = chosenSkin
                   ? `/api/content/cars/${encodeURIComponent(c.id)}/skins/${encodeURIComponent(chosenSkin)}/preview`
                   : c.thumb;
                 return (
-                <div key={c.id} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)'}}>
+                <div key={idx} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)'}}>
+                  <div className="muted mono" style={{fontSize: 10, width: 22, textAlign:'right', flexShrink:0}}>{idx + 1}</div>
                   <div style={{width: 36, height: 22, borderRadius: 3, overflow:'hidden', background: 'var(--bg-3)', flexShrink: 0}}>
                     {thumbSrc && <img src={thumbSrc} style={{width:'100%', height:'100%', objectFit:'cover'}}
                       onError={e => { e.target.style.display='none'; }}/>}
@@ -183,15 +181,8 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                         : c.brand}
                     </div>
                   </div>
-                  {cnt > 1 && (
-                    <span className="badge" style={{fontSize:10, fontWeight:600, background:'color-mix(in srgb, var(--red) 12%, transparent)', color:'var(--red)', border:'1px solid var(--red)'}}>×{cnt}</span>
-                  )}
                   <button className="icon-btn" style={{width: 24, height: 24}}
-                    onClick={() => setSessionCfg(s => {
-                      const nextSkins = { ...(s.carSkins || {}) };
-                      delete nextSkins[c.id];
-                      return {...s, carIds: s.carIds.filter(x => x !== c.id), carSkins: nextSkins};
-                    })}>
+                    onClick={() => setSessionCfg(s => ({...s, slots: (s.slots || []).filter((_, i) => i !== idx)}))}>
                     <I3S.IconX size={12}/>
                   </button>
                 </div>

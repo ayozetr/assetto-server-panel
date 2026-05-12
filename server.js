@@ -1155,21 +1155,22 @@ function apiConfig(req, res) {
     const q   = ini['QUALIFY']   || null;
     const r0  = ini['RACE']      || null;
     const w   = ini['WEATHER_0'] || {};
-    // entry_list.ini is the source of truth for per-car skin assignments —
-    // each [CAR_n] block has a MODEL + SKIN, so we walk it to rebuild the
-    // model→skin map the Session page restores on F5. First skin wins per
-    // model since the panel UI exposes a single skin per car id.
+    // entry_list.ini is the source of truth for the grid layout — each
+    // [CAR_n] block defines one slot's MODEL + SKIN. We walk them in order
+    // so the Session page's "Selected Cars" list restores 1:1 after F5,
+    // including same-car-different-skin entries.
     const ENTRY_LIST = path.join(path.dirname(AC_CFG_FILE), 'entry_list.ini');
-    let carSkins = {};
+    let slots = [];
     try {
       const entry = parseINI(fs.readFileSync(ENTRY_LIST, 'utf8'));
-      for (const [section, kv] of Object.entries(entry)) {
-        if (!/^CAR_\d+$/.test(section)) continue;
+      const ordered = Object.entries(entry)
+        .filter(([sec]) => /^CAR_\d+$/.test(sec))
+        .sort(([a], [b]) => parseInt(a.slice(4), 10) - parseInt(b.slice(4), 10));
+      for (const [, kv] of ordered) {
         const model = kv['MODEL'];
-        const skin  = kv['SKIN'];
-        if (model && skin && skin !== 'Base' && !(model in carSkins)) {
-          carSkins[model] = skin;
-        }
+        if (!model) continue;
+        const skin = (kv['SKIN'] && kv['SKIN'] !== 'Base') ? kv['SKIN'] : null;
+        slots.push({ id: model, skin });
       }
     } catch {}
     json(res, 200, {
@@ -1194,7 +1195,7 @@ function apiConfig(req, res) {
       track:       s['TRACK']              || '',
       trackConfig: s['CONFIG_TRACK']       || '',
       cars:        (s['CARS'] || '').split(';').filter(Boolean),
-      carSkins,
+      slots,
       // Per-session-type values. Each section can be physically present or
       // missing — `*Enabled` flags reflect that so the Session page can
       // restore the per-row toggles. When a section is absent we still
@@ -1872,20 +1873,23 @@ const AC_WEATHER_PRESETS = new Set([
   '5_light_clouds', '6_mid_clouds', '7_heavy_clouds',
 ]);
 
-// Regenerate entry_list.ini so every [CAR_n].MODEL is present in SERVER.CARS.
-// One block per joinable slot, models cycled to fill up to `slotCount`.
-// Caller is responsible for already having validated `cars` via isValidContentId
-// and `carSkins` values via isValidSkinName.
-async function writeEntryList(cars, slotCount, carSkins = {}) {
+// Regenerate entry_list.ini from an ordered slot list. Each slot is an
+// {id, skin} pair — the panel exposes per-slot skin selection so two slots
+// of the same car can run different liveries. When `slotCount` is given and
+// larger than the slot list, we cycle through it to fill the rest.
+// Caller is responsible for already having validated each slot's id with
+// isValidContentId and skin with isValidSkinName.
+async function writeEntryList(slots, slotCount) {
+  if (!Array.isArray(slots) || slots.length === 0) return;
   const ENTRY_LIST = path.join(path.dirname(AC_CFG_FILE), 'entry_list.ini');
-  const slots = Math.max(1, Math.min(200, slotCount | 0));
+  const total = Math.max(1, Math.min(200, (slotCount | 0) || slots.length));
   const blocks = [];
-  for (let i = 0; i < slots; i++) {
-    const model = cars[i % cars.length];
-    const skin  = (carSkins && carSkins[model]) || 'Base';
+  for (let i = 0; i < total; i++) {
+    const slot = slots[i % slots.length];
+    const skin = slot.skin || 'Base';
     blocks.push(
       `[CAR_${i}]\n` +
-      `MODEL=${model}\n` +
+      `MODEL=${slot.id}\n` +
       `SKIN=${skin}\n` +
       `SPECTATOR_MODE=0\n` +
       `DRIVERNAME=\n` +
@@ -1919,15 +1923,32 @@ async function apiSessionApply(req, res) {
         return json(res, 400, { error: 'Invalid layout' });
       s['CONFIG_TRACK'] = body.layout || '';
     }
-    if (Array.isArray(body.cars)) {
-      const clean = body.cars.filter(isValidContentId);
-      if (body.cars.length && !clean.length)
-        return json(res, 400, { error: 'cars contains invalid identifiers' });
-      if (clean.length) s['CARS'] = [...new Set(clean)].join(';');
+    // Ordered slot list. Each slot has its own MODEL + SKIN so the same car
+    // can appear multiple times in the grid with different liveries. The
+    // [SERVER].CARS field gets the deduplicated set of ids (acServer's
+    // "allowed cars" list); writeEntryList consumes the ordered slots
+    // directly so position+skin land 1:1 in entry_list.ini.
+    let cleanSlots = null;
+    if (Array.isArray(body.slots)) {
+      cleanSlots = [];
+      for (const slot of body.slots) {
+        if (!slot || typeof slot !== 'object') continue;
+        const id = slot.id;
+        if (!isValidContentId(id)) continue;
+        const rawSkin = typeof slot.skin === 'string' ? slot.skin : '';
+        const skin    = rawSkin && isValidSkinName(rawSkin) ? rawSkin : '';
+        cleanSlots.push({ id, skin });
+      }
+      if (body.slots.length && !cleanSlots.length)
+        return json(res, 400, { error: 'slots contains no valid entries' });
+      if (cleanSlots.length) {
+        const uniqIds = [...new Set(cleanSlots.map(x => x.id))];
+        s['CARS'] = uniqIds.join(';');
+      }
     }
-    if (body.slots !== undefined) {
-      const v = clampInt(body.slots, 1, 200);
-      if (!v) return json(res, 400, { error: 'slots must be an integer between 1 and 200' });
+    if (body.maxClients !== undefined) {
+      const v = clampInt(body.maxClients, 1, 200);
+      if (!v) return json(res, 400, { error: 'maxClients must be an integer between 1 and 200' });
       s['MAX_CLIENTS'] = String(v);
     }
 
@@ -2019,25 +2040,11 @@ async function apiSessionApply(req, res) {
     }
     await fsp.writeFile(AC_CFG_FILE, patched, 'utf8');
 
-    // When the car set changes, entry_list.ini must be regenerated to match.
+    // When the slot list changes, entry_list.ini must be regenerated to match.
     // acServer requires every [CAR_n].MODEL to appear in [SERVER].CARS and
     // refuses to start otherwise — leaving stale slots crashes the boot.
-    if (Array.isArray(body.cars) && body.cars.length) {
-      const clean = body.cars.filter(isValidContentId);
-      if (clean.length) {
-        // Sanitise carSkins → only string values that pass the skin-name
-        // allowlist make it through. Anything else is silently dropped so a
-        // forged payload can't slip a path traversal into the entry list.
-        const cleanSkins = {};
-        if (body.carSkins && typeof body.carSkins === 'object') {
-          for (const [id, skin] of Object.entries(body.carSkins)) {
-            if (isValidContentId(id) && typeof skin === 'string' && isValidSkinName(skin)) {
-              cleanSkins[id] = skin;
-            }
-          }
-        }
-        await writeEntryList(clean, intOr(s['MAX_CLIENTS'], clean.length), cleanSkins);
-      }
+    if (cleanSlots && cleanSlots.length) {
+      await writeEntryList(cleanSlots, intOr(s['MAX_CLIENTS'], cleanSlots.length));
     }
 
     // Auto-restart if server is running and the caller asks for it

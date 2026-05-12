@@ -110,13 +110,15 @@ function App() {
     practiceTime: 10,
     qualifyTime:  10,
     raceLaps:     5,
-    slots: 24,
+    maxClients: 24,
     time: 13,
     weather: '3_clear',
     airTemp: 18,
     penalties: true,
-    carIds: [],
-    carSkins: {},
+    // Ordered list of grid slots; each slot is independent so two slots of the
+    // same car can run different skins. Mirrors the [CAR_n] sequence in
+    // entry_list.ini one-for-one.
+    slots: [],
   });
 
   const [config, setConfig] = uS({
@@ -178,9 +180,9 @@ function App() {
           const hour = Number.isFinite(d.sunAngle) ? Math.max(0, Math.min(23, Math.round(d.sunAngle / 16) + 13)) : s.time;
           return {
             ...s,
-            ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
-            ...(d.carSkins && typeof d.carSkins === 'object' ? { carSkins: d.carSkins } : {}),
-            ...(d.maxClients ? { slots: d.maxClients } : {}),
+            ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '' } : {}),
+            ...(Array.isArray(d.slots) && d.slots.length ? { slots: d.slots } : {}),
+            ...(d.maxClients ? { maxClients: d.maxClients } : {}),
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
             ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
@@ -409,8 +411,8 @@ function AppInner(props) {
           const hour = Number.isFinite(d.sunAngle) ? Math.max(0, Math.min(23, Math.round(d.sunAngle / 16) + 13)) : s.time;
           return {
             ...s,
-            ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
-            ...(d.carSkins && typeof d.carSkins === 'object' ? { carSkins: d.carSkins } : {}),
+            ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '' } : {}),
+            ...(Array.isArray(d.slots) && d.slots.length ? { slots: d.slots } : {}),
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
             ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
@@ -440,9 +442,8 @@ function AppInner(props) {
       body: JSON.stringify({
         trackId:         sessionCfg.trackId,
         layout:          sessionCfg.layout || '',
-        cars:            sessionCfg.carIds,
-        carSkins:        sessionCfg.carSkins || {},
-        slots:           sessionCfg.slots,
+        slots:           sessionCfg.slots || [],
+        maxClients:      sessionCfg.maxClients,
         practiceEnabled: sessionCfg.practiceEnabled,
         qualifyEnabled:  sessionCfg.qualifyEnabled,
         raceEnabled:     sessionCfg.raceEnabled,
@@ -464,7 +465,7 @@ function AppInner(props) {
           toast.push(`${t('common.error')}: ${d.error || ('HTTP ' + r.status)}`, 'error');
           return;
         }
-        if (sessionCfg.slots) setServer(s => ({ ...s, slots: sessionCfg.slots }));
+        if (sessionCfg.maxClients) setServer(s => ({ ...s, slots: sessionCfg.maxClients }));
         if (d.restartError) {
           toast.push(`${t('toast.session_apply')} · ${d.restartError}`, 'warn');
         } else if (d.restarted) {
@@ -498,7 +499,7 @@ function AppInner(props) {
         }
         if (config.maxClients > 0) {
           setServer(s => ({ ...s, slots: config.maxClients }));
-          setSessionCfg(s => ({ ...s, slots: config.maxClients }));
+          setSessionCfg(s => ({ ...s, maxClients: config.maxClients }));
         }
         if (d.rejected && d.rejected.length) {
           toast.push(`${t('common.warn') || 'Warning'}: rejected fields: ${d.rejected.join(', ')}`, 'warn');

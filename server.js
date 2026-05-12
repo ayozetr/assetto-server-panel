@@ -1279,13 +1279,32 @@ async function apiPlayers(res) {
   }
   const list = await acFetchJson('/JSON%7C0');
   if (!list || !Array.isArray(list.Cars)) return json(res, 200, []);
+  // /JSON|0 doesn't expose Steam GUIDs. Recover them by exact in-game-name
+  // match against the `players` table — that table is populated from every
+  // imported result file, so any returning player gets their GUID back.
+  // Skip names that map to multiple GUIDs: kicking/banning the wrong account
+  // is worse than leaving the buttons disabled until the result importer
+  // confirms the match.
+  const nameToGuid = {};
+  if (db) {
+    try {
+      const counts = {};
+      for (const r of db.prepare('SELECT guid, name FROM players').all()) {
+        counts[r.name] = (counts[r.name] || 0) + 1;
+        nameToGuid[r.name] = r.guid;
+      }
+      for (const n of Object.keys(nameToGuid)) {
+        if (counts[n] > 1) delete nameToGuid[n];
+      }
+    } catch {}
+  }
   return json(res, 200, list.Cars
     .map((c, i) => ({ c, slot: i }))
     .filter(({ c }) => c && c.IsConnected && c.DriverName)
     .map(({ c, slot }) => ({
       id:     slot,
       name:   c.DriverName,
-      steam:  '',
+      steam:  nameToGuid[c.DriverName] || '',
       nation: c.DriverNation || '',
       carId:  c.Model || '',
       car:    formatName(c.Model || ''),

@@ -5,16 +5,20 @@
 const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB, useRef: useRefB } = React;
 const I3 = window.AppIcons;
 
-// Spinner-overlay → fade-in <img> wrapper. State resets on src change so the
-// skin selector inside the modal re-spins for every new preview.
+// Spinner-overlay → fade-in <img> wrapper. Compares `loadedSrc === src`
+// synchronously instead of leaning on a useEffect reset, so swapping the
+// `src` mid-mount (clicking a different skin thumbnail in the modal)
+// flips back to "not loaded" in the same render that the new src lands —
+// no frame where the partially-decoded new image is visible at opacity 1.
 function LoadingImg({ src, alt, style, fallback = null }) {
-  const [loaded, setLoaded] = useStateB(false);
-  const [failed, setFailed] = useStateB(false);
-  useEffectB(() => { setLoaded(false); setFailed(false); }, [src]);
-  if (!src || failed) return fallback;
+  const [loadedSrc, setLoadedSrc] = useStateB(null);
+  const [failedSrc, setFailedSrc] = useStateB(null);
+  const isLoaded = loadedSrc === src;
+  const isFailed = failedSrc === src;
+  if (!src || isFailed) return fallback;
   return (
     <div style={{position:'relative', width:'100%', height:'100%', overflow:'hidden'}}>
-      {!loaded && (
+      {!isLoaded && (
         <div style={{
           position:'absolute', inset:0, display:'flex', alignItems:'center',
           justifyContent:'center', background:'var(--bg-3)',
@@ -30,11 +34,11 @@ function LoadingImg({ src, alt, style, fallback = null }) {
         src={src} alt={alt}
         style={{
           width:'100%', height:'100%', objectFit:'cover', display:'block',
-          opacity: loaded ? 1 : 0, transition:'opacity 180ms ease-out',
+          opacity: isLoaded ? 1 : 0, transition:'opacity 180ms ease-out',
           ...style,
         }}
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
+        onLoad={() => setLoadedSrc(src)}
+        onError={() => setFailedSrc(src)}
       />
     </div>
   );

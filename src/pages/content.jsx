@@ -182,18 +182,37 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
 function CarCard({ car, count, onOpen, t }) {
   const skinsCount = car.skins?.length || 0;
   const [imgFailed, setImgFailed] = useStateB(false);
+  const [imgLoaded, setImgLoaded] = useStateB(false);
   const initial = (car.brand || car.name || '?').slice(0, 2).toUpperCase();
 
   return (
     <div className={`car-card ${count > 0 ? 'selected' : ''}`} onClick={onOpen}>
       <div className="car-thumb" style={{position:'relative', overflow:'hidden'}}>
         {car.thumb && !imgFailed ? (
-          <img
-            src={car.thumb}
-            alt={car.name}
-            style={{width:'100%', height:'100%', objectFit:'cover'}}
-            onError={() => setImgFailed(true)}
-          />
+          <>
+            {!imgLoaded && (
+              <div style={{
+                position:'absolute', inset:0, display:'flex', alignItems:'center',
+                justifyContent:'center', background:'var(--bg-3)',
+              }}>
+                <div style={{
+                  width:18, height:18, borderRadius:'50%',
+                  border:'2px solid var(--border)', borderTopColor:'var(--red)',
+                  animation:'spin 0.8s linear infinite',
+                }}/>
+              </div>
+            )}
+            <img
+              src={car.thumb}
+              alt={car.name}
+              style={{
+                width:'100%', height:'100%', objectFit:'cover',
+                opacity: imgLoaded ? 1 : 0, transition:'opacity 180ms ease-out',
+              }}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgFailed(true)}
+            />
+          </>
         ) : (
           <div style={{
             width:'100%', height:'100%', display:'flex', alignItems:'center',
@@ -255,7 +274,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   const [showKunos, setShowKunos] = useStateB(true);
   const [modalCar,  setModalCar]  = useStateB(null);
   const [page,      setPage]      = useStateB(1);
-  const [pageSize,  setPageSize]  = useStateB(30);
+  const [pageSize,  setPageSize]  = useStateB(10);
 
   // Default Kunos toggle off when mods are present (runs once after data loads)
   const _kunosCarInit = useRefB(false);
@@ -358,7 +377,7 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
           </div>
           <div className="right row" style={{gap:6, alignItems:'center'}}>
             <span style={{fontSize:11, color:'var(--text-faint)'}}>{t('common.per_page')}:</span>
-            {[15,30,50].map(n => (
+            {[10,20,30].map(n => (
               <button key={n} className={`tag ${pageSize===n?'active':''}`} style={{padding:'2px 8px'}} onClick={()=>setPageSize(n)}>{n}</button>
             ))}
           </div>

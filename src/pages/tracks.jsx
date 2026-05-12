@@ -174,16 +174,35 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal, t }) {
   };
 
   const [imgFailed, setImgFailed] = useStateT(false);
+  const [imgLoaded, setImgLoaded] = useStateT(false);
   const trackInitial = track.name.slice(0,2).toUpperCase();
 
   return (
     <div className={`track-card ${selected ? 'selected' : ''}`} onClick={handleClick}>
-      <div className="track-thumb">
+      <div className="track-thumb" style={{position:'relative', overflow:'hidden'}}>
         {!imgFailed ? (
-          <img src={track.thumb} alt={track.name}
-            style={{width:'100%', height:'100%', objectFit:'cover'}}
-            onError={() => setImgFailed(true)}
-          />
+          <>
+            {!imgLoaded && (
+              <div style={{
+                position:'absolute', inset:0, display:'flex', alignItems:'center',
+                justifyContent:'center', background:'var(--bg-3)',
+              }}>
+                <div style={{
+                  width:20, height:20, borderRadius:'50%',
+                  border:'2px solid var(--border)', borderTopColor:'var(--red)',
+                  animation:'spin 0.8s linear infinite',
+                }}/>
+              </div>
+            )}
+            <img src={track.thumb} alt={track.name}
+              style={{
+                width:'100%', height:'100%', objectFit:'cover',
+                opacity: imgLoaded ? 1 : 0, transition:'opacity 180ms ease-out',
+              }}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgFailed(true)}
+            />
+          </>
         ) : (
           <div style={{
             width:'100%', height:'100%', display:'flex', alignItems:'center',
@@ -243,7 +262,7 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   const [showKunos,  setShowKunos]  = useStateT(true);
   const [modalTrack, setModalTrack] = useStateT(null);
   const [page,       setPage]       = useStateT(1);
-  const [pageSize,   setPageSize]   = useStateT(30);
+  const [pageSize,   setPageSize]   = useStateT(10);
 
   // Default Kunos toggle off when mods are present (runs once after data loads)
   const _kunosTrackInit = useRefT(false);
@@ -304,7 +323,7 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
           </div>
           <div className="right row" style={{gap:6, alignItems:'center'}}>
             <span style={{fontSize:11, color:'var(--text-faint)'}}>{t('common.per_page')}:</span>
-            {[15,30,50].map(n => (
+            {[10,20,30].map(n => (
               <button key={n} className={`tag ${pageSize===n?'active':''}`} style={{padding:'2px 8px'}} onClick={()=>setPageSize(n)}>{n}</button>
             ))}
           </div>

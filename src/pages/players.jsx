@@ -3,16 +3,99 @@
 // `PagePlayers` symbol is published into `window.AppPagesMonitoring` along
 // with the dashboard and logs counterparts so the consumer in app.jsx still
 // destructures a single namespace.
-const { useState: usePlayersState, useEffect: usePlayersEffect } = React;
+const { useState: usePlayersState, useEffect: usePlayersEffect, useMemo: usePlayersMemo } = React;
 const I2P = window.AppIcons;
 const fmtMs = window.AppUtils.fmtMs;
 
-function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, onKick, onBan }) {
+// Render "Apodo (in-game name)" when an admin has set a nickname for this
+// player, otherwise just the in-game name.
+function renderPlayerName(name, nickname) {
+  if (nickname) return `${nickname} (${name})`;
+  return name;
+}
+
+function NicknameModal({ player, onSave, onClose }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const [value, setValue] = usePlayersState(player.nickname || '');
+  const submit = () => onSave(value.trim().slice(0, 64));
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-header">
+          <I2P.IconEdit size={15}/>
+          <div className="modal-title">{t('pl.nick.title')}</div>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label className="field-label">{t('pl.nick.in_game')}</label>
+            <div className="mono" style={{fontSize: 13}}>{player.name}</div>
+          </div>
+          <div className="field">
+            <label className="field-label">{t('pl.nick.label')}</label>
+            <input
+              className="input"
+              value={value}
+              autoFocus
+              maxLength={64}
+              placeholder={t('pl.nick.placeholder')}
+              onChange={e => setValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+            />
+            <span className="field-hint">{t('pl.nick.hint')}</span>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={submit}>
+            <I2P.IconCheck size={13}/> {t('common.save')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, server, isAdmin, onKick, onBan }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
   const [players, setPlayers] = usePlayersState(initialPlayers);
   const [historySearch, setHistorySearch] = usePlayersState('');
   const [whitelisting, setWhitelisting] = usePlayersState({}); // guid → boolean
+  const [editingNick, setEditingNick] = usePlayersState(null); // past-player row
+
+  // Look up nicknames by GUID so the live online table can render the same
+  // "Apodo (in-game)" treatment without an extra backend call.
+  const nickByGuid = usePlayersMemo(() => {
+    const m = {};
+    for (const p of pastPlayers || []) {
+      if (p.steam && p.nickname) m[p.steam] = p.nickname;
+    }
+    return m;
+  }, [pastPlayers]);
+
+  const saveNickname = async (nickname) => {
+    if (!editingNick) return;
+    try {
+      const r = await fetch(`/api/players/${encodeURIComponent(editingNick.steam)}/nickname`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) {
+        toast.push(`${t('common.error')}: ${d.error || ('HTTP ' + r.status)}`, 'error');
+        return;
+      }
+      // Update local row so the table reflects the change without a full reload
+      if (setPastPlayers) {
+        setPastPlayers(prev => prev.map(p => p.id === editingNick.id ? { ...p, nickname } : p));
+      }
+      toast.push(t('pl.nick.saved'), 'success');
+      setEditingNick(null);
+    } catch (e) {
+      toast.push(`${t('common.error')}: ${e.message}`, 'error');
+    }
+  };
 
   const handleWhitelist = async (p) => {
     if (!p.steam) { toast.push(t('pl.no_guid') || 'Player has no Steam GUID', 'warn'); return; }
@@ -95,11 +178,11 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                 <td>
                   <div className="row" style={{gap: 10}}>
                     <div className="user-avatar" style={{width: 26, height: 26, fontSize: 11, background: 'var(--bg-3)', color: 'var(--text-muted)'}}>
-                      {p.name.slice(0,1).toUpperCase()}
+                      {(p.nickname || p.name).slice(0,1).toUpperCase()}
                     </div>
                     <div>
                       <div className="row" style={{gap: 5, alignItems:'center'}}>
-                        <span className="player-name">{p.name}</span>
+                        <span className="player-name">{renderPlayerName(p.name, p.nickname)}</span>
                         {flagUrl && <img src={flagUrl} alt={p.nation} title={p.nation} style={{height:9, width:'auto', borderRadius:1, opacity:0.75}} onError={e=>{e.target.style.display='none'}}/>}
                       </div>
                       <div className="row" style={{gap:4, alignItems:'center', marginTop:2}}>
@@ -122,7 +205,16 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                 <td className="mono muted">{p.totalTime}</td>
                 <td className="mono muted" style={{fontSize: 12}}>{p.lastSeen}</td>
                 {isAdmin && (
-                  <td><button className="btn btn-sm btn-danger">Ban</button></td>
+                  <td>
+                    <button
+                      className="icon-btn"
+                      title={t('pl.nick.edit_tip')}
+                      onClick={() => setEditingNick(p)}
+                      style={{width: 26, height: 26}}
+                    >
+                      <I2P.IconEdit size={12}/>
+                    </button>
+                  </td>
                 )}
               </tr>
               );
@@ -142,6 +234,10 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
     </div>
   );
 
+  const modalNode = editingNick
+    ? <NicknameModal player={editingNick} onSave={saveNickname} onClose={() => setEditingNick(null)}/>
+    : null;
+
   if (server.status !== 'running') {
     return (
       <>
@@ -153,6 +249,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
           <div className="empty">{t('topbar.stopped')}</div>
         </div>
         {renderPast}
+        {modalNode}
       </>
     );
   }
@@ -187,7 +284,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
                 <td><div className={`player-pos ${i === 0 ? 'p1' : ''}`}>{i + 1}</div></td>
                 <td>
                   <div className="row" style={{gap:5, alignItems:'center'}}>
-                    <span className="player-name">{p.name}</span>
+                    <span className="player-name">{renderPlayerName(p.name, nickByGuid[p.steam])}</span>
                     {p.nation && (() => { const f = (window.AppUtils || {}).nationFlag?.(p.nation); return f ? <img src={f} alt={p.nation} title={p.nation} style={{height:9,width:'auto',borderRadius:1,opacity:0.75}} onError={e=>{e.target.style.display='none'}}/> : null; })()}
                   </div>
                   <div className="row" style={{gap: 4, alignItems:'center', marginTop:2}}>
@@ -236,6 +333,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, server, isAdmin, on
         </table>
       </div>
       {renderPast}
+      {modalNode}
     </>
   );
 }

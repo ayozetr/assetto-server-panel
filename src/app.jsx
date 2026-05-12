@@ -287,7 +287,7 @@ function App() {
         theme={theme} setTheme={setTheme}
         server={serverDisplay} setServer={setServer}
         players={players} setPlayers={setPlayers}
-        pastPlayers={pastPlayers}
+        pastPlayers={pastPlayers} setPastPlayers={setPastPlayers}
         lapTimes={lapTimes}
         users={users} setUsers={setUsers}
         cars={cars} setCars={setCars}
@@ -314,7 +314,7 @@ function AppInner(props) {
 
   const {
     user, page, setPage, theme, setTheme,
-    server, setServer, players, setPlayers, pastPlayers,
+    server, setServer, players, setPlayers, pastPlayers, setPastPlayers,
     lapTimes, users, setUsers, cars, setCars, tracks, setTracks,
     sessionCfg, setSessionCfg, config, setConfig, setUser, osInfo,
     dataLoaded, backendDown,
@@ -509,7 +509,7 @@ function AppInner(props) {
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
-  else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
+  else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} setPastPlayers={setPastPlayers} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
   else if (page === 'logs')      content = <PageLogs server={server}/>;
   else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes}/>;
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;

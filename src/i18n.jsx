@@ -257,6 +257,13 @@ const dict = {
     'pl.no_guid': 'Player has no Steam GUID',
     'pl.history': 'Connection History',
     'pl.hist_col.date': 'Date',
+    'pl.nick.title': 'Player nickname',
+    'pl.nick.label': 'Nickname',
+    'pl.nick.in_game': 'In-game name',
+    'pl.nick.placeholder': 'e.g. José García',
+    'pl.nick.hint': 'Shown alongside the in-game name in this panel and on lap times. Leave empty to clear.',
+    'pl.nick.edit_tip': 'Edit nickname',
+    'pl.nick.saved': 'Nickname saved',
 
     // Logs
     'log.title': 'Server Logs',
@@ -662,6 +669,13 @@ const dict = {
     'pl.no_guid': 'El jugador no tiene Steam GUID',
     'pl.history': 'Historial de Conexiones',
     'pl.hist_col.date': 'Fecha',
+    'pl.nick.title': 'Apodo del jugador',
+    'pl.nick.label': 'Apodo',
+    'pl.nick.in_game': 'Nombre en el juego',
+    'pl.nick.placeholder': 'p. ej. José García',
+    'pl.nick.hint': 'Se muestra junto al nombre en el juego en este panel y en los tiempos. Déjalo vacío para borrarlo.',
+    'pl.nick.edit_tip': 'Editar apodo',
+    'pl.nick.saved': 'Apodo guardado',
 
     // Logs
     'log.title': 'Logs del Servidor',
@@ -1067,6 +1081,13 @@ const dict = {
     'pl.no_guid': 'Il giocatore non ha Steam GUID',
     'pl.history': 'Cronologia Connessioni',
     'pl.hist_col.date': 'Data',
+    'pl.nick.title': 'Soprannome del giocatore',
+    'pl.nick.label': 'Soprannome',
+    'pl.nick.in_game': 'Nome in gioco',
+    'pl.nick.placeholder': 'es. Mario Rossi',
+    'pl.nick.hint': 'Mostrato accanto al nome in gioco in questo pannello e nei tempi sul giro. Lascia vuoto per rimuoverlo.',
+    'pl.nick.edit_tip': 'Modifica soprannome',
+    'pl.nick.saved': 'Soprannome salvato',
 
     // Logs
     'log.title': 'Log del Server',

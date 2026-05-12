@@ -309,6 +309,7 @@ try {
   try { db.exec(`ALTER TABLE audit_log ADD COLUMN prev_hash     TEXT    NOT NULL DEFAULT ''`); } catch {}
   try { db.exec(`ALTER TABLE audit_log ADD COLUMN row_hash      TEXT    NOT NULL DEFAULT ''`); } catch {}
   try { db.exec(`ALTER TABLE audit_log ADD COLUMN chain_version INTEGER NOT NULL DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE players   ADD COLUMN nickname      TEXT    NOT NULL DEFAULT ''`); } catch {}
 
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
@@ -1311,35 +1312,41 @@ function apiResults(req, res) {
 
     const where = [];
     const args  = [];
-    if (track)     { where.push('track = ?');         args.push(track); }
-    if (car)       { where.push('car = ?');           args.push(car); }
-    if (driver)    { where.push('driver_guid = ?');   args.push(driver); }
-    if (from)      { where.push('session_date >= ?'); args.push(from); }
-    if (to)        { where.push('session_date <= ?'); args.push(to); }
-    if (validOnly) { where.push('valid = 1'); }
+    if (track)     { where.push('l.track = ?');         args.push(track); }
+    if (car)       { where.push('l.car = ?');           args.push(car); }
+    if (driver)    { where.push('l.driver_guid = ?');   args.push(driver); }
+    if (from)      { where.push('l.session_date >= ?'); args.push(from); }
+    if (to)        { where.push('l.session_date <= ?'); args.push(to); }
+    if (validOnly) { where.push('l.valid = 1'); }
     args.push(limit);
+    // LEFT JOIN players for the optional admin-set nickname so the lap-time
+    // page can render "Apodo (in-game name)" without a second round-trip.
     const sql = `
-      SELECT id, driver_name, driver_guid, car, track, track_config, ms, s1, s2, s3, cuts, valid, session_date
-      FROM laps
+      SELECT l.id, l.driver_name, l.driver_guid, p.nickname AS nickname,
+             l.car, l.track, l.track_config, l.ms, l.s1, l.s2, l.s3,
+             l.cuts, l.valid, l.session_date
+      FROM laps l
+      LEFT JOIN players p ON p.guid = l.driver_guid
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY ms ASC
+      ORDER BY l.ms ASC
       LIMIT ?
     `;
     const rows = db.prepare(sql).all(...args);
 
     const laps = rows.map(r => ({
-      id:     r.id,
-      player: r.driver_name,
-      car:    r.car,
-      track:  r.track,
-      layout: r.track_config,
-      ms:     r.ms,
-      s1:     r.s1,
-      s2:     r.s2,
-      s3:     r.s3,
-      cuts:   r.cuts,
-      valid:  r.valid === 1,
-      date:   r.session_date,
+      id:       r.id,
+      player:   r.driver_name,
+      nickname: r.nickname || '',
+      car:      r.car,
+      track:    r.track,
+      layout:   r.track_config,
+      ms:       r.ms,
+      s1:       r.s1,
+      s2:       r.s2,
+      s3:       r.s3,
+      cuts:     r.cuts,
+      valid:    r.valid === 1,
+      date:     r.session_date,
     }));
     json(res, 200, laps);
   } catch (e) { json(res, 500, { error: e.message }); }
@@ -1352,6 +1359,7 @@ function apiPlayersHistory(res) {
       SELECT
         p.guid,
         p.name,
+        p.nickname,
         p.nation,
         p.first_seen,
         p.last_seen,
@@ -1370,6 +1378,7 @@ function apiPlayersHistory(res) {
     const players = rows.map(p => ({
       id:        p.guid,
       name:      p.name,
+      nickname:  p.nickname || '',
       steam:     p.guid,
       nation:    p.nation || '',
       car:       formatName(p.last_car || ''),
@@ -1715,6 +1724,29 @@ async function apiPlayerBan(req, res) {
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'player.ban', guid, body.name || '');
     json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// Admin-set display name for a player — stored alongside the in-game name so
+// lap times (joined by GUID) can be rendered as "Apodo (in-game)" without
+// touching the laps the acServer importer already wrote.
+async function apiPlayerNickname(req, res, guid) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 500, { error: 'Database unavailable' });
+  if (!/^\d{17}$/.test(guid)) return json(res, 400, { error: 'guid must be 17 digits' });
+  try {
+    const body = await readBody(req);
+    // Allow clearing with empty string. Cap to a sensible display length and
+    // strip control characters so the modal can't be used to inject weird
+    // glyphs into the laps table.
+    const raw = typeof body.nickname === 'string' ? body.nickname : '';
+    const nickname = raw.replace(/[\r\n\t\0]/g, ' ').trim().slice(0, 64);
+    const r = db.prepare('UPDATE players SET nickname = ? WHERE guid = ?').run(nickname, guid);
+    if (r.changes === 0) return json(res, 404, { error: 'Player not found' });
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    insertAuditLog(actor, 'player.nickname', guid, nickname);
+    const row = db.prepare('SELECT guid, name, nickname FROM players WHERE guid = ?').get(guid);
+    json(res, 200, { ok: true, player: row });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -3270,6 +3302,8 @@ function handler(req, res) {
     // Player control
     if (urlPath === '/api/players/kick'   && req.method === 'POST') return apiPlayerKick(req, res);
     if (urlPath === '/api/players/ban'    && req.method === 'POST') return apiPlayerBan(req, res);
+    const playerNickMatch = urlPath.match(/^\/api\/players\/(\d{17})\/nickname$/);
+    if (playerNickMatch && req.method === 'PUT') return apiPlayerNickname(req, res, playerNickMatch[1]);
 
     // Whitelist
     if (urlPath === '/api/whitelist'     && req.method === 'GET')  return apiWhitelistGet(res);

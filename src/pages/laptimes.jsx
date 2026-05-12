@@ -26,6 +26,14 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   uEt(() => { setPage(1); }, [trackId, carId, validOnly, dateFrom, dateTo]);
 
   const allPlayers = uMt(() => Array.from(new Set(lapTimes.map(l => l.player))).sort(), [lapTimes]);
+  // Build a single map for nickname lookup so the comparison view, tag chips
+  // and header all use the same "Apodo (in-game)" treatment as the records table.
+  const nickByPlayer = uMt(() => {
+    const m = {};
+    for (const l of lapTimes) { if (l.nickname && !m[l.player]) m[l.player] = l.nickname; }
+    return m;
+  }, [lapTimes]);
+  const labelOf = (p) => nickByPlayer[p] ? `${nickByPlayer[p]} (${p})` : p;
 
   // Only show tracks/cars that have at least one lap time
   const usedTrackIds   = uMt(() => new Set(lapTimes.map(l => l.track)), [lapTimes]);
@@ -183,7 +191,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
                     return (
                       <tr key={r.id}>
                         <td><div className={`player-pos ${globalIndex === 0 ? 'p1' : ''}`}>{globalIndex + 1}</div></td>
-                        <td className="player-name">{r.player}</td>
+                        <td className="player-name">{r.nickname ? `${r.nickname} (${r.player})` : r.player}</td>
                         <td className="muted">{trackName(r.track)}</td>
                         <td className="muted" style={{fontSize: 12}}>{carName(r.car)}</td>
                         <td className="mono" style={{fontWeight: 600}}>{fmtMs(r.ms)}</td>
@@ -226,7 +234,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
                   <button key={p}
                     className={`tag ${selectedPlayers.includes(p) ? 'active' : ''}`}
                     onClick={()=>togglePlayer(p)}>
-                    {p}
+                    {labelOf(p)}
                   </button>
                 ))}
               </div>
@@ -235,6 +243,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
 
           <ComparisonTable
             players={selectedPlayers}
+            labelOf={labelOf}
             tracks={tracks}
             laps={filtered}
             trackId={trackId}
@@ -246,7 +255,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   );
 }
 
-function ComparisonTable({ players, tracks, laps, trackId, t }) {
+function ComparisonTable({ players, labelOf, tracks, laps, trackId, t }) {
   if (players.length < 1) {
     return (
       <div className="card"><div className="empty">{t('times.compare.empty_sel')}</div></div>
@@ -285,7 +294,7 @@ function ComparisonTable({ players, tracks, laps, trackId, t }) {
         <thead>
           <tr>
             <th>{t('times.col.track')}</th>
-            {players.map(p => <th key={p} style={{width: 160}}>{p}</th>)}
+            {players.map(p => <th key={p} style={{width: 160}}>{labelOf ? labelOf(p) : p}</th>)}
           </tr>
         </thead>
         <tbody>

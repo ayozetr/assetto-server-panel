@@ -221,6 +221,19 @@ Add a Steam GUID to `blacklist.txt`.
 
 ---
 
+### `PUT /api/players/:guid/nickname`
+Set or clear the admin-defined nickname for a player. Persisted in the `players.nickname` column; lap times (joined by GUID) pick it up automatically via `/api/results`.
+
+**Auth required:** yes (admin)
+
+**URL:** `:guid` must be a 17-digit Steam GUID.
+
+**Body:** `{ "nickname": "José García" }` — empty string clears.
+
+**Response:** `{ "ok": true, "player": { "guid": "...", "name": "...", "nickname": "..." } }` — `404` if the GUID has no `players` row yet (a player is only inserted when the result importer first sees them).
+
+---
+
 ## Content
 
 ### `GET /api/cars`

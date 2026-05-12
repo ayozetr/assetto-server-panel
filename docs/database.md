@@ -57,7 +57,8 @@ Historical record of every player who has connected to the server.
 | Column | Type | Description |
 |--------|------|-------------|
 | `guid` | TEXT PK | Steam GUID |
-| `name` | TEXT | Display name |
+| `name` | TEXT | In-game display name (set by acServer) |
+| `nickname` | TEXT | Admin-set real name shown alongside the in-game name on the Players and Lap times pages. Empty by default. Added by ALTER migration. |
 | `nation` | TEXT | 3-letter country code |
 | `first_seen` | TEXT | Date of first connection |
 | `last_seen` | TEXT | Date of last connection |

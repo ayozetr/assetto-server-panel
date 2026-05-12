@@ -48,6 +48,24 @@ Every `[CAR_n].MODEL` in `entry_list.ini` has to appear in `[SERVER].CARS`. The 
 
 ---
 
+## "Players Online" is empty even though somebody is connected
+
+The dashboard reads the live driver list from `acServer`'s HTTP API. Current `acServer` builds reply `200 OK` with an empty body on `/api/details`, so the panel falls back to `/JSON|0`. That endpoint still lists the connected drivers (you'll see them in the table) but it does **not** expose lap stats, ping, or Steam GUID — those columns will read `0` / `0ms` until you switch to a binary build whose `/api/details` works.
+
+---
+
+## "Whitelist" / "Ban" buttons stay disabled on a live player
+
+Both endpoints need the player's Steam GUID, which `/JSON|0` does not provide (see the previous entry). The panel recovers GUIDs by exact in-game-name match against the `players` table — populated when the result-file importer reads each session's JSON.
+
+- **Returning player** (already imported once before): GUID is found, buttons are enabled.
+- **First-time player**: no row in `players` yet, so GUID is blank and the buttons stay disabled. After they disconnect and `acServer` writes a result file, the importer creates their row; on their next reconnect the buttons work.
+- **Ambiguous name** (two distinct GUIDs sharing the same in-game name): the match is intentionally suppressed — kicking/banning the wrong account is worse than waiting. Disambiguate from the *Players history* table (each row shows the GUID directly).
+
+`Kick` is unaffected — it uses the car-slot index and works from the first connection.
+
+---
+
 ## Lap times table is empty
 
 AC result files must exist in `AC_SERVER_RESULTS` and follow the expected format:

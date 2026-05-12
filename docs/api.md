@@ -194,6 +194,10 @@ Live player list proxied from the AC HTTP API.
 
 **Auth required:** yes
 
+The endpoint first tries `/api/details` on the AC HTTP API (rich payload — `BestTime`, `LastTime`, `NumLaps`, `Ping`, `Driver.Guid`). Current `acServer` builds reply `200 OK` with an empty body on that path, so the dashboard falls back to `/JSON|0` which still lists the connected drivers but **without** lap stats, ping, or Steam GUID. To keep the admin actions usable in the fallback case, the panel recovers each driver's GUID by an exact in-game-name match against the `players` table — populated by the result-file importer. Ambiguous names (two GUIDs sharing the same in-game name) are intentionally left blank so the *Whitelist* and *Ban* buttons never act on the wrong account; *Kick* is unaffected because it uses the car slot index instead of the GUID.
+
+A side effect of the fallback: a first-time player (no row in `players` yet) appears in the live list with an empty GUID until their first result file is imported. Returning players get their GUID back automatically on the next poll.
+
 ---
 
 ### `GET /api/players/history`

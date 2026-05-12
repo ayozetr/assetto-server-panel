@@ -42,15 +42,58 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
 
   const [activity, setActivity] = useState([]);
   useEffect(() => {
-    fetch('/api/logs?n=100')
-      .then(r => r.json())
-      .then(d => {
-        const notable = (d.lines || []).filter(l =>
-          l.tag !== 'CFG' && (l.lvl !== 'info' || /connected|joined|lap completed|best lap/i.test(l.msg))
-        );
-        setActivity(notable.slice(-8).reverse().slice(0, 5));
-      })
-      .catch(() => {});
+    const NOISE = /^(?:\s*content\/\S+\.(?:ini|kn5|ksanim|wav|fbx|dds)\s+ok\s*$|REQ\b|\{|\}|PAGE:|Serve |TCP packet|RECEIVED \d|Dispatching TCP|GET |POST |HEAD |listening on |plugin lines absent|plugin not configured|protocol version:|socket error:|parse error:)/i;
+    const stripPrefix = (s) => s
+      .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+/i, '')
+      .replace(/^(INFO|WARN|ERROR|DEBUG)\s+/i, '')
+      .replace(/^\[[A-Z_0-9]{2,12}\]\s*/, '');
+    const fmt = (l) => {
+      if (!l || !l.msg) return null;
+      if (l.tag === 'CFG' || l.tag === 'HTTP') return null;
+      if (NOISE.test(l.msg.trim())) return null;
+      if (/\bCAR_INFO\b/.test(l.msg)) return null;
+      const body = stripPrefix(l.msg).trim();
+      let m;
+      if ((m = body.match(/^JOIN\s+(.+?)\s+\([^)]+\)\s+car_id=\d+\s+model=(\S+)/))) {
+        return { ...l, kind: 'join',  text: `${m[1]} se ha unido (${m[2]})` };
+      }
+      if ((m = body.match(/^LEAVE\s+(.+?)\s+car_id=/))) {
+        return { ...l, kind: 'leave', text: `${m[1]} ha salido` };
+      }
+      if ((m = body.match(/^LAP\s+(.+?)\s+([\d.]+)s\s+cuts=(\d+)/))) {
+        const secs  = parseFloat(m[2]);
+        const mins  = Math.floor(secs / 60);
+        const rest  = (secs - mins * 60).toFixed(3).padStart(6, '0');
+        const time  = `${mins}:${rest}`;
+        const cuts  = parseInt(m[3], 10);
+        return { ...l, kind: 'lap', text: `Vuelta ${m[1]} — ${time}${cuts ? ` (cortes: ${cuts})` : ''}` };
+      }
+      if ((m = body.match(/^(?:NEW_SESSION|SESSION_INFO)\s+(.+?)\s+\(([^)]+)\)\s+track=(\S+)/))) {
+        const trackName = m[3].split('/').slice(-1)[0] || m[3];
+        return { ...l, kind: 'session', text: `Sesión ${m[1]} en ${trackName}` };
+      }
+      if (/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i.test(body)) {
+        const who = body.match(/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i)[1];
+        return { ...l, kind: 'warn', text: `Colisión: ${who}` };
+      }
+      if (l.lvl === 'error') return { ...l, kind: 'error', text: body };
+      if (l.lvl === 'warn')  return { ...l, kind: 'warn',  text: body };
+      if (l.lvl === 'ok' && /\b(connected|joined|best lap|validated|success)\b/i.test(body))
+        return { ...l, kind: 'ok', text: body };
+      return null;
+    };
+    const load = () => {
+      fetch('/api/logs?n=200')
+        .then(r => r.json())
+        .then(d => {
+          const items = (d.lines || []).map(fmt).filter(Boolean);
+          setActivity(items.slice(-5).reverse());
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 8000);
+    return () => clearInterval(id);
   }, []);
 
   return (
@@ -230,11 +273,19 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           ) : (
             <div style={{padding: '4px 0'}}>
               {activity.map((it, i) => {
-                const dotColor = it.lvl === 'ok' ? '#16a34a' : it.lvl === 'error' ? 'var(--red)' : it.lvl === 'warn' ? '#f59e0b' : 'var(--text-faint)';
+                const dotColor =
+                  it.kind === 'join'    ? '#16a34a' :
+                  it.kind === 'leave'   ? 'var(--text-faint)' :
+                  it.kind === 'lap'     ? '#2563eb' :
+                  it.kind === 'session' ? '#a855f7' :
+                  it.kind === 'ok'      ? '#16a34a' :
+                  it.kind === 'error'   ? 'var(--red)' :
+                  it.kind === 'warn'    ? '#f59e0b' :
+                                          'var(--text-faint)';
                 return (
                   <div key={it.id} style={{display:'flex', gap: 12, padding: '9px 18px', borderBottom: i < activity.length - 1 ? '1px solid var(--border)' : 'none', alignItems:'center', overflow:'hidden'}}>
                     <span style={{width: 6, height: 6, borderRadius: 50, background: dotColor, flexShrink: 0}}></span>
-                    <span style={{fontSize: 13, flex: 1, minWidth: 0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={it.msg}>{it.msg}</span>
+                    <span style={{fontSize: 13, flex: 1, minWidth: 0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={it.msg}>{it.text || it.msg}</span>
                     {it.time && <span className="muted" style={{fontSize: 11.5, flexShrink: 0}}>{it.time}</span>}
                   </div>
                 );

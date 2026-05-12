@@ -35,6 +35,15 @@ function _logEmit(level, args) {
   const prefix = ctx?.reqId ? `${ts} ${level} [${ctx.reqId}]` : `${ts} ${level}`;
   const stream = (level === 'ERROR' || level === 'WARN') ? console.error : console.log;
   stream(prefix, ...args);
+  // Mirror into logBuffer so the Dashboard activity card sees [UDP] events
+  // and other panel-internal log lines, not just stdout from a spawned
+  // acServer child (which is empty whenever acServer was adopted via pidof).
+  try {
+    if (typeof appendLog === 'function') {
+      const body = args.map(a => typeof a === 'string' ? a : (a && a.stack) || String(a)).join(' ');
+      appendLog(`${prefix} ${body}`);
+    }
+  } catch {}
 }
 const log = {
   info:  (...args) => _logEmit('INFO',  args),

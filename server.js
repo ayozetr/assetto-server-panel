@@ -436,22 +436,24 @@ async function importResultFile(filename) {
         (@driver_name, @driver_guid, @car, @track, @track_config, @ms, @lap_timestamp, @s1, @s2, @s3, @cuts, @valid, @session_date, @source_file)
     `);
 
-    // When the UDP plugin already recorded a lap live, this row exists but
-    // lacks sectors (the UDP event has lap_time + cuts only). Fill them in
-    // from the JSON without otherwise touching the row. Strict guard: only
-    // update when sectors are still zero, so we never overwrite a previous
-    // import's data accidentally.
+    // When the UDP plugin already recorded a lap live, the row exists with
+    // a placeholder s1 = lap_time and s2=s3=0. The JSON has authoritative
+    // sector data (or the same lap_time-in-s1 layout if the track doesn't
+    // emit per-sector splits), so we replace the row's sectors + canonical
+    // lap_timestamp + source_file. Guard by `source_file='udp:live'` so we
+    // only touch rows the UDP listener was the sole writer of — never
+    // clobber a previous JSON import.
     const stmtFillSectors = db.prepare(`
       UPDATE laps
          SET s1 = @s1, s2 = @s2, s3 = @s3,
-             lap_timestamp = CASE WHEN lap_timestamp = 0 THEN @lap_timestamp ELSE lap_timestamp END,
-             source_file = CASE WHEN source_file = 'udp:live' THEN @source_file ELSE source_file END
+             lap_timestamp = @lap_timestamp,
+             source_file = @source_file
        WHERE driver_guid = @driver_guid
          AND ms = @ms
          AND car = @car
          AND track = @track
          AND track_config = @track_config
-         AND s1 = 0 AND s2 = 0 AND s3 = 0
+         AND source_file = 'udp:live'
     `);
 
     const stmtPlayer = db.prepare(`
@@ -2376,11 +2378,15 @@ function udpParseEvent(buf) {
         const lapMsSinceStart = udpState.session.startedAt
           ? Math.max(0, Date.now() - udpState.session.startedAt)
           : 0;
+        // Seed s1 with the full lap_time so the row reads "as if" it were a
+        // single-sector lap (which is what this track's JSON ends up writing
+        // too). The post-session JSON backfill below will replace these with
+        // real s1/s2/s3 on tracks that emit per-sector splits.
         const ins = db.prepare(`
           INSERT OR IGNORE INTO laps
             (driver_name, driver_guid, car, track, track_config, ms, lap_timestamp,
              s1, s2, s3, cuts, valid, session_date, source_file)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, 'udp:live')
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, 'udp:live')
         `).run(
           car.name,
           car.guid,
@@ -2389,6 +2395,7 @@ function udpParseEvent(buf) {
           udpState.session.config || '',
           lapTime,
           lapMsSinceStart,
+          lapTime,   // s1 placeholder = lap_time (overwritten by JSON if it has real sectors)
           cuts,
           cuts === 0 ? 1 : 0,
           date,

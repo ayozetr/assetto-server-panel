@@ -70,7 +70,10 @@ Historical record of every player who has connected to the server.
 
 ### `laps`
 
-Every lap time imported from AC result files.
+Every lap time. Laps are ingested from two sources and merged via a content-based dedup index:
+
+1. **UDP plugin listener** (live). Each `ACSP_LAP_COMPLETED` event from acServer becomes a row with `source_file = 'udp:live'` and `s1 = s2 = s3 = 0` (the UDP protocol carries lap_time + cuts but not sectors).
+2. **Result-file importer** (post-session). When acServer writes its session JSON, `importResultFile` reads each lap. New laps are inserted normally; laps that the UDP listener already wrote are detected by the dedup index and instead get an UPDATE that fills in the sectors and replaces `source_file = 'udp:live'` with the actual filename — so the row ends up identical to one written purely from the JSON.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -81,14 +84,16 @@ Every lap time imported from AC result files.
 | `track` | TEXT | Track ID |
 | `track_config` | TEXT | Layout name (empty for single-layout) |
 | `ms` | INTEGER | Lap time in milliseconds |
-| `s1`, `s2`, `s3` | INTEGER | Sector times in milliseconds |
+| `s1`, `s2`, `s3` | INTEGER | Sector times in milliseconds (0 until the JSON importer fills them in for UDP-captured laps) |
 | `cuts` | INTEGER | Number of track cuts |
 | `valid` | INTEGER | `1` = clean lap, `0` = invalid |
-| `lap_timestamp` | INTEGER | Timestamp from the result file |
+| `lap_timestamp` | INTEGER | Millis-since-session-start. UDP captures roughly the same value as the JSON; the JSON importer overwrites it when it has a more authoritative figure. |
 | `session_date` | TEXT | Date of the session |
-| `source_file` | TEXT | Result filename it came from |
+| `source_file` | TEXT | Origin: `udp:live` while only the UDP listener has seen the lap, otherwise the result JSON filename |
 
-A unique constraint on `(driver_guid, car, track, track_config, lap_timestamp, source_file)` prevents duplicate imports.
+**Dedup**: a unique index `laps_dedup_runtime` on `(driver_guid, ms, car, track, track_config)` prevents both sources from creating two rows for the same lap. `INSERT OR IGNORE` is the gate for both code paths; the JSON importer additionally runs a fill-sectors UPDATE when the conflicting row has zero sectors so professional-grade sector data lands as soon as the JSON arrives. The original table-level UNIQUE on `(driver_guid, car, track, track_config, lap_timestamp, source_file)` is intentionally wider and stays as a no-op redundancy.
+
+The `total_laps` counter on the `players` table is only incremented when the INSERT actually adds a row (i.e. the lap is genuinely new), so a UDP-captured lap that later arrives in the JSON doesn't double-count.
 
 ---
 

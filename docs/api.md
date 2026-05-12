@@ -195,13 +195,14 @@ Append a single Steam GUID to the whitelist (used by the per-player button on th
 ## Players
 
 ### `GET /api/players`
-Live player list proxied from the AC HTTP API.
+Live player list — drivers currently connected to the AC server.
 
 **Auth required:** yes
 
-The endpoint first tries `/api/details` on the AC HTTP API (rich payload — `BestTime`, `LastTime`, `NumLaps`, `Ping`, `Driver.Guid`). Current `acServer` builds reply `200 OK` with an empty body on that path, so the dashboard falls back to `/JSON|0` which still lists the connected drivers but **without** lap stats, ping, or Steam GUID. To keep the admin actions usable in the fallback case, the panel recovers each driver's GUID by an exact in-game-name match against the `players` table — populated by the result-file importer. Ambiguous names (two GUIDs sharing the same in-game name) are intentionally left blank so the *Whitelist* and *Ban* buttons never act on the wrong account; *Kick* is unaffected because it uses the car slot index instead of the GUID.
-
-A side effect of the fallback: a first-time player (no row in `players` yet) appears in the live list with an empty GUID until their first result file is imported. Returning players get their GUID back automatically on the next poll.
+Source priority:
+1. **UDP plugin listener** (primary). When the dashboard has live ACSP events flowing, the connected-car map carries every detail straight from acServer's `NEW_CONNECTION` + `LAP_COMPLETED` packets: name, Steam GUID, car model, best lap, last lap and lap count. This makes Whitelist/Ban work from the first connection and best/last times appear live without waiting for the post-session JSON.
+2. **`/api/details`** (HTTP fallback). Older acServer builds expose rich per-car data here; current Go builds return `200 OK` with an empty body so this branch usually goes unused.
+3. **`/JSON|0`** (last resort). Lists connected drivers' names + models. Best/last/laps/ping all read `0`. To still allow Whitelist/Ban, the GUID is recovered by exact name match against the `players` table (populated by the importer + UDP listener); ambiguous-name matches are skipped deliberately. Kick keeps working in any tier because it uses the car-slot index.
 
 ---
 

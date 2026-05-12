@@ -310,6 +310,13 @@ try {
   try { db.exec(`ALTER TABLE audit_log ADD COLUMN row_hash      TEXT    NOT NULL DEFAULT ''`); } catch {}
   try { db.exec(`ALTER TABLE audit_log ADD COLUMN chain_version INTEGER NOT NULL DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE players   ADD COLUMN nickname      TEXT    NOT NULL DEFAULT ''`); } catch {}
+  // Lap-dedup index for cross-source ingestion. The UDP plugin and the
+  // result-file importer both write into `laps`; this unique index keys a
+  // lap by content (driver+time+car+track) so neither source can create
+  // a duplicate row regardless of the millisecond it captured the event.
+  // The original UNIQUE(...) constraint on the table is wider so it stays
+  // harmless; this index is the one we rely on at runtime.
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS laps_dedup_runtime ON laps(driver_guid, ms, car, track, track_config)`); } catch (e) { console.error('  laps_dedup_runtime migration:', e.message); }
 
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
@@ -429,6 +436,24 @@ async function importResultFile(filename) {
         (@driver_name, @driver_guid, @car, @track, @track_config, @ms, @lap_timestamp, @s1, @s2, @s3, @cuts, @valid, @session_date, @source_file)
     `);
 
+    // When the UDP plugin already recorded a lap live, this row exists but
+    // lacks sectors (the UDP event has lap_time + cuts only). Fill them in
+    // from the JSON without otherwise touching the row. Strict guard: only
+    // update when sectors are still zero, so we never overwrite a previous
+    // import's data accidentally.
+    const stmtFillSectors = db.prepare(`
+      UPDATE laps
+         SET s1 = @s1, s2 = @s2, s3 = @s3,
+             lap_timestamp = CASE WHEN lap_timestamp = 0 THEN @lap_timestamp ELSE lap_timestamp END,
+             source_file = CASE WHEN source_file = 'udp:live' THEN @source_file ELSE source_file END
+       WHERE driver_guid = @driver_guid
+         AND ms = @ms
+         AND car = @car
+         AND track = @track
+         AND track_config = @track_config
+         AND s1 = 0 AND s2 = 0 AND s3 = 0
+    `);
+
     const stmtPlayer = db.prepare(`
       INSERT INTO players (guid, name, nation, first_seen, last_seen, total_laps, last_car, last_track)
         VALUES (@guid, @name, @nation, @date, @date, @cnt, @car, @track)
@@ -455,7 +480,7 @@ async function importResultFile(filename) {
         const s2 = (sectors[1] > 0 && sectors[1] < 2_000_000) ? sectors[1] : 0;
         const s3 = (sectors[2] > 0 && sectors[2] < 2_000_000) ? sectors[2] : 0;
 
-        const r = stmtLap.run({
+        const payload = {
           driver_name:   l.DriverName,
           driver_guid:   l.DriverGuid,
           car:           l.CarModel || '',
@@ -468,11 +493,17 @@ async function importResultFile(filename) {
           valid:         (l.Cuts || 0) === 0 ? 1 : 0,
           session_date:  date,
           source_file:   filename,
-        });
+        };
+        const r = stmtLap.run(payload);
 
         if (r.changes > 0) {
           if (!lapsByPlayer[l.DriverGuid]) lapsByPlayer[l.DriverGuid] = { cnt: 0, name: l.DriverName, car: l.CarModel || '' };
           lapsByPlayer[l.DriverGuid].cnt++;
+        } else {
+          // Row already exists (UDP plugin captured it live). Fill in sectors
+          // and the canonical lap_timestamp + source_file from the JSON if
+          // the existing row only had the live snapshot.
+          stmtFillSectors.run(payload);
         }
       }
 
@@ -1304,6 +1335,14 @@ function acFetchJson(path) {
 }
 
 async function apiPlayers(res) {
+  // Primary source: the UDP plugin listener, when it has live driver data.
+  // It carries Steam GUIDs, model + best/last lap straight from acServer's
+  // NEW_CONNECTION + LAP_COMPLETED events, so the Whitelist/Ban buttons
+  // work from the first lap and best/last times populate live without
+  // waiting for the post-session JSON.
+  const live = udpGetLivePlayers();
+  if (live && live.length) return json(res, 200, live);
+
   // Older acServer builds return a rich payload with lap stats, ping and GUID
   // on /api/details. Current builds reply 200 with an empty body — so when
   // /api/details yields nothing usable, fall back to /JSON|0 which still lists
@@ -2030,6 +2069,18 @@ async function apiSessionApply(req, res) {
       s['RACE_GAS_PENALTY_DISABLED'] = body.penalties ? '0' : '1';
     }
 
+    // Auto-enable the UDP plugin if the admin hasn't done it manually. This
+    // is the price-of-entry for live lap capture; one-time write that costs
+    // nothing if the panel ends up uninstalled later (the lines just sit
+    // there, ignored by acServer when port=0). Defaults: 12000 (commands
+    // acServer ← plugin) / 127.0.0.1:12001 (events acServer → plugin).
+    const existingLocalPort = parseInt(s['UDP_PLUGIN_LOCAL_PORT'], 10) || 0;
+    const existingAddress   = (s['UDP_PLUGIN_ADDRESS'] || '').trim();
+    if (!existingLocalPort || !existingAddress) {
+      if (!existingLocalPort) s['UDP_PLUGIN_LOCAL_PORT'] = '12000';
+      if (!existingAddress)   s['UDP_PLUGIN_ADDRESS']   = '127.0.0.1:12001';
+    }
+
     await rotateConfigBackup();
     let patched = patchINI(raw, ini);
     // Physically drop disabled sessions from the INI text. patchINI only
@@ -2039,6 +2090,12 @@ async function apiSessionApply(req, res) {
       for (const name of sectionsToRemove) patched = removeIniSection(patched, name);
     }
     await fsp.writeFile(AC_CFG_FILE, patched, 'utf8');
+
+    // If the listener wasn't running yet (first Apply after install) it
+    // boots here. The acServer restart below picks up the new INI lines
+    // and starts pushing events at us. Subsequent restarts won't double-
+    // bind because udpStartListener no-ops when state.socket is set.
+    udpStartListener(s['UDP_PLUGIN_ADDRESS'], parseInt(s['UDP_PLUGIN_LOCAL_PORT'], 10) || 0);
 
     // When the slot list changes, entry_list.ini must be regenerated to match.
     // acServer requires every [CAR_n].MODEL to appear in [SERVER].CARS and
@@ -2069,6 +2126,330 @@ async function apiSessionApply(req, res) {
     insertAuditLog(actor, 'session.apply', body.trackId || '', detail);
     json(res, 200, { ok: true, restarted, restartError });
   } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// ── UDP plugin (acServer live events) ────────────────────────────────────────
+// acServer pushes a stream of live events over UDP — every connection, lap
+// completion and session change. We bind a listener, parse the binary frames
+// and persist laps the moment they happen (no waiting for session-end JSON
+// dumps). The car_id → driver map also feeds the live "Players Online" table
+// so the dashboard knows Steam GUID, model and best/last lap for every
+// connected slot. Cross-source dedup lives at the schema level
+// (laps_dedup_runtime UNIQUE INDEX on driver_guid+ms+car+track+track_config).
+//
+// Wire convention (per kunos UDP plugin spec):
+//   UDP_PLUGIN_LOCAL_PORT     — acServer's command-listen port; plugin SENDS here
+//   UDP_PLUGIN_ADDRESS=host:p — acServer's event-push target; plugin BINDS here
+const dgram = require('dgram');
+
+const ACSP = {
+  // Inbound events from acServer
+  NEW_SESSION:       50,
+  NEW_CONNECTION:    51,
+  CONNECTION_CLOSED: 52,
+  CAR_UPDATE:        53,
+  CAR_INFO:          54,
+  END_SESSION:       55,
+  VERSION:           56,
+  CHAT:              57,
+  CLIENT_LOADED:     58,
+  SESSION_INFO:      59,
+  ERROR:             60,
+  LAP_COMPLETED:     73,
+  CLIENT_EVENT:      130,
+  // Outbound commands to acServer
+  REALTIMEPOS_INTERVAL: 200,
+  GET_CAR_INFO:         201,
+  SEND_CHAT:            202,
+  BROADCAST_CHAT:       203,
+  GET_SESSION_INFO:     204,
+  SET_SESSION_INFO:     205,
+  KICK_USER:            206,
+  NEXT_SESSION:         207,
+  RESTART_SESSION:      208,
+  ADMIN_COMMAND:        209,
+};
+
+// Two string flavours in the protocol:
+//   utf32-le → uint8 char-count + char-count*4 bytes (driver name/team/GUID)
+//   utf8     → uint8 byte-count + byte-count bytes (track, model, skin, weather)
+function readUtf8Str(buf, off) {
+  const len = buf[off];
+  return { value: buf.slice(off + 1, off + 1 + len).toString('utf8'), next: off + 1 + len };
+}
+function readUtf32Str(buf, off) {
+  const len = buf[off];
+  let s = '';
+  for (let i = 0; i < len; i++) {
+    try { s += String.fromCodePoint(buf.readUInt32LE(off + 1 + i * 4)); } catch {}
+  }
+  return { value: s, next: off + 1 + len * 4 };
+}
+
+const udpState = {
+  socket: null,
+  remoteHost: '127.0.0.1',
+  remotePort: 0,
+  cars: new Map(), // car_id → { name, team, guid, model, skin, joinedAt, bestLap, lastLap, lapsCount }
+  session: { type: null, name: null, track: null, config: null, weather: null, startedAt: 0, dateStr: '' },
+  startedAt: 0,
+  lastPacketAt: 0,
+};
+
+function udpTypeName(t) {
+  return ({1:'PRACTICE',2:'QUALIFY',3:'RACE',4:'HOTLAP',5:'TIME_ATTACK',6:'DRIFT',7:'DRAG'})[t] || `TYPE_${t}`;
+}
+
+function udpStartListener(listenHostPort, sendCommandsToPort) {
+  if (!sendCommandsToPort || !listenHostPort) {
+    log.info('[UDP] plugin not configured (UDP_PLUGIN_LOCAL_PORT=0 or empty UDP_PLUGIN_ADDRESS) — live lap capture disabled');
+    return;
+  }
+  if (udpState.socket) { log.warn('[UDP] listener already running'); return; }
+  const [host, portStr] = String(listenHostPort).split(':');
+  const listenPort = parseInt(portStr, 10);
+  const listenHost = host || '127.0.0.1';
+  if (!listenPort) return log.warn('[UDP] invalid UDP_PLUGIN_ADDRESS:', listenHostPort);
+
+  udpState.remoteHost = '127.0.0.1';
+  udpState.remotePort = sendCommandsToPort;
+
+  const sock = dgram.createSocket('udp4');
+  sock.on('error', e => log.error('[UDP] socket error:', e.message));
+  sock.on('message', (msg) => {
+    udpState.lastPacketAt = Date.now();
+    try { udpParseEvent(msg); }
+    catch (e) { log.warn('[UDP] parse error:', e.message, 'first_byte=' + (msg[0] ?? 'nil') + ' length=' + msg.length); }
+  });
+  sock.bind(listenPort, listenHost, () => {
+    udpState.socket = sock;
+    udpState.startedAt = Date.now();
+    log.info(`[UDP] listening on ${listenHost}:${listenPort}, commands → 127.0.0.1:${sendCommandsToPort}`);
+    // Pull a snapshot in case acServer was already running when we booted.
+    udpSendCommand(ACSP.GET_SESSION_INFO, Buffer.from([0xFF, 0xFF]));
+  });
+}
+
+function udpSendCommand(cmd, payload = Buffer.alloc(0)) {
+  if (!udpState.socket || !udpState.remotePort) return false;
+  const buf = Buffer.concat([Buffer.from([cmd]), payload]);
+  udpState.socket.send(buf, udpState.remotePort, udpState.remoteHost);
+  return true;
+}
+
+function udpParseEvent(buf) {
+  const ev = buf[0];
+  let off = 1;
+  switch (ev) {
+    case ACSP.VERSION:
+      log.info('[UDP] protocol version:', buf[off]);
+      break;
+
+    case ACSP.NEW_SESSION:
+    case ACSP.SESSION_INFO: {
+      // Same payload shape for both events.
+      const protoVersion = buf[off++]; void protoVersion;
+      const sessIndex    = buf[off++]; void sessIndex;
+      const currentIndex = buf[off++]; void currentIndex;
+      const sessCount    = buf[off++]; void sessCount;
+      const serverName   = readUtf32Str(buf, off); off = serverName.next;
+      const track        = readUtf8Str(buf, off);  off = track.next;
+      const trackConfig  = readUtf8Str(buf, off);  off = trackConfig.next;
+      const sessName     = readUtf8Str(buf, off);  off = sessName.next;
+      const type         = buf[off++];
+      const time         = buf.readUInt16LE(off);  off += 2;
+      const laps         = buf.readUInt16LE(off);  off += 2;
+      const waitTime     = buf.readUInt16LE(off);  off += 2;
+      const ambientTemp  = buf[off++];
+      const roadTemp     = buf[off++];
+      const weather      = readUtf8Str(buf, off);  off = weather.next;
+      const elapsedMs    = buf.readInt32LE(off);   off += 4;
+
+      udpState.session = {
+        type, time, laps, waitTime, ambientTemp, roadTemp,
+        track:     track.value,
+        config:    trackConfig.value,
+        name:      sessName.value,
+        weather:   weather.value,
+        startedAt: Date.now() - Math.max(0, elapsedMs),
+        dateStr:   new Date().toISOString().slice(0, 10),
+      };
+      log.info(`[UDP] ${ev === ACSP.NEW_SESSION ? 'NEW_SESSION' : 'SESSION_INFO'} ${sessName.value} (${udpTypeName(type)}) track=${track.value}${trackConfig.value ? '/' + trackConfig.value : ''}`);
+      // Reset per-session counters but keep the connected-cars map intact.
+      for (const c of udpState.cars.values()) { c.bestLap = 0; c.lastLap = 0; c.lapsCount = 0; }
+      break;
+    }
+
+    case ACSP.NEW_CONNECTION:
+    case ACSP.CONNECTION_CLOSED: {
+      const name  = readUtf32Str(buf, off); off = name.next;
+      const team  = readUtf32Str(buf, off); off = team.next;
+      const guid  = readUtf32Str(buf, off); off = guid.next;
+      const carId = buf[off++];
+      const model = readUtf8Str(buf, off);  off = model.next;
+      const skin  = readUtf8Str(buf, off);  off = skin.next;
+      if (ev === ACSP.NEW_CONNECTION) {
+        udpState.cars.set(carId, {
+          carId,
+          name:    name.value,
+          team:    team.value,
+          guid:    guid.value,
+          model:   model.value,
+          skin:    skin.value,
+          joinedAt: Date.now(),
+          bestLap: 0, lastLap: 0, lapsCount: 0,
+        });
+        log.info(`[UDP] JOIN ${name.value} (${guid.value}) car_id=${carId} model=${model.value}`);
+        // Upsert the players row immediately so Whitelist/Ban buttons light up
+        // on the first connection (the JSON importer only fires at session
+        // end, which can be hours later).
+        try {
+          if (db && /^\d{17}$/.test(guid.value)) {
+            const date = udpState.session.dateStr || new Date().toISOString().slice(0, 10);
+            db.prepare(`
+              INSERT OR IGNORE INTO players (guid, name, nation, first_seen, last_seen, total_laps, last_car, last_track)
+              VALUES (?, ?, '', ?, ?, 0, ?, ?)
+            `).run(guid.value, name.value, date, date, model.value, udpState.session.track || '');
+            db.prepare(`
+              UPDATE players SET name = ?, last_seen = ?, last_car = ?, last_track = ?
+              WHERE guid = ?
+            `).run(name.value, date, model.value, udpState.session.track || '', guid.value);
+          }
+        } catch (e) { log.warn('[UDP] player upsert failed:', e.message); }
+      } else {
+        log.info(`[UDP] LEAVE ${name.value} car_id=${carId}`);
+        udpState.cars.delete(carId);
+      }
+      break;
+    }
+
+    case ACSP.LAP_COMPLETED: {
+      const carId     = buf[off++];
+      const lapTime   = buf.readUInt32LE(off); off += 4;
+      const cuts      = buf[off++];
+      const carsCount = buf[off++];
+      const leaderboard = [];
+      for (let i = 0; i < carsCount; i++) {
+        leaderboard.push({
+          carId:     buf[off],
+          lapTime:   buf.readUInt32LE(off + 1),
+          lapsCount: buf.readUInt16LE(off + 5),
+          completed: buf[off + 7],
+        });
+        off += 8;
+      }
+      const gripLevel = buf.readFloatLE(off); off += 4;
+      void gripLevel;
+
+      const car = udpState.cars.get(carId);
+      if (!car) {
+        log.warn(`[UDP] LAP_COMPLETED for unknown car_id=${carId} — ignoring`);
+        break;
+      }
+      car.lastLap = lapTime;
+      const myEntry = leaderboard.find(x => x.carId === carId);
+      if (myEntry) car.lapsCount = myEntry.lapsCount;
+      if (!car.bestLap || lapTime < car.bestLap) car.bestLap = lapTime;
+
+      log.info(`[UDP] LAP ${car.name} ${(lapTime/1000).toFixed(3)}s cuts=${cuts}`);
+
+      if (!db) break;
+      if (lapTime <= 0 || lapTime >= 999_000_000) break;
+      if (!/^\d{17}$/.test(car.guid)) break;
+
+      try {
+        const date = udpState.session.dateStr || new Date().toISOString().slice(0, 10);
+        const lapMsSinceStart = udpState.session.startedAt
+          ? Math.max(0, Date.now() - udpState.session.startedAt)
+          : 0;
+        const ins = db.prepare(`
+          INSERT OR IGNORE INTO laps
+            (driver_name, driver_guid, car, track, track_config, ms, lap_timestamp,
+             s1, s2, s3, cuts, valid, session_date, source_file)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, 'udp:live')
+        `).run(
+          car.name,
+          car.guid,
+          car.model,
+          udpState.session.track  || '',
+          udpState.session.config || '',
+          lapTime,
+          lapMsSinceStart,
+          cuts,
+          cuts === 0 ? 1 : 0,
+          date,
+        );
+        // Only bump player totals when the lap was actually new (the dedup
+        // index rejects repeats; we don't double-count those).
+        if (ins.changes > 0 && cuts === 0) {
+          db.prepare(`
+            UPDATE players SET total_laps = total_laps + 1, last_seen = ?, last_car = ?, last_track = ?
+            WHERE guid = ?
+          `).run(date, car.model, udpState.session.track || '', car.guid);
+        }
+      } catch (e) { log.warn('[UDP] lap insert failed:', e.message); }
+      break;
+    }
+
+    case ACSP.CAR_INFO: {
+      const carId = buf[off++];
+      const isConnected = !!buf[off++];
+      const model = readUtf8Str(buf, off);  off = model.next;
+      const skin  = readUtf8Str(buf, off);  off = skin.next;
+      const name  = readUtf32Str(buf, off); off = name.next;
+      const team  = readUtf32Str(buf, off); off = team.next;
+      const guid  = readUtf32Str(buf, off); off = guid.next;
+      if (isConnected) {
+        const existing = udpState.cars.get(carId) || {};
+        udpState.cars.set(carId, {
+          carId,
+          name:    name.value, team: team.value, guid: guid.value,
+          model:   model.value, skin: skin.value,
+          joinedAt: existing.joinedAt || Date.now(),
+          bestLap:  existing.bestLap || 0,
+          lastLap:  existing.lastLap || 0,
+          lapsCount: existing.lapsCount || 0,
+        });
+      }
+      break;
+    }
+
+    case ACSP.CHAT:
+    case ACSP.CLIENT_LOADED:
+    case ACSP.CLIENT_EVENT:
+    case ACSP.END_SESSION:
+    case ACSP.ERROR:
+    case ACSP.CAR_UPDATE:
+      // Acknowledged. Not on the critical path for lap persistence.
+      break;
+
+    default:
+      log.warn('[UDP] unhandled event type:', ev, 'length:', buf.length);
+  }
+}
+
+// Live-driver snapshot for apiPlayers. Returns null if the listener has no
+// data so the caller falls back to /api/details / /JSON|0.
+function udpGetLivePlayers() {
+  if (!udpState.cars.size) return null;
+  return Array.from(udpState.cars.values()).map(c => ({
+    id:     c.carId,
+    name:   c.name,
+    steam:  c.guid,
+    nation: '',
+    carId:  c.model,
+    car:    formatName(c.model),
+    bestMs: c.bestLap || 0,
+    lastMs: c.lastLap || 0,
+    laps:   c.lapsCount || 0,
+    ping:   0,
+  }));
+}
+
+// Public helper: tell acServer to advance to the next session. Returns true
+// if the command was sent (the server's response goes back as NEW_SESSION).
+function udpNextSession() {
+  return udpSendCommand(ACSP.NEXT_SESSION);
 }
 
 // ── Server control ────────────────────────────────────────────────────────────
@@ -3541,6 +3922,21 @@ importAllResults();
 startResultsWatcher();
 loadLogFileIntoBuffer();
 cleanupOldChunks();
+
+// Boot the UDP plugin listener if server_cfg.ini already has it enabled. If
+// the admin hasn't applied a session yet, the auto-config in apiSessionApply
+// will fill the lines on the first Apply and the listener kicks in after the
+// subsequent acServer restart.
+(function bootUdpListener() {
+  try {
+    const ini = parseINI(fs.readFileSync(AC_CFG_FILE, 'utf8'));
+    const s = ini['SERVER'] || {};
+    const localPort = parseInt(s['UDP_PLUGIN_LOCAL_PORT'], 10) || 0;
+    const address   = (s['UDP_PLUGIN_ADDRESS'] || '').trim();
+    if (localPort > 0 && address) udpStartListener(address, localPort);
+    else log.info('[UDP] plugin lines absent in server_cfg.ini — will be auto-configured on next session apply');
+  } catch (e) { log.warn('[UDP] could not read server_cfg.ini to boot listener:', e.message); }
+})();
 setInterval(cleanupOldChunks, 60 * 60 * 1000); // sweep abandoned chunk dirs every hour
 
 // Sweeper status counters surfaced via /api/admin/stats so ops can see whether

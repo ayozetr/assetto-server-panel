@@ -2435,17 +2435,23 @@ function udpParseEvent(buf) {
     }
 
     case ACSP.CAR_INFO: {
-      // TEMP debug — dump full hex of every CAR_INFO so we can compare the
-      // self-healing response (where I decoded the layout) against the
-      // bootstrap GET_CAR_INFO responses (where the parser still fails).
-      log.info(`[UDP-DBG-CARINFO] len=${buf.length} hex=${buf.toString('hex')}`);
+      // Verified against real captures of this Go acServer build:
+      //   ev (1) → car_id (1) → isConnected (1) → model utf32 → skin utf32
+      // For disconnected slots the packet ENDS at skin. For connected slots
+      // it continues with name utf32 → an empty utf32 separator (likely
+      // "driver_team" or a guids-list prefix) → guid utf32.
       const carId = buf[off++];
       const isConnected = !!buf[off++];
       const model = readUtf32Str(buf, off); off = model.next;
       const skin  = readUtf32Str(buf, off); off = skin.next;
+      if (!isConnected) break; // empty slot — packet ends here
       const name  = readUtf32Str(buf, off); off = name.next;
+      // Skip the empty utf32 string acServer puts between name and guid on
+      // this build. Its semantic is unclear (driver_team? guids list?) but
+      // it's always zero-length in observed traffic so the safe parse is to
+      // consume one length byte and move on.
+      const _team = readUtf32Str(buf, off); off = _team.next; void _team;
       const guid  = readUtf32Str(buf, off); off = guid.next;
-      if (!isConnected) break;
       // Sanity-check the guid before touching state — a parser drift would
       // otherwise replace a known JOIN entry with garbage.
       if (!/^\d{17}$/.test(guid.value)) {

@@ -6,6 +6,44 @@
 const { useState: useStateT, useMemo: useMemoT, useEffect: useEffectT, useRef: useRefT } = React;
 const I3T = window.AppIcons;
 
+// Small <img> wrapper that shows a red spinner while the browser is fetching
+// the image and fades the actual image in once `onLoad` fires. Heavy mod
+// track previews used to paint in visible chunks; this gives clean rendering.
+// The state resets on every src change so reopening the modal on a different
+// layout shows the spinner again until the new image lands.
+function LoadingImg({ src, alt, style, fallback = null }) {
+  const [loaded, setLoaded] = useStateT(false);
+  const [failed, setFailed] = useStateT(false);
+  useEffectT(() => { setLoaded(false); setFailed(false); }, [src]);
+  if (!src || failed) return fallback;
+  return (
+    <div style={{position:'relative', width:'100%', height:'100%', overflow:'hidden'}}>
+      {!loaded && (
+        <div style={{
+          position:'absolute', inset:0, display:'flex', alignItems:'center',
+          justifyContent:'center', background:'var(--bg-3)',
+        }}>
+          <div style={{
+            width:18, height:18, borderRadius:'50%',
+            border:'2px solid var(--border)', borderTopColor:'var(--red)',
+            animation:'spin 0.8s linear infinite',
+          }}/>
+        </div>
+      )}
+      <img
+        src={src} alt={alt}
+        style={{
+          width:'100%', height:'100%', objectFit:'cover', display:'block',
+          opacity: loaded ? 1 : 0, transition:'opacity 180ms ease-out',
+          ...style,
+        }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
 // ── Track modal (multi-layout tracks) ─────────────────────────────────────────
 function TrackModal({ track, sessionCfg, setSessionCfg, onClose, t }) {
   const isSelected    = sessionCfg.trackId === track.id;
@@ -56,13 +94,7 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose, t }) {
           {/* Left: track preview + layout thumbnails */}
           <div style={{padding:18, borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:12}}>
             <div style={{borderRadius:6, overflow:'hidden', background:'var(--bg-3)', height:160, flexShrink:0}}>
-              <img
-                key={thumbSrc}
-                src={thumbSrc}
-                alt={name}
-                style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}}
-                onError={e => { e.target.style.display='none'; }}
-              />
+              <LoadingImg src={thumbSrc} alt={name} />
             </div>
 
             {hasLayouts && (
@@ -90,12 +122,7 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose, t }) {
                           transition:'border-color 120ms',
                         }}
                       >
-                        <img
-                          src={lThumb}
-                          alt={l}
-                          style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}}
-                          onError={e => { e.target.style.display='none'; }}
-                        />
+                        <LoadingImg src={lThumb} alt={l} />
                       </button>
                     );
                   })}

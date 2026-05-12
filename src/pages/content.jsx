@@ -5,6 +5,41 @@
 const { useState: useStateB, useMemo: useMemoB, useEffect: useEffectB, useRef: useRefB } = React;
 const I3 = window.AppIcons;
 
+// Spinner-overlay → fade-in <img> wrapper. State resets on src change so the
+// skin selector inside the modal re-spins for every new preview.
+function LoadingImg({ src, alt, style, fallback = null }) {
+  const [loaded, setLoaded] = useStateB(false);
+  const [failed, setFailed] = useStateB(false);
+  useEffectB(() => { setLoaded(false); setFailed(false); }, [src]);
+  if (!src || failed) return fallback;
+  return (
+    <div style={{position:'relative', width:'100%', height:'100%', overflow:'hidden'}}>
+      {!loaded && (
+        <div style={{
+          position:'absolute', inset:0, display:'flex', alignItems:'center',
+          justifyContent:'center', background:'var(--bg-3)',
+        }}>
+          <div style={{
+            width:18, height:18, borderRadius:'50%',
+            border:'2px solid var(--border)', borderTopColor:'var(--red)',
+            animation:'spin 0.8s linear infinite',
+          }}/>
+        </div>
+      )}
+      <img
+        src={src} alt={alt}
+        style={{
+          width:'100%', height:'100%', objectFit:'cover', display:'block',
+          opacity: loaded ? 1 : 0, transition:'opacity 180ms ease-out',
+          ...style,
+        }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
 // ── Car modal ─────────────────────────────────────────────────────────────────
 function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
   // Preselect the skin the admin previously chose for this car (if any) so
@@ -60,12 +95,7 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
 
             {/* Main preview */}
             <div style={{borderRadius: 6, overflow:'hidden', background:'var(--bg-3)', height: 168, flexShrink: 0}}>
-              <img
-                src={imgSrc}
-                alt={hasSkins ? car.skins[skinIdx] : car.name}
-                style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}}
-                onError={e => { e.target.style.display='none'; }}
-              />
+              <LoadingImg src={imgSrc} alt={hasSkins ? car.skins[skinIdx] : car.name} />
             </div>
 
             {/* Skin indicator */}
@@ -92,11 +122,9 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
                       transition: 'border-color 120ms',
                     }}
                   >
-                    <img
+                    <LoadingImg
                       src={`/api/content/cars/${encodeURIComponent(car.id)}/skins/${encodeURIComponent(skin)}/preview`}
                       alt={skin}
-                      style={{width:'100%', height:'100%', objectFit:'cover', display:'block'}}
-                      onError={e => { e.target.style.display='none'; }}
                     />
                   </button>
                 ))}

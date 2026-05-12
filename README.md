@@ -23,7 +23,7 @@ A full web interface to manage your Assetto Corsa server without touching the te
 Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events.
 
 ### 🏎️ Player management
-Live player table with car, lap count, best/last time and country flag. Kick and ban directly from the panel. Full history of every player who has ever joined the server. **Per-player admin-set nicknames** — pencil button in the history table opens a modal to attach a real name (e.g. "José García") to an in-game alias ("SampleDriver"); the panel then renders rows as "Apodo (in-game)" everywhere, including historic lap times.
+Live player table with car, lap count, best/last time and country flag. Kick and ban directly from the panel. Full history of every player who has ever joined the server. **Per-player admin-set nicknames** — pencil button in the history table opens a modal to attach a real name to an in-game alias; the panel then renders rows as "Nickname (in-game)" everywhere, including historic lap times.
 
 ### ⏱️ Lap times database
 Every lap time stored in SQLite automatically. **Live ingest via UDP plugin** — laps land in the database within milliseconds of crossing the finish line, no waiting for the session-end JSON dump. The panel auto-configures `UDP_PLUGIN_LOCAL_PORT` and `UDP_PLUGIN_ADDRESS` in `server_cfg.ini` on the first session apply (zero manual setup). Cross-source dedup via a content-based UNIQUE INDEX prevents the post-session JSON importer from duplicating laps the UDP listener already captured; the JSON instead fills in sector splits on those rows.

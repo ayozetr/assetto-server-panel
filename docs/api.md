@@ -241,7 +241,7 @@ Set or clear the admin-defined nickname for a player. Persisted in the `players.
 
 **URL:** `:guid` must be a 17-digit Steam GUID.
 
-**Body:** `{ "nickname": "José García" }` — empty string clears.
+**Body:** `{ "nickname": "<display name>" }` — empty string clears.
 
 **Response:** `{ "ok": true, "player": { "guid": "...", "name": "...", "nickname": "..." } }` — `404` if the GUID has no `players` row yet (a player is only inserted when the result importer first sees them).
 
@@ -398,7 +398,7 @@ Create a new panel user.
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "username": "Sample User", "password": "...", "role": "user" }`
+**Body:** `{ "username": "alice", "password": "...", "role": "user" }`
 
 Username must be 1–64 characters: letters, numbers, `_` and `-` only.
 

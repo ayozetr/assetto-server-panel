@@ -41,7 +41,11 @@ const ENTRY_POINTS = [
 const SW_REGISTER_SRC = `
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    // updateViaCache:'none' tells the browser to bypass its HTTP cache when
+    // checking for sw.js updates. Without this, the browser can hold the
+    // previous sw.js for hours (max-age) and new SW versions never reach the
+    // user — leading to "F5 keeps showing the old bundle" after a deploy.
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
       .then(reg => console.log('[PWA] Service Worker registered', reg.scope))
       .catch(err => console.warn('[PWA] Service Worker registration failed', err));
   });

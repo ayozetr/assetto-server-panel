@@ -135,6 +135,18 @@ Read `server_cfg.ini` as a JSON object.
 
 **Auth required:** yes
 
+In addition to the `[SERVER]` mapping, the response carries per-session values used by the *Session* page:
+
+| Field | Source |
+| --- | --- |
+| `practiceTime` | `[PRACTICE].TIME` (minutes) |
+| `qualifyTime`  | `[QUALIFY].TIME`  (minutes) |
+| `raceLaps`     | `[RACE].LAPS` |
+| `sunAngle`     | `[SERVER].SUN_ANGLE` — convert to hour-of-day via `round(angle/16)+13` |
+| `weather`      | `[WEATHER_0].GRAPHICS` (e.g. `3_clear`) |
+| `airTemp`      | `[WEATHER_0].BASE_TEMPERATURE_AMBIENT` |
+| `penalties`    | inverse of `[SERVER].RACE_GAS_PENALTY_DISABLED` |
+
 ---
 
 ### `PUT /api/config`
@@ -241,11 +253,27 @@ Lap times from imported result files. Supports server-side filtering — push th
 ---
 
 ### `POST /api/session/apply`
-Write track and car selection to `server_cfg.ini`. Auto-restarts the AC server if it is running (unless `restart: false`).
+Write the *Session* page state to `server_cfg.ini`. Auto-restarts the AC server if it is running (unless `restart: false`).
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "trackId": "loros", "layout": "", "cars": ["av_citroen_saxo_ph1a_gra"], "slots": 10, "restart": true }`
+**Body:** every field is optional — omitted fields are left untouched.
+
+| Field | Target | Notes |
+| --- | --- | --- |
+| `trackId` | `[SERVER].TRACK` | |
+| `layout`  | `[SERVER].CONFIG_TRACK` | |
+| `cars`    | `[SERVER].CARS` *and* a regenerated `entry_list.ini` | one `[CAR_n]` slot per car, cycled to fill `MAX_CLIENTS` |
+| `slots`   | `[SERVER].MAX_CLIENTS` | |
+| `mode`    | none — routes `laps` to the right section | `Practice` \| `Qualify` \| `Race` |
+| `laps`    | `[PRACTICE].TIME` / `[QUALIFY].TIME` / `[RACE].LAPS` | depends on `mode` |
+| `time`    | `[SERVER].SUN_ANGLE` | hour 0..23, written as `(h-13)·16` clamped to [-80,80] |
+| `weather` | `[WEATHER_0].GRAPHICS` | one of the seven Kunos presets |
+| `airTemp` | `[WEATHER_0].BASE_TEMPERATURE_AMBIENT` | 0..40 |
+| `penalties` | `[SERVER].RACE_GAS_PENALTY_DISABLED` | inverted (`true` → `0`) |
+| `restart` | — | default `true`; restarts the AC server iff it was running |
+
+Whenever the body carries `cars`, `entry_list.ini` is rewritten so every `[CAR_n].MODEL` is in `[SERVER].CARS` — required, since `acServer` refuses to boot otherwise. The previous file is preserved as `entry_list.ini.bak`.
 
 ---
 

@@ -42,3 +42,6 @@ Thumbs.db
 # AI context — local only
 CLAUDE.md
 TASKS.md
+
+# Local dev fixture (server_cfg.ini copy + scratch DB + logs)
+local-cfg/

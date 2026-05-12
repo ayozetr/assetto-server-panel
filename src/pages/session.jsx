@@ -1,4 +1,4 @@
-// Page: Session config (mode, conditions, assists, track + car summary).
+// Page: Session config (mode + duration, conditions, track + car summary).
 // Split out of content.jsx for size. Publishes into the shared
 // `window.AppPagesContent` namespace.
 const { useState: useStateS, useMemo: useMemoS } = React;
@@ -21,6 +21,13 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
     }));
   }, [sessionCfg.carIds, cars]);
   const set = (k, v) => setSessionCfg(c => ({...c, [k]: v}));
+
+  // Each session mode has its own backing field — pick the right one so the
+  // single laps/duration input edits the value the server will actually write.
+  const lapsKey   = sessionCfg.mode === 'Race' ? 'raceLaps'
+                  : sessionCfg.mode === 'Qualify' ? 'qualifyTime'
+                  : 'practiceTime';
+  const lapsValue = sessionCfg[lapsKey] ?? 0;
 
   return (
     <>
@@ -48,7 +55,12 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               <div className="grid-2">
                 <div className="field">
                   <label className="field-label">{sessionCfg.mode === 'Race' ? t('sess.laps') : t('sess.duration')}</label>
-                  <input className="input" type="number" inputMode="numeric" min="1" value={sessionCfg.laps} onChange={e => set('laps', Number(e.target.value))} disabled={!isAdmin}/>
+                  <input
+                    className="input" type="number" inputMode="numeric" min="1"
+                    value={lapsValue}
+                    onChange={e => set(lapsKey, Number(e.target.value))}
+                    disabled={!isAdmin}
+                  />
                 </div>
                 <div className="field">
                   <label className="field-label">{t('sess.slots')}</label>
@@ -75,41 +87,29 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 <div className="field">
                   <label className="field-label">{t('sess.weather')}</label>
                   <select className="select" value={sessionCfg.weather} onChange={e => set('weather', e.target.value)} disabled={!isAdmin}>
-                    <option>Clear</option><option>Cloudy</option>
-                    <option>Fog</option><option>Light Rain</option>
-                    <option>Thunderstorm</option>
+                    <option value="3_clear">{t('sess.weather.clear')}</option>
+                    <option value="4_mid_clear">{t('sess.weather.mid_clear')}</option>
+                    <option value="5_light_clouds">{t('sess.weather.light_clouds')}</option>
+                    <option value="6_mid_clouds">{t('sess.weather.mid_clouds')}</option>
+                    <option value="7_heavy_clouds">{t('sess.weather.heavy_clouds')}</option>
+                    <option value="2_light_fog">{t('sess.weather.light_fog')}</option>
+                    <option value="1_heavy_fog">{t('sess.weather.heavy_fog')}</option>
                   </select>
                 </div>
               </div>
               <div className="grid-2">
                 <div className="field">
                   <label className="field-label">{t('sess.temp')}: {sessionCfg.airTemp}°C</label>
-                  <input type="range" min="5" max="40" value={sessionCfg.airTemp} onChange={e => set('airTemp', Number(e.target.value))} style={{accentColor: 'var(--red)'}} disabled={!isAdmin}/>
+                  <input type="range" min="0" max="40" value={sessionCfg.airTemp} onChange={e => set('airTemp', Number(e.target.value))} style={{accentColor: 'var(--red)'}} disabled={!isAdmin}/>
                 </div>
                 <div className="field">
-                  <label className="field-label">{t('sess.damage')}: {sessionCfg.damage}%</label>
-                  <input type="range" min="0" max="100" step="10" value={sessionCfg.damage} onChange={e => set('damage', Number(e.target.value))} style={{accentColor: 'var(--red)'}} disabled={!isAdmin}/>
+                  <label className="field-label">{t('sess.penalties')}</label>
+                  <div className="row" style={{gap: 10, alignItems:'center', minHeight: 24}}>
+                    <div className={`switch ${sessionCfg.penalties ? 'on' : ''}`} onClick={() => isAdmin && set('penalties', !sessionCfg.penalties)}></div>
+                    <span className="muted" style={{fontSize: 12}}>{t('sess.penalties.hint')}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <I3S.IconShield size={14} style={{color:'var(--red)'}}/>
-              <div className="card-title">{t('sess.assist_title')}</div>
-            </div>
-            <div className="card-body col" style={{gap: 12}}>
-              {[
-                ['ABS', 'abs'], [t('sess.tc'), 'tc'], [t('sess.auto_shift'), 'autoShift'],
-                [t('sess.ideal_line'), 'ideal'], [t('sess.penalties'), 'penalties'],
-                [t('sess.tire_wear'), 'tireWear'], [t('sess.fuel'), 'fuel'],
-              ].map(([label, key]) => (
-                <div className="row-between" key={key}>
-                  <span style={{fontSize: 13}}>{label}</span>
-                  <div className={`switch ${sessionCfg[key] ? 'on' : ''}`} onClick={() => isAdmin && set(key, !sessionCfg[key])}></div>
-                </div>
-              ))}
             </div>
           </div>
         </div>

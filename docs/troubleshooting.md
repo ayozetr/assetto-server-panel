@@ -36,6 +36,18 @@ The panel detects the AC server by sending an HTTP request to `http://127.0.0.1:
 
 ---
 
+## "Proceso terminó al arrancar" right after pressing *Start*
+
+`acServer` died inside the 500 ms boot window. Read the tail of `AC_SERVER_LOG` to see the exact reason — the most common one is:
+
+```
+Error, entry list CAR_n car <model> is illegal
+```
+
+Every `[CAR_n].MODEL` in `entry_list.ini` has to appear in `[SERVER].CARS`. The dashboard now regenerates `entry_list.ini` automatically whenever the Session page writes a new car set, but pre-existing installs may carry stale entries left over from a previous fleet. Re-apply the session from the *Session* page once and `entry_list.ini` will be rewritten; the prior file is kept as `entry_list.ini.bak`.
+
+---
+
 ## Lap times table is empty
 
 AC result files must exist in `AC_SERVER_RESULTS` and follow the expected format:

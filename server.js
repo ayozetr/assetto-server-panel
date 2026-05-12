@@ -1125,7 +1125,11 @@ function apiConfig(req, res) {
   fs.readFile(AC_CFG_FILE, 'utf8', (err, data) => {
     if (err) return json(res, 404, { error: 'server_cfg.ini not found' });
     const ini = parseINI(data);
-    const s   = ini['SERVER'] || {};
+    const s   = ini['SERVER']    || {};
+    const p   = ini['PRACTICE']  || {};
+    const q   = ini['QUALIFY']   || {};
+    const r0  = ini['RACE']      || {};
+    const w   = ini['WEATHER_0'] || {};
     json(res, 200, {
       name:        s['NAME']                    || '',
       welcome:     s['WELCOME_MESSAGE']          || '',
@@ -1148,6 +1152,20 @@ function apiConfig(req, res) {
       track:       s['TRACK']              || '',
       trackConfig: s['CONFIG_TRACK']       || '',
       cars:        (s['CARS'] || '').split(';').filter(Boolean),
+      // Per-session-type values — all three coexist in server_cfg.ini, the
+      // dashboard's `mode` toggle just decides which one the laps/duration
+      // input edits at any given time (it is a UI hint, not an INI key).
+      practiceTime: intOr(p['TIME'], 10),
+      qualifyTime:  intOr(q['TIME'], 10),
+      raceLaps:     intOr(r0['LAPS'], 5),
+      // Hour-of-day is exposed as 0..23 to the client; SUN_ANGLE is the
+      // native INI unit. Conversion: hour↔angle via (hour-13)*16 clamped
+      // to [-80, +80] (matches Content Manager's slider).
+      sunAngle:     intOr(s['SUN_ANGLE'], 48),
+      weather:      w['GRAPHICS']                  || '3_clear',
+      airTemp:      intOr(w['BASE_TEMPERATURE_AMBIENT'], 18),
+      // RACE_GAS_PENALTY_DISABLED is inverted: "1" means penalties OFF.
+      penalties:    s['RACE_GAS_PENALTY_DISABLED'] !== '1',
     });
   });
 }
@@ -1720,6 +1738,40 @@ async function apiWhitelistAdd(req, res) {
 }
 
 // ── Session apply ─────────────────────────────────────────────────────────────
+// Stock Assetto Corsa weather presets (GRAPHICS values). Limiting the writer
+// to this allowlist prevents arbitrary INI injection via a forged `weather`.
+const AC_WEATHER_PRESETS = new Set([
+  '1_heavy_fog', '2_light_fog', '3_clear', '4_mid_clear',
+  '5_light_clouds', '6_mid_clouds', '7_heavy_clouds',
+]);
+
+// Regenerate entry_list.ini so every [CAR_n].MODEL is present in SERVER.CARS.
+// One block per joinable slot, models cycled to fill up to `slotCount`.
+// Caller is responsible for already having validated `cars` via isValidContentId.
+async function writeEntryList(cars, slotCount) {
+  const ENTRY_LIST = path.join(path.dirname(AC_CFG_FILE), 'entry_list.ini');
+  const slots = Math.max(1, Math.min(200, slotCount | 0));
+  const blocks = [];
+  for (let i = 0; i < slots; i++) {
+    blocks.push(
+      `[CAR_${i}]\n` +
+      `MODEL=${cars[i % cars.length]}\n` +
+      `SKIN=Base\n` +
+      `SPECTATOR_MODE=0\n` +
+      `DRIVERNAME=\n` +
+      `TEAM=\n` +
+      `GUID=\n` +
+      `BALLAST=0\n` +
+      `RESTRICTOR=0\n`
+    );
+  }
+  // Single rolling .bak so an admin can recover the previous slot list if the
+  // regeneration ever produces something unexpected. Best-effort: never block
+  // the rewrite on a backup failure.
+  try { await fsp.copyFile(ENTRY_LIST, ENTRY_LIST + '.bak'); } catch {}
+  await fsp.writeFile(ENTRY_LIST, blocks.join('\n'), 'utf8');
+}
+
 async function apiSessionApply(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
@@ -1749,8 +1801,68 @@ async function apiSessionApply(req, res) {
       s['MAX_CLIENTS'] = String(v);
     }
 
+    // Mode + laps/duration. `mode` chooses which section the single laps/time
+    // input writes to; the other two sections are left untouched so they keep
+    // whatever the admin configured for them previously.
+    if (body.mode !== undefined || body.laps !== undefined) {
+      const mode = body.mode;
+      if (mode !== undefined && !['Practice', 'Qualify', 'Race'].includes(mode))
+        return json(res, 400, { error: 'mode must be Practice, Qualify or Race' });
+      const laps = (body.laps !== undefined) ? clampInt(body.laps, 1, 9999) : null;
+      if (body.laps !== undefined && laps === null)
+        return json(res, 400, { error: 'laps must be a positive integer' });
+      if (laps !== null) {
+        if (mode === 'Race') {
+          const r = ini['RACE'] = ini['RACE'] || {};
+          r['LAPS'] = String(laps);
+        } else if (mode === 'Practice') {
+          const p = ini['PRACTICE'] = ini['PRACTICE'] || {};
+          p['TIME'] = String(laps);
+        } else if (mode === 'Qualify') {
+          const q = ini['QUALIFY'] = ini['QUALIFY'] || {};
+          q['TIME'] = String(laps);
+        }
+      }
+    }
+
+    // Hour-of-day → SUN_ANGLE. Same formula Content Manager uses; the [-80,80]
+    // clamp matches AC's renderable range, so hour=0 effectively saturates to
+    // dawn rather than midnight.
+    if (body.time !== undefined) {
+      const h = clampInt(body.time, 0, 23);
+      if (h === null) return json(res, 400, { error: 'time must be an hour 0..23' });
+      const angle = Math.max(-80, Math.min(80, (h - 13) * 16));
+      s['SUN_ANGLE'] = String(angle);
+    }
+
+    if (body.weather !== undefined) {
+      if (!AC_WEATHER_PRESETS.has(body.weather))
+        return json(res, 400, { error: 'Unknown weather preset' });
+      const w = ini['WEATHER_0'] = ini['WEATHER_0'] || {};
+      w['GRAPHICS'] = body.weather;
+    }
+    if (body.airTemp !== undefined) {
+      const t = clampInt(body.airTemp, 0, 40);
+      if (t === null) return json(res, 400, { error: 'airTemp must be 0..40' });
+      const w = ini['WEATHER_0'] = ini['WEATHER_0'] || {};
+      w['BASE_TEMPERATURE_AMBIENT'] = String(t);
+    }
+    if (body.penalties !== undefined) {
+      s['RACE_GAS_PENALTY_DISABLED'] = body.penalties ? '0' : '1';
+    }
+
     await rotateConfigBackup();
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
+
+    // When the car set changes, entry_list.ini must be regenerated to match.
+    // acServer requires every [CAR_n].MODEL to appear in [SERVER].CARS and
+    // refuses to start otherwise — leaving stale slots crashes the boot.
+    if (Array.isArray(body.cars) && body.cars.length) {
+      const clean = body.cars.filter(isValidContentId);
+      if (clean.length) {
+        await writeEntryList(clean, intOr(s['MAX_CLIENTS'], clean.length));
+      }
+    }
 
     // Auto-restart if server is running and the caller asks for it
     let restarted = false, restartError = null;

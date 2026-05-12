@@ -93,18 +93,25 @@ function App() {
   const [lapTimes,    setLapTimes]    = uS([]);
   const [users,       setUsers]       = uS([]);
 
+  // `mode` is the only field with no INI backing — it just selects which
+  // session section the laps/duration input edits. Persist it in
+  // localStorage so F5 keeps the admin's last choice; the rest comes from
+  // /api/config below.
+  // `mode` has no INI backing — persisted in localStorage so F5 keeps the
+  // last choice. The three per-mode laps/duration values are cached
+  // separately so toggling `mode` swaps instantly without a round-trip.
   const [sessionCfg, setSessionCfg] = uS({
     trackId: '',
     layout: '',
-    mode: 'Práctica',
-    laps: 12,
+    mode: (typeof localStorage !== 'undefined' && localStorage.getItem('ac-session-mode')) || 'Practice',
+    practiceTime: 10,
+    qualifyTime:  10,
+    raceLaps:     5,
     slots: 24,
-    time: 14,
-    weather: 'Soleado',
-    airTemp: 24,
-    damage: 50,
-    abs: true, tc: true, autoShift: false, ideal: false,
-    penalties: true, tireWear: true, fuel: true,
+    time: 13,
+    weather: '3_clear',
+    airTemp: 18,
+    penalties: true,
     carIds: [],
   });
 
@@ -135,6 +142,11 @@ function App() {
     else localStorage.removeItem('ac-user');
   }, [user]);
 
+  // `mode` has no INI backing — persist locally so F5 keeps the last choice.
+  uE(() => {
+    if (sessionCfg.mode) localStorage.setItem('ac-session-mode', sessionCfg.mode);
+  }, [sessionCfg.mode]);
+
   // Validate server-side session on mount; force re-login if cookie is stale
   uE(() => {
     if (user) {
@@ -160,11 +172,23 @@ function App() {
       .then(d => {
         if (d.error) return;
         setConfig(c => ({ ...c, ...d }));
-        setSessionCfg(s => ({
-          ...s,
-          ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
-          ...(d.maxClients ? { slots: d.maxClients } : {}),
-        }));
+        setSessionCfg(s => {
+          // SUN_ANGLE → hour reversal. Saturates at 8/18 because AC's [-80,80]
+          // angle range can't render night anyway.
+          const hour = Number.isFinite(d.sunAngle) ? Math.max(0, Math.min(23, Math.round(d.sunAngle / 16) + 13)) : s.time;
+          return {
+            ...s,
+            ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
+            ...(d.maxClients ? { slots: d.maxClients } : {}),
+            ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
+            ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
+            ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
+            ...(d.weather    ? { weather: d.weather } : {}),
+            time:      hour,
+            airTemp:   Number.isFinite(d.airTemp) ? d.airTemp : s.airTemp,
+            penalties: typeof d.penalties === 'boolean' ? d.penalties : s.penalties,
+          };
+        });
         if (d.maxClients) setServer(s => ({ ...s, slots: d.maxClients }));
       })
       .catch(() => {});
@@ -380,14 +404,20 @@ function AppInner(props) {
     fetch('/api/config').then(r => r.json()).then(d => {
       if (d && !d.error) {
         setConfig(prev => ({ ...prev, ...d }));
-        if (d.track) {
-          setSessionCfg(s => ({
+        setSessionCfg(s => {
+          const hour = Number.isFinite(d.sunAngle) ? Math.max(0, Math.min(23, Math.round(d.sunAngle / 16) + 13)) : s.time;
+          return {
             ...s,
-            trackId: d.track,
-            layout:  d.trackConfig || '',
-            carIds:  d.cars?.length ? d.cars : s.carIds,
-          }));
-        }
+            ...(d.track      ? { trackId: d.track, layout: d.trackConfig || '', carIds: d.cars?.length ? d.cars : s.carIds } : {}),
+            ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
+            ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
+            ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
+            ...(d.weather    ? { weather: d.weather } : {}),
+            time:      hour,
+            airTemp:   Number.isFinite(d.airTemp) ? d.airTemp : s.airTemp,
+            penalties: typeof d.penalties === 'boolean' ? d.penalties : s.penalties,
+          };
+        });
       }
     }).catch(()=>{});
 
@@ -399,11 +429,19 @@ function AppInner(props) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        trackId: sessionCfg.trackId,
-        layout:  sessionCfg.layout || '',
-        cars:    sessionCfg.carIds,
-        slots:   sessionCfg.slots,
-        restart: true,
+        trackId:   sessionCfg.trackId,
+        layout:    sessionCfg.layout || '',
+        cars:      sessionCfg.carIds,
+        slots:     sessionCfg.slots,
+        mode:      sessionCfg.mode,
+        laps:      sessionCfg.mode === 'Race'    ? sessionCfg.raceLaps
+                 : sessionCfg.mode === 'Qualify' ? sessionCfg.qualifyTime
+                 :                                 sessionCfg.practiceTime,
+        time:      sessionCfg.time,
+        weather:   sessionCfg.weather,
+        airTemp:   sessionCfg.airTemp,
+        penalties: sessionCfg.penalties,
+        restart:   true,
       }),
     })
       .then(async r => {

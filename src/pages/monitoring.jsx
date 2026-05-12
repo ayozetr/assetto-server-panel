@@ -76,6 +76,11 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         const who = body.match(/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i)[1];
         return { ...l, kind: 'warn', text: `Colisión: ${who}` };
       }
+      if ((m = body.match(/^Clean exit, driver disconnected:\s*(.+?)\s*\[\]?\s*$/i))) {
+        return { ...l, kind: 'leave', text: `${m[1]} ha salido` };
+      }
+      if (/^Dynamic track\b/i.test(body))   return { ...l, kind: 'session', text: 'Pista dinámica actualizada' };
+      if (/^Sending welcome message\b/i.test(body)) return null;
       if (l.lvl === 'error') return { ...l, kind: 'error', text: body };
       if (l.lvl === 'warn')  return { ...l, kind: 'warn',  text: body };
       if (l.lvl === 'ok' && /\b(connected|joined|best lap|validated|success)\b/i.test(body))
@@ -83,7 +88,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
       return null;
     };
     const load = () => {
-      fetch('/api/logs?n=200')
+      fetch('/api/logs?n=500')
         .then(r => r.json())
         .then(d => {
           const items = (d.lines || []).map(fmt).filter(Boolean);

@@ -2244,12 +2244,6 @@ function udpSendCommand(cmd, payload = Buffer.alloc(0)) {
 function udpParseEvent(buf) {
   const ev = buf[0];
   let off = 1;
-  // TEMPORARY: hex-dump driver-payload events so we can ground-truth the
-  // exact field layout this acServer build emits. Remove once the parser is
-  // confirmed against a real packet.
-  if (ev === ACSP.NEW_CONNECTION || ev === ACSP.CONNECTION_CLOSED || ev === ACSP.CAR_INFO) {
-    log.info(`[UDP-DBG] ev=${ev} len=${buf.length} hex=${buf.slice(0, Math.min(buf.length, 160)).toString('hex')}`);
-  }
   switch (ev) {
     case ACSP.VERSION:
       log.info('[UDP] protocol version:', buf[off]);
@@ -2292,12 +2286,18 @@ function udpParseEvent(buf) {
 
     case ACSP.NEW_CONNECTION:
     case ACSP.CONNECTION_CLOSED: {
+      // Field layout in this Go acServer build (verified via hex capture):
+      //   driver_name (utf32) → driver_guid (utf32) → car_id (1) →
+      //   car_model (utf8) → car_skin (utf8)
+      // The classic Kunos spec had a `driver_team` between name and guid;
+      // this build omits it. Keep team as an empty placeholder so the
+      // shape of state.cars stays consistent.
       const name  = readUtf32Str(buf, off); off = name.next;
-      const team  = readUtf32Str(buf, off); off = team.next;
       const guid  = readUtf32Str(buf, off); off = guid.next;
       const carId = buf[off++];
       const model = readUtf8Str(buf, off);  off = model.next;
       const skin  = readUtf8Str(buf, off);  off = skin.next;
+      const team  = { value: '' };
       if (ev === ACSP.NEW_CONNECTION) {
         udpState.cars.set(carId, {
           carId,
@@ -2353,7 +2353,11 @@ function udpParseEvent(buf) {
 
       const car = udpState.cars.get(carId);
       if (!car) {
-        log.warn(`[UDP] LAP_COMPLETED for unknown car_id=${carId} — ignoring`);
+        // Listener missed the JOIN (booted mid-session, or acServer restarted
+        // without re-emitting events for active drivers). Ask for that slot's
+        // CAR_INFO so the next lap from the same driver lands cleanly.
+        log.warn(`[UDP] LAP_COMPLETED for unknown car_id=${carId} — requesting CAR_INFO`);
+        udpSendCommand(ACSP.GET_CAR_INFO, Buffer.from([carId]));
         break;
       }
       car.lastLap = lapTime;
@@ -2402,24 +2406,25 @@ function udpParseEvent(buf) {
     }
 
     case ACSP.CAR_INFO: {
+      // Team-less shape, same as NEW_CONNECTION on this binary.
       const carId = buf[off++];
       const isConnected = !!buf[off++];
       const model = readUtf8Str(buf, off);  off = model.next;
       const skin  = readUtf8Str(buf, off);  off = skin.next;
       const name  = readUtf32Str(buf, off); off = name.next;
-      const team  = readUtf32Str(buf, off); off = team.next;
       const guid  = readUtf32Str(buf, off); off = guid.next;
       if (isConnected) {
         const existing = udpState.cars.get(carId) || {};
         udpState.cars.set(carId, {
           carId,
-          name:    name.value, team: team.value, guid: guid.value,
+          name:    name.value, team: '', guid: guid.value,
           model:   model.value, skin: skin.value,
           joinedAt: existing.joinedAt || Date.now(),
           bestLap:  existing.bestLap || 0,
           lastLap:  existing.lastLap || 0,
           lapsCount: existing.lapsCount || 0,
         });
+        log.info(`[UDP] CAR_INFO car_id=${carId} ${name.value} (${guid.value}) model=${model.value}`);
       }
       break;
     }

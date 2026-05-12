@@ -1362,7 +1362,40 @@ async function apiPlayers(res) {
   // work from the first lap and best/last times populate live without
   // waiting for the post-session JSON.
   const live = udpGetLivePlayers();
-  if (live && live.length) return json(res, 200, live);
+  if (live && live.length) {
+    // udpGetLivePlayers leaves nation='' because the UDP protocol does not
+    // carry it. Enrich by guid against the players table (filled by past
+    // result imports), then top up the remaining gaps by name against the
+    // live /JSON|0 (which exposes DriverNation but no GUID). Both lookups
+    // are best-effort: failures leave the flag absent, never blocking the
+    // response.
+    const byGuid = {};
+    if (db) {
+      try {
+        const guids = live.map(p => p.steam).filter(g => /^\d{17}$/.test(g));
+        if (guids.length) {
+          const ph = guids.map(() => '?').join(',');
+          for (const r of db.prepare(`SELECT guid, nation FROM players WHERE guid IN (${ph})`).all(...guids)) {
+            if (r.nation) byGuid[r.guid] = r.nation;
+          }
+        }
+      } catch {}
+    }
+    const enriched = live.map(p => ({ ...p, nation: byGuid[p.steam] || '' }));
+    if (enriched.some(p => !p.nation)) {
+      const list = await acFetchJson('/JSON%7C0');
+      if (list && Array.isArray(list.Cars)) {
+        const byName = {};
+        for (const c of list.Cars) {
+          if (c && c.IsConnected && c.DriverName && c.DriverNation) byName[c.DriverName] = c.DriverNation;
+        }
+        for (const p of enriched) {
+          if (!p.nation && byName[p.name]) p.nation = byName[p.name];
+        }
+      }
+    }
+    return json(res, 200, enriched);
+  }
 
   // Older acServer builds return a rich payload with lap stats, ping and GUID
   // on /api/details. Current builds reply 200 with an empty body — so when

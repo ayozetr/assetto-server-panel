@@ -304,11 +304,13 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   const [query,     setQuery]     = useStateB('');
   const [brand,     setBrand]     = useStateB('all');
   const [showKunos, setShowKunos] = useStateB(true);
+  const [showMods,  setShowMods]  = useStateB(true);
   const [modalCar,  setModalCar]  = useStateB(null);
   const [page,      setPage]      = useStateB(1);
   const [pageSize,  setPageSize]  = useStateB(10);
 
-  // Default Kunos toggle off when mods are present (runs once after data loads)
+  // First time cars are loaded, auto-hide Kunos content if there's at least
+  // one mod — admins of modded servers usually only browse the mods.
   const _kunosCarInit = useRefB(false);
   useEffectB(() => {
     if (!_kunosCarInit.current && cars.length > 0) {
@@ -318,20 +320,22 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
   }, [cars]);
 
   // Reset page on filter change
-  useEffectB(() => { setPage(1); }, [query, brand, showKunos, pageSize]);
+  useEffectB(() => { setPage(1); }, [query, brand, showKunos, showMods, pageSize]);
 
-  const kunosCount = useMemoB(() => cars.filter(c => c.isKunos).length, [cars]);
+  const kunosCount = useMemoB(() => cars.filter(c =>  c.isKunos).length, [cars]);
+  const modsCount  = useMemoB(() => cars.filter(c => !c.isKunos).length, [cars]);
   const brands     = useMemoB(() => {
-    const base = cars.filter(c => showKunos || !c.isKunos);
+    const base = cars.filter(c => (showKunos && c.isKunos) || (showMods && !c.isKunos));
     return ['all', ...Array.from(new Set(base.map(c => c.brand).filter(Boolean))).sort()];
-  }, [cars, showKunos]);
+  }, [cars, showKunos, showMods]);
 
   const filtered = useMemoB(() => cars.filter(c => {
-    if (!showKunos && c.isKunos) return false;
+    if ( c.isKunos && !showKunos) return false;
+    if (!c.isKunos && !showMods)  return false;
     if (brand !== 'all' && c.brand !== brand) return false;
     if (query && !(`${c.brand} ${c.name} ${c.id}`).toLowerCase().includes(query.toLowerCase())) return false;
     return true;
-  }), [cars, brand, query, showKunos]);
+  }), [cars, brand, query, showKunos, showMods]);
 
   // Each "Add to slot" pushes a new {id, skin} onto the ordered slots array,
   // so the same car can appear multiple times with different skins (FK2 blue
@@ -381,6 +385,16 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
             <span className="toggle-label">{t('cars.kunos')} ({kunosCount})</span>
             <span className="toggle">
               <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
+              <span className="toggle-track"></span>
+              <span className="toggle-thumb"></span>
+            </span>
+          </label>
+        )}
+        {modsCount > 0 && (
+          <label className="toggle-wrap" title={t('cars.mods_hint', { count: modsCount })}>
+            <span className="toggle-label">{t('cars.mods')} ({modsCount})</span>
+            <span className="toggle">
+              <input type="checkbox" checked={showMods} onChange={e => setShowMods(e.target.checked)}/>
               <span className="toggle-track"></span>
               <span className="toggle-thumb"></span>
             </span>

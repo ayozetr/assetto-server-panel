@@ -288,11 +288,13 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
   const [query,      setQuery]      = useStateT('');
   const [country,    setCountry]    = useStateT('all');
   const [showKunos,  setShowKunos]  = useStateT(true);
+  const [showMods,   setShowMods]   = useStateT(true);
   const [modalTrack, setModalTrack] = useStateT(null);
   const [page,       setPage]       = useStateT(1);
   const [pageSize,   setPageSize]   = useStateT(10);
 
-  // Default Kunos toggle off when mods are present (runs once after data loads)
+  // First time tracks are loaded, auto-hide Kunos content if there's at least
+  // one mod track — admins of modded servers usually only browse the mods.
   const _kunosTrackInit = useRefT(false);
   useEffectT(() => {
     if (!_kunosTrackInit.current && tracks.length > 0) {
@@ -301,20 +303,22 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
     }
   }, [tracks]);
 
-  useEffectT(() => { setPage(1); }, [query, country, showKunos, pageSize]);
+  useEffectT(() => { setPage(1); }, [query, country, showKunos, showMods, pageSize]);
 
-  const kunosCount = useMemoT(() => tracks.filter(t => t.isKunos).length, [tracks]);
+  const kunosCount = useMemoT(() => tracks.filter(t =>  t.isKunos).length, [tracks]);
+  const modsCount  = useMemoT(() => tracks.filter(t => !t.isKunos).length, [tracks]);
   const countries  = useMemoT(() => {
-    const base = tracks.filter(t => showKunos || !t.isKunos);
+    const base = tracks.filter(t => (showKunos && t.isKunos) || (showMods && !t.isKunos));
     return ['all', ...Array.from(new Set(base.map(t => t.countryEs || t.country).filter(Boolean))).sort()];
-  }, [tracks, showKunos]);
+  }, [tracks, showKunos, showMods]);
 
   const filtered = useMemoT(() => tracks.filter(t => {
-    if (!showKunos && t.isKunos) return false;
+    if ( t.isKunos && !showKunos) return false;
+    if (!t.isKunos && !showMods)  return false;
     if (country !== 'all' && (t.countryEs || t.country) !== country) return false;
     if (query && !(t.name + ' ' + (t.countryEs || t.country) + ' ' + t.id).toLowerCase().includes(query.toLowerCase())) return false;
     return true;
-  }), [tracks, country, query, showKunos]);
+  }), [tracks, country, query, showKunos, showMods]);
 
   return (
     <>
@@ -333,6 +337,16 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
             <span className="toggle-label">{t('tracks.kunos')} ({kunosCount})</span>
             <span className="toggle">
               <input type="checkbox" checked={showKunos} onChange={e => setShowKunos(e.target.checked)}/>
+              <span className="toggle-track"></span>
+              <span className="toggle-thumb"></span>
+            </span>
+          </label>
+        )}
+        {modsCount > 0 && (
+          <label className="toggle-wrap" title={t('tracks.mods_hint', { count: modsCount })}>
+            <span className="toggle-label">{t('tracks.mods')} ({modsCount})</span>
+            <span className="toggle">
+              <input type="checkbox" checked={showMods} onChange={e => setShowMods(e.target.checked)}/>
               <span className="toggle-track"></span>
               <span className="toggle-thumb"></span>
             </span>

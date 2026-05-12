@@ -150,7 +150,10 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                   </div>
                   <div style={{flex: 1}}>
                     <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>
-                    <div style={{fontSize: 12, color: 'var(--text-muted)'}}>{track.city || track.loc} · {track.length} km · {sessionCfg.layout}</div>
+                    <div style={{fontSize: 12, color: 'var(--text-muted)'}}>
+                      {track.city || track.loc} · {track.length} km
+                      {sessionCfg.layout && <> · {track.layoutDetails?.[sessionCfg.layout]?.name || sessionCfg.layout}</>}
+                    </div>
                     <div className="row" style={{marginTop: 8, gap: 6}}>
                       <span className="badge badge-red">{primaryMode.label}</span>
                       <span className="badge">{carsCount} {t('dash.cars') || 'slots'}</span>

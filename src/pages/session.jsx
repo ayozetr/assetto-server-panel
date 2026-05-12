@@ -139,7 +139,11 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 <div className="field" style={{marginTop: 12}}>
                   <label className="field-label">Layout</label>
                   <select className="select" value={sessionCfg.layout} onChange={e => set('layout', e.target.value)} disabled={!isAdmin}>
-                    {track.layouts.map(l => <option key={l} value={l}>{l || 'Default'}</option>)}
+                    {track.layouts.map(l => (
+                      <option key={l} value={l}>
+                        {track.layoutDetails?.[l]?.name || l || 'Default'}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

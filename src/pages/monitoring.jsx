@@ -16,6 +16,27 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const carsCount = (sessionCfg.slots || []).length;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: ()=>{} };
 
+  // Translate the raw acServer weather id (e.g. `7_heavy_clouds`) to the
+  // localised label the Session page uses. Fall back to the raw id so an
+  // unknown preset still surfaces something readable instead of nothing.
+  const WEATHER_KEYS = {
+    '3_clear':         'sess.weather.clear',
+    '4_mid_clear':     'sess.weather.mid_clear',
+    '5_light_clouds':  'sess.weather.light_clouds',
+    '6_mid_clouds':    'sess.weather.mid_clouds',
+    '7_heavy_clouds':  'sess.weather.heavy_clouds',
+    '2_light_fog':     'sess.weather.light_fog',
+    '1_heavy_fog':     'sess.weather.heavy_fog',
+  };
+  const weatherLabel = WEATHER_KEYS[sessionCfg.weather] ? t(WEATHER_KEYS[sessionCfg.weather]) : (sessionCfg.weather || '—');
+
+  // The new Session model has independent per-session toggles; the Dashboard
+  // shows the first enabled one as the "primary" with its duration/laps.
+  const primaryMode = sessionCfg.practiceEnabled ? { label: t('sess.row.practice'), value: `${sessionCfg.practiceTime || 0} min` }
+                    : sessionCfg.qualifyEnabled  ? { label: t('sess.row.qualify'),  value: `${sessionCfg.qualifyTime  || 0} min` }
+                    : sessionCfg.raceEnabled     ? { label: t('sess.row.race'),     value: `${sessionCfg.raceLaps     || 0} ${t('sess.unit.laps')}` }
+                    : { label: '—', value: '' };
+
   const joinUrl = server.publicIp ? `https://acstuff.club/s/q:race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';
   const cmUrl = server.publicIp ? `acmanager://race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';
 
@@ -131,9 +152,9 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>
                     <div style={{fontSize: 12, color: 'var(--text-muted)'}}>{track.city || track.loc} · {track.length} km · {sessionCfg.layout}</div>
                     <div className="row" style={{marginTop: 8, gap: 6}}>
-                      <span className="badge badge-red">{sessionCfg.mode}</span>
-                      <span className="badge">{carsCount}</span>
-                      <span className="badge">{sessionCfg.laps} {t('dash.laps')}</span>
+                      <span className="badge badge-red">{primaryMode.label}</span>
+                      <span className="badge">{carsCount} {t('dash.cars') || 'slots'}</span>
+                      {primaryMode.value && <span className="badge">{primaryMode.value}</span>}
                     </div>
                   </div>
                 </div>
@@ -152,15 +173,15 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                 <div className="grid-3">
                   <div>
                     <div className="field-label">{t('dash.time')}</div>
-                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.time}:00</div>
+                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{String(sessionCfg.time ?? 0).padStart(2, '0')}:00</div>
                   </div>
                   <div>
                     <div className="field-label">{t('dash.weather')}</div>
-                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.weather}</div>
+                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{weatherLabel}</div>
                   </div>
                   <div>
-                    <div className="field-label">{t('dash.damage')}</div>
-                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.damage}%</div>
+                    <div className="field-label">{t('sess.temp')}</div>
+                    <div style={{fontSize: 13, fontWeight: 500, marginTop: 2}}>{sessionCfg.airTemp ?? '—'}°C</div>
                   </div>
                 </div>
               </>

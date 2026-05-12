@@ -43,38 +43,14 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const [activity, setActivity] = useState([]);
   useEffect(() => {
     const NOISE = /^(?:\s*content\/\S+\.(?:ini|kn5|ksanim|wav|fbx|dds)\s+ok\s*$|REQ\b|\{|\}|PAGE:|Serve |TCP packet|RECEIVED \d|Dispatching TCP|GET |POST |HEAD |listening on |plugin lines absent|plugin not configured|protocol version:|socket error:|parse error:|WARNING:\s*MAX_CONTACTS_PER_KM\b|WARNING:\s*pitstop window\b|WARNING:\s*tyre\b|Loading\b|Reading\b|Reset\b)/i;
-    // Resolve "trackId/layoutId" into a human-readable "<Track Name> (<Layout>)"
-    // using the catalogue. Some mods carry no root ui_track.json, so the panel
-    // falls back to the first layout's name as the track-level name (e.g.
-    // "Red Bull Ring"), which redundantly concatenates with the
-    // selected layout's name. Recover the base track name by finding the
-    // longest common prefix among every layout's name, and strip that prefix
-    // from the chosen layout so only the variant remains in parentheses.
     const formatTrackPath = (raw) => {
       if (!raw) return '';
       const [trackId, layoutId] = raw.includes('/') ? raw.split('/') : raw.split('-');
       const tk = (tracks || []).find(t => t && t.id === trackId);
       if (!tk) return layoutId ? `${trackId} (${layoutId})` : trackId;
-      const layoutNames = tk.layoutDetails
-        ? Object.values(tk.layoutDetails).map(d => d && d.name).filter(Boolean)
-        : [];
-      let common = '';
-      if (layoutNames.length) {
-        common = layoutNames[0];
-        for (let i = 1; i < layoutNames.length; i++) {
-          let j = 0;
-          while (j < common.length && j < layoutNames[i].length && common[j] === layoutNames[i][j]) j++;
-          common = common.slice(0, j);
-        }
-        common = common.replace(/[\s_/-]+$/, '');
-      }
-      const baseTrack = common && common.length >= 3 ? common : tk.name;
-      const layoutNameRaw = layoutId && tk.layoutDetails && tk.layoutDetails[layoutId] && tk.layoutDetails[layoutId].name;
-      if (!layoutNameRaw) return baseTrack;
-      const layoutClean = common && layoutNameRaw.startsWith(common)
-        ? layoutNameRaw.slice(common.length).replace(/^[\s_/-]+/, '').trim()
-        : layoutNameRaw;
-      return layoutClean ? `${baseTrack} (${layoutClean})` : baseTrack;
+      const base = (window.AppUtils?.trackBaseName?.(tk)) || tk.name;
+      const layout = layoutId ? (window.AppUtils?.layoutShortName?.(tk, layoutId)) : '';
+      return layout ? `${base} (${layout})` : base;
     };
     const stripPrefix = (s) => s
       .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+/i, '')
@@ -229,10 +205,10 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                       onError={e => { e.target.style.display='none'; }}/>
                   </div>
                   <div style={{flex: 1}}>
-                    <div style={{fontSize: 14, fontWeight: 600}}>{track.name}</div>
+                    <div style={{fontSize: 14, fontWeight: 600}}>{(window.AppUtils?.trackBaseName?.(track)) || track.name}</div>
                     <div style={{fontSize: 12, color: 'var(--text-muted)'}}>
                       {track.city || track.loc} · {track.length} km
-                      {sessionCfg.layout && <> · {track.layoutDetails?.[sessionCfg.layout]?.name || sessionCfg.layout}</>}
+                      {sessionCfg.layout && <> · {(window.AppUtils?.layoutShortName?.(track, sessionCfg.layout)) || (track.layoutDetails?.[sessionCfg.layout]?.name || sessionCfg.layout)}</>}
                     </div>
                     <div className="row" style={{marginTop: 8, gap: 6}}>
                       <span className="badge badge-red">{primaryMode.label}</span>

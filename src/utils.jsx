@@ -25,6 +25,46 @@ function passesPwPolicy(pw) {
 }
 window.passesPwPolicy = passesPwPolicy;
 
+// Longest character-by-character common prefix across an array of strings.
+// Used to recover a base track name when each layout's name redundantly
+// includes the track root (e.g. "Red Bull Ring", "Red Bull Ring Real
+// Outbound", …) — common prefix → "Red Bull Ring ".
+function _longestCommonPrefix(arr) {
+  if (!arr || !arr.length) return '';
+  let p = arr[0];
+  for (let i = 1; i < arr.length; i++) {
+    let j = 0;
+    while (j < p.length && j < arr[i].length && p[j] === arr[i][j]) j++;
+    p = p.slice(0, j);
+    if (!p) break;
+  }
+  return p;
+}
+
+// Returns the base track name with the redundant layout suffix stripped when
+// the catalogue has no root ui_track.json. Falls back to track.name.
+function trackBaseName(track) {
+  if (!track) return '';
+  const names = track.layoutDetails ? Object.values(track.layoutDetails).map(d => d && d.name).filter(Boolean) : [];
+  if (names.length < 2) return track.name || '';
+  const common = _longestCommonPrefix(names).replace(/[\s_/-]+$/, '');
+  return common.length >= 3 ? common : (track.name || '');
+}
+
+// Returns the layout's display name with the shared track prefix stripped
+// when present, so it reads as just the variant (e.g. "Grand Prix" instead
+// of "Red Bull Ring"). Falls back to the raw layout name.
+function layoutShortName(track, layoutId) {
+  if (!track) return layoutId || '';
+  const raw = (track.layoutDetails && track.layoutDetails[layoutId] && track.layoutDetails[layoutId].name) || layoutId || '';
+  const base = trackBaseName(track);
+  if (!base || !raw) return raw;
+  if (raw.toLowerCase().startsWith(base.toLowerCase())) {
+    return raw.slice(base.length).replace(/^[\s_/-]+/, '').trim() || raw;
+  }
+  return raw;
+}
+
 window.AppUtils = {
   fmtMs: (ms) => {
     if (ms == null || ms < 0) return '—';
@@ -39,4 +79,6 @@ window.AppUtils = {
     return iso2 ? `https://flagcdn.com/16x12/${iso2}.png` : null;
   },
   passesPwPolicy,
+  trackBaseName,
+  layoutShortName,
 };

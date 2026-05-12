@@ -2227,6 +2227,10 @@ function udpStartListener(listenHostPort, sendCommandsToPort) {
     log.info(`[UDP] listening on ${listenHost}:${listenPort}, commands → 127.0.0.1:${sendCommandsToPort}`);
     // Pull a snapshot in case acServer was already running when we booted.
     udpSendCommand(ACSP.GET_SESSION_INFO, Buffer.from([0xFF, 0xFF]));
+    // And request per-car info for every possible slot so we rebuild our
+    // car_id → driver map without waiting for a JOIN event. The protocol
+    // ignores requests for empty slots silently.
+    for (let i = 0; i < 64; i++) udpSendCommand(ACSP.GET_CAR_INFO, Buffer.from([i]));
   });
 }
 
@@ -2240,6 +2244,12 @@ function udpSendCommand(cmd, payload = Buffer.alloc(0)) {
 function udpParseEvent(buf) {
   const ev = buf[0];
   let off = 1;
+  // TEMPORARY: hex-dump driver-payload events so we can ground-truth the
+  // exact field layout this acServer build emits. Remove once the parser is
+  // confirmed against a real packet.
+  if (ev === ACSP.NEW_CONNECTION || ev === ACSP.CONNECTION_CLOSED || ev === ACSP.CAR_INFO) {
+    log.info(`[UDP-DBG] ev=${ev} len=${buf.length} hex=${buf.slice(0, Math.min(buf.length, 160)).toString('hex')}`);
+  }
   switch (ev) {
     case ACSP.VERSION:
       log.info('[UDP] protocol version:', buf[off]);

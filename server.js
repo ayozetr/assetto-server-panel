@@ -870,6 +870,30 @@ function sanitizeIniPassword(v) {
   return String(v).replace(/[^\x21-\x7E]/g, '').replace(/[\[\];#"'`]/g, '');
 }
 
+// Remove a whole section from the INI text — its header line plus every
+// following line until the next section header (or EOF). Used to physically
+// drop [PRACTICE]/[QUALIFY]/[RACE] when the admin disables that session.
+// Setting IS_OPEN=0 isn't enough: acServer cycles through every section it
+// finds, so the slot still passes through. Deleting the section is the only
+// reliable way to keep the loop on a single session.
+function removeIniSection(raw, sectionName) {
+  const lines  = raw.split('\n');
+  const target = `[${sectionName}]`;
+  const out    = [];
+  let skipping = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === target) { skipping = true; continue; }
+    if (skipping) {
+      if (/^\[.+\]$/.test(trimmed)) { skipping = false; out.push(line); }
+      // else: still inside the section we're dropping — discard
+    } else {
+      out.push(line);
+    }
+  }
+  return out.join('\n');
+}
+
 function patchINI(raw, obj) {
   const lines = raw.split('\n');
   let section = '__default__';
@@ -1127,9 +1151,9 @@ function apiConfig(req, res) {
     if (err) return json(res, 404, { error: 'server_cfg.ini not found' });
     const ini = parseINI(data);
     const s   = ini['SERVER']    || {};
-    const p   = ini['PRACTICE']  || {};
-    const q   = ini['QUALIFY']   || {};
-    const r0  = ini['RACE']      || {};
+    const p   = ini['PRACTICE']  || null;
+    const q   = ini['QUALIFY']   || null;
+    const r0  = ini['RACE']      || null;
     const w   = ini['WEATHER_0'] || {};
     json(res, 200, {
       name:        s['NAME']                    || '',
@@ -1153,12 +1177,17 @@ function apiConfig(req, res) {
       track:       s['TRACK']              || '',
       trackConfig: s['CONFIG_TRACK']       || '',
       cars:        (s['CARS'] || '').split(';').filter(Boolean),
-      // Per-session-type values — all three coexist in server_cfg.ini, the
-      // dashboard's `mode` toggle just decides which one the laps/duration
-      // input edits at any given time (it is a UI hint, not an INI key).
-      practiceTime: intOr(p['TIME'], 10),
-      qualifyTime:  intOr(q['TIME'], 10),
-      raceLaps:     intOr(r0['LAPS'], 5),
+      // Per-session-type values. Each section can be physically present or
+      // missing — `*Enabled` flags reflect that so the Session page can
+      // restore the per-row toggles. When a section is absent we still
+      // return a default duration/laps so toggling it back on shows
+      // something sensible until the admin edits it.
+      practiceEnabled: !!p,
+      qualifyEnabled:  !!q,
+      raceEnabled:     !!r0,
+      practiceTime:    intOr(p?.['TIME'], 10),
+      qualifyTime:     intOr(q?.['TIME'], 10),
+      raceLaps:        intOr(r0?.['LAPS'], 5),
       // Hour-of-day is exposed as 0..23 to the client; SUN_ANGLE is the
       // native INI unit. Conversion: hour↔angle via (hour-13)*16 clamped
       // to [-80, +80] (matches Content Manager's slider).
@@ -1881,28 +1910,56 @@ async function apiSessionApply(req, res) {
       s['MAX_CLIENTS'] = String(v);
     }
 
-    // Mode + laps/duration. `mode` chooses which section the single laps/time
-    // input writes to; the other two sections are left untouched so they keep
-    // whatever the admin configured for them previously.
-    if (body.mode !== undefined || body.laps !== undefined) {
-      const mode = body.mode;
-      if (mode !== undefined && !['Practice', 'Qualify', 'Race'].includes(mode))
-        return json(res, 400, { error: 'mode must be Practice, Qualify or Race' });
-      const laps = (body.laps !== undefined) ? clampInt(body.laps, 1, 9999) : null;
-      if (body.laps !== undefined && laps === null)
-        return json(res, 400, { error: 'laps must be a positive integer' });
-      if (laps !== null) {
-        if (mode === 'Race') {
-          const r = ini['RACE'] = ini['RACE'] || {};
-          r['LAPS'] = String(laps);
-        } else if (mode === 'Practice') {
-          const p = ini['PRACTICE'] = ini['PRACTICE'] || {};
-          p['TIME'] = String(laps);
-        } else if (mode === 'Qualify') {
-          const q = ini['QUALIFY'] = ini['QUALIFY'] || {};
-          q['TIME'] = String(laps);
+    // Per-session enable/duration. Each session is independent now: the
+    // admin can disable Qualify and Race entirely (sections get removed
+    // from the INI so LOOP_MODE cycles only Practice), or have all three.
+    // At least one has to stay on — a server with no sessions can't run.
+    const sessionFlags = {
+      Practice: body.practiceEnabled,
+      Qualify:  body.qualifyEnabled,
+      Race:     body.raceEnabled,
+    };
+    const anyExplicit = Object.values(sessionFlags).some(v => v !== undefined);
+    if (anyExplicit) {
+      // Resolve final enabled state per session, preserving the existing
+      // value when the field wasn't sent.
+      const resolved = {
+        Practice: sessionFlags.Practice ?? !!ini['PRACTICE'],
+        Qualify:  sessionFlags.Qualify  ?? !!ini['QUALIFY'],
+        Race:     sessionFlags.Race     ?? !!ini['RACE'],
+      };
+      if (!resolved.Practice && !resolved.Qualify && !resolved.Race)
+        return json(res, 400, { error: 'At least one session (Practice, Qualify or Race) must stay enabled' });
+      // For disabled sessions, mark for INI removal after patch.
+      var sectionsToRemove = [];
+      for (const [name, on] of Object.entries(resolved)) {
+        if (!on) {
+          sectionsToRemove.push(name.toUpperCase());
+          delete ini[name.toUpperCase()];
         }
       }
+    }
+    // Per-session values. We accept the modern shape (practiceTime, qualifyTime,
+    // raceLaps) so the panel can edit all three independently without sending
+    // a "mode" hint. If a section is being disabled this turn its value is
+    // ignored — the section gets removed below.
+    if (body.practiceTime !== undefined && (sessionFlags.Practice ?? true)) {
+      const v = clampInt(body.practiceTime, 1, 9999);
+      if (v === null) return json(res, 400, { error: 'practiceTime must be 1..9999' });
+      const p = ini['PRACTICE'] = ini['PRACTICE'] || { NAME: 'Practice', IS_OPEN: '1' };
+      p['TIME'] = String(v);
+    }
+    if (body.qualifyTime !== undefined && (sessionFlags.Qualify ?? true)) {
+      const v = clampInt(body.qualifyTime, 1, 9999);
+      if (v === null) return json(res, 400, { error: 'qualifyTime must be 1..9999' });
+      const q = ini['QUALIFY'] = ini['QUALIFY'] || { NAME: 'Qualify', IS_OPEN: '1' };
+      q['TIME'] = String(v);
+    }
+    if (body.raceLaps !== undefined && (sessionFlags.Race ?? true)) {
+      const v = clampInt(body.raceLaps, 1, 9999);
+      if (v === null) return json(res, 400, { error: 'raceLaps must be 1..9999' });
+      const r = ini['RACE'] = ini['RACE'] || { NAME: 'Race', LAPS: '5', IS_OPEN: '1', WAIT_TIME: '60' };
+      r['LAPS'] = String(v);
     }
 
     // Hour-of-day → SUN_ANGLE. Same formula Content Manager uses; the [-80,80]
@@ -1932,7 +1989,14 @@ async function apiSessionApply(req, res) {
     }
 
     await rotateConfigBackup();
-    await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
+    let patched = patchINI(raw, ini);
+    // Physically drop disabled sessions from the INI text. patchINI only
+    // edits/appends; it doesn't remove. Done after patching so any
+    // would-be values for disabled sessions don't make it to disk.
+    if (typeof sectionsToRemove !== 'undefined') {
+      for (const name of sectionsToRemove) patched = removeIniSection(patched, name);
+    }
+    await fsp.writeFile(AC_CFG_FILE, patched, 'utf8');
 
     // When the car set changes, entry_list.ini must be regenerated to match.
     // acServer requires every [CAR_n].MODEL to appear in [SERVER].CARS and

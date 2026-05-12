@@ -139,9 +139,12 @@ In addition to the `[SERVER]` mapping, the response carries per-session values u
 
 | Field | Source |
 | --- | --- |
-| `practiceTime` | `[PRACTICE].TIME` (minutes) |
-| `qualifyTime`  | `[QUALIFY].TIME`  (minutes) |
-| `raceLaps`     | `[RACE].LAPS` |
+| `practiceEnabled` | `true` if `[PRACTICE]` exists in the INI |
+| `qualifyEnabled`  | `true` if `[QUALIFY]` exists in the INI  |
+| `raceEnabled`     | `true` if `[RACE]` exists in the INI |
+| `practiceTime` | `[PRACTICE].TIME` (minutes) — falls back to 10 when the section is absent |
+| `qualifyTime`  | `[QUALIFY].TIME`  (minutes) — falls back to 10 when the section is absent |
+| `raceLaps`     | `[RACE].LAPS` — falls back to 5 when the section is absent |
 | `sunAngle`     | `[SERVER].SUN_ANGLE` — convert to hour-of-day via `round(angle/16)+13` |
 | `weather`      | `[WEATHER_0].GRAPHICS` (e.g. `3_clear`) |
 | `airTemp`      | `[WEATHER_0].BASE_TEMPERATURE_AMBIENT` |
@@ -282,8 +285,8 @@ Write the *Session* page state to `server_cfg.ini`. Auto-restarts the AC server 
 | `layout`  | `[SERVER].CONFIG_TRACK` | |
 | `cars`    | `[SERVER].CARS` *and* a regenerated `entry_list.ini` | one `[CAR_n]` slot per car, cycled to fill `MAX_CLIENTS` |
 | `slots`   | `[SERVER].MAX_CLIENTS` | |
-| `mode`    | none — routes `laps` to the right section | `Practice` \| `Qualify` \| `Race` |
-| `laps`    | `[PRACTICE].TIME` / `[QUALIFY].TIME` / `[RACE].LAPS` | depends on `mode` |
+| `practiceEnabled` / `qualifyEnabled` / `raceEnabled` | `[PRACTICE]` / `[QUALIFY]` / `[RACE]` section presence | when `false` the whole section is removed; reject if all three end up `false` |
+| `practiceTime` / `qualifyTime` / `raceLaps` | `[PRACTICE].TIME` / `[QUALIFY].TIME` / `[RACE].LAPS` | ignored for sessions being disabled this turn |
 | `time`    | `[SERVER].SUN_ANGLE` | hour 0..23, written as `(h-13)·16` clamped to [-80,80] |
 | `weather` | `[WEATHER_0].GRAPHICS` | one of the seven Kunos presets |
 | `airTemp` | `[WEATHER_0].BASE_TEMPERATURE_AMBIENT` | 0..40 |

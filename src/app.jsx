@@ -97,13 +97,16 @@ function App() {
   // session section the laps/duration input edits. Persist it in
   // localStorage so F5 keeps the admin's last choice; the rest comes from
   // /api/config below.
-  // `mode` has no INI backing — persisted in localStorage so F5 keeps the
-  // last choice. The three per-mode laps/duration values are cached
-  // separately so toggling `mode` swaps instantly without a round-trip.
+  // Each session (Practice/Qualify/Race) is independent — its own enable
+  // toggle plus its own duration/laps value. acServer cycles every section
+  // physically present in server_cfg.ini; disabling a row asks the backend
+  // to drop that section.
   const [sessionCfg, setSessionCfg] = uS({
     trackId: '',
     layout: '',
-    mode: (typeof localStorage !== 'undefined' && localStorage.getItem('ac-session-mode')) || 'Practice',
+    practiceEnabled: true,
+    qualifyEnabled:  true,
+    raceEnabled:     true,
     practiceTime: 10,
     qualifyTime:  10,
     raceLaps:     5,
@@ -142,10 +145,6 @@ function App() {
     else localStorage.removeItem('ac-user');
   }, [user]);
 
-  // `mode` has no INI backing — persist locally so F5 keeps the last choice.
-  uE(() => {
-    if (sessionCfg.mode) localStorage.setItem('ac-session-mode', sessionCfg.mode);
-  }, [sessionCfg.mode]);
 
   // Validate server-side session on mount; force re-login if cookie is stale
   uE(() => {
@@ -412,6 +411,9 @@ function AppInner(props) {
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
             ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
+            ...(typeof d.practiceEnabled === 'boolean' ? { practiceEnabled: d.practiceEnabled } : {}),
+            ...(typeof d.qualifyEnabled  === 'boolean' ? { qualifyEnabled:  d.qualifyEnabled  } : {}),
+            ...(typeof d.raceEnabled     === 'boolean' ? { raceEnabled:     d.raceEnabled     } : {}),
             ...(d.weather    ? { weather: d.weather } : {}),
             time:      hour,
             airTemp:   Number.isFinite(d.airTemp) ? d.airTemp : s.airTemp,
@@ -423,25 +425,31 @@ function AppInner(props) {
 
   const handleApplySession = () => {
     if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
+    if (!sessionCfg.practiceEnabled && !sessionCfg.qualifyEnabled && !sessionCfg.raceEnabled) {
+      toast.push(t('sess.no_session_enabled') || 'At least one session must be enabled', 'error');
+      return;
+    }
     const wasRunning = server.status === 'running';
     if (wasRunning) setServer(s => ({...s, status: 'starting'}));
     fetch('/api/session/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        trackId:   sessionCfg.trackId,
-        layout:    sessionCfg.layout || '',
-        cars:      sessionCfg.carIds,
-        slots:     sessionCfg.slots,
-        mode:      sessionCfg.mode,
-        laps:      sessionCfg.mode === 'Race'    ? sessionCfg.raceLaps
-                 : sessionCfg.mode === 'Qualify' ? sessionCfg.qualifyTime
-                 :                                 sessionCfg.practiceTime,
-        time:      sessionCfg.time,
-        weather:   sessionCfg.weather,
-        airTemp:   sessionCfg.airTemp,
-        penalties: sessionCfg.penalties,
-        restart:   true,
+        trackId:         sessionCfg.trackId,
+        layout:          sessionCfg.layout || '',
+        cars:            sessionCfg.carIds,
+        slots:           sessionCfg.slots,
+        practiceEnabled: sessionCfg.practiceEnabled,
+        qualifyEnabled:  sessionCfg.qualifyEnabled,
+        raceEnabled:     sessionCfg.raceEnabled,
+        practiceTime:    sessionCfg.practiceTime,
+        qualifyTime:     sessionCfg.qualifyTime,
+        raceLaps:        sessionCfg.raceLaps,
+        time:            sessionCfg.time,
+        weather:         sessionCfg.weather,
+        airTemp:         sessionCfg.airTemp,
+        penalties:       sessionCfg.penalties,
+        restart:         true,
       }),
     })
       .then(async r => {

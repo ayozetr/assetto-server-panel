@@ -22,12 +22,16 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
   }, [sessionCfg.carIds, cars]);
   const set = (k, v) => setSessionCfg(c => ({...c, [k]: v}));
 
-  // Each session mode has its own backing field — pick the right one so the
-  // single laps/duration input edits the value the server will actually write.
-  const lapsKey   = sessionCfg.mode === 'Race' ? 'raceLaps'
-                  : sessionCfg.mode === 'Qualify' ? 'qualifyTime'
-                  : 'practiceTime';
-  const lapsValue = sessionCfg[lapsKey] ?? 0;
+  // Three session rows side-by-side — each is independent: enable toggle plus
+  // its own duration/laps input. acServer cycles every section present in the
+  // INI; disabling a row removes its section so the cycle stays on whatever
+  // is on. At least one has to stay enabled.
+  const sessionRows = [
+    { key: 'Practice', flag: 'practiceEnabled', value: 'practiceTime', unit: 'min',     label: t('sess.row.practice') },
+    { key: 'Qualify',  flag: 'qualifyEnabled',  value: 'qualifyTime',  unit: 'min',     label: t('sess.row.qualify')  },
+    { key: 'Race',     flag: 'raceEnabled',     value: 'raceLaps',     unit: 'laps',    label: t('sess.row.race')     },
+  ];
+  const anyEnabled = sessionRows.some(r => sessionCfg[r.flag]);
 
   return (
     <>
@@ -43,29 +47,33 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               <I3S.IconFlag size={14} style={{color:'var(--red)'}}/>
               <div className="card-title">{t('sess.mode_title')}</div>
             </div>
-            <div className="card-body col" style={{gap: 16}}>
-              <div className="field">
-                <label className="field-label">{t('sess.mode')}</label>
-                <div className="segmented" style={{alignSelf: 'flex-start'}}>
-                  {['Practice', 'Qualify', 'Race'].map(m => (
-                    <button key={m} className={sessionCfg.mode === m ? 'active' : ''} onClick={() => set('mode', m)}>{m}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="field">
-                  <label className="field-label">{sessionCfg.mode === 'Race' ? t('sess.laps') : t('sess.duration')}</label>
-                  <input
-                    className="input" type="number" inputMode="numeric" min="1"
-                    value={lapsValue}
-                    onChange={e => set(lapsKey, Number(e.target.value))}
-                    disabled={!isAdmin}
-                  />
-                </div>
-                <div className="field">
-                  <label className="field-label">{t('sess.slots')}</label>
-                  <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.slots} onChange={e => set('slots', Number(e.target.value))} disabled={!isAdmin}/>
-                </div>
+            <div className="card-body col" style={{gap: 12}}>
+              {sessionRows.map(row => {
+                const enabled = !!sessionCfg[row.flag];
+                return (
+                  <div key={row.key} className="row" style={{gap: 12, alignItems: 'center'}}>
+                    <div className={`switch ${enabled ? 'on' : ''}`} style={{flexShrink: 0}}
+                      onClick={() => isAdmin && set(row.flag, !enabled)}/>
+                    <div style={{flex: 1, fontSize: 13, fontWeight: 500, opacity: enabled ? 1 : 0.5}}>{row.label}</div>
+                    <input
+                      className="input" type="number" inputMode="numeric" min="1"
+                      style={{width: 90, opacity: enabled ? 1 : 0.5}}
+                      value={sessionCfg[row.value] ?? 0}
+                      onChange={e => set(row.value, Number(e.target.value))}
+                      disabled={!isAdmin || !enabled}
+                    />
+                    <div className="muted" style={{fontSize: 11, width: 36, opacity: enabled ? 1 : 0.5}}>
+                      {row.unit === 'laps' ? t('sess.unit.laps') : t('sess.unit.min')}
+                    </div>
+                  </div>
+                );
+              })}
+              {!anyEnabled && (
+                <div className="muted" style={{fontSize: 11.5, color: 'var(--red)'}}>{t('sess.no_session_enabled')}</div>
+              )}
+              <div className="field" style={{marginTop: 4}}>
+                <label className="field-label">{t('sess.slots')}</label>
+                <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.slots} onChange={e => set('slots', Number(e.target.value))} disabled={!isAdmin} style={{maxWidth: 120}}/>
               </div>
             </div>
           </div>

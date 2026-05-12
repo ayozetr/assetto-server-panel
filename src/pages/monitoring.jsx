@@ -43,6 +43,17 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const [activity, setActivity] = useState([]);
   useEffect(() => {
     const NOISE = /^(?:\s*content\/\S+\.(?:ini|kn5|ksanim|wav|fbx|dds)\s+ok\s*$|REQ\b|\{|\}|PAGE:|Serve |TCP packet|RECEIVED \d|Dispatching TCP|GET |POST |HEAD |listening on |plugin lines absent|plugin not configured|protocol version:|socket error:|parse error:)/i;
+    // Resolve "trackId/layoutId" or "trackId-layoutId" into a human-readable
+    // "<Track Name> <Layout Name>" using the catalogue loaded into `tracks`.
+    // Falls back to the raw segment when the track/layout is unknown.
+    const formatTrackPath = (raw) => {
+      if (!raw) return '';
+      const [trackId, layoutId] = raw.includes('/') ? raw.split('/') : raw.split('-');
+      const tk = (tracks || []).find(t => t && t.id === trackId);
+      if (!tk) return layoutId ? `${trackId} ${layoutId}` : trackId;
+      const layoutName = layoutId && tk.layoutDetails && tk.layoutDetails[layoutId] && tk.layoutDetails[layoutId].name;
+      return layoutName ? `${tk.name} ${layoutName}` : tk.name;
+    };
     const stripPrefix = (s) => s
       .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+/i, '')
       .replace(/^(INFO|WARN|ERROR|DEBUG)\s+/i, '')
@@ -69,8 +80,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         return { ...l, kind: 'lap', text: `Vuelta ${m[1]} — ${time}${cuts ? ` (cortes: ${cuts})` : ''}` };
       }
       if ((m = body.match(/^(?:NEW_SESSION|SESSION_INFO)\s+(.+?)\s+\(([^)]+)\)\s+track=(\S+)/))) {
-        const trackName = m[3].split('/').slice(-1)[0] || m[3];
-        return { ...l, kind: 'session', text: `Sesión ${m[1]} en ${trackName}` };
+        return { ...l, kind: 'session', text: `Sesión ${m[1]} en ${formatTrackPath(m[3])}` };
       }
       if (/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i.test(body)) {
         const who = body.match(/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i)[1];
@@ -99,7 +109,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
     load();
     const id = setInterval(load, 8000);
     return () => clearInterval(id);
-  }, []);
+  }, [tracks]);
 
   return (
     <>

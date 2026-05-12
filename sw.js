@@ -7,7 +7,7 @@
 //   - same-origin static    : stale-while-revalidate
 
 // Bump on every behaviour change so old caches are dropped at activate-time.
-const CACHE_NAME  = 'ac-panel-v17';
+const CACHE_NAME  = 'ac-panel-v18';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -147,20 +147,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for CDN scripts (React, Babel, fonts)
-  if (url.origin !== self.location.origin) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(request);
-        const networkFetch = fetch(request).then((res) => {
-          if (res.ok) cache.put(request, res.clone());
-          return res;
-        }).catch(() => cached);
-        return cached || networkFetch;
-      })
-    );
-    return;
-  }
+  // Cross-origin requests (React/ReactDOM on unpkg, Google fonts) — let the
+  // browser handle them natively without SW interception. When the SW does
+  // `fetch(request)` against a foreign origin the call is governed by the
+  // page's CSP `connect-src` directive (not `script-src` like a normal
+  // <script> tag would be), so a strict `connect-src 'self'` blocks it and
+  // the page ends up without React. Skipping respondWith returns control to
+  // the browser, which honours the `script-src` allowlist correctly.
+  if (url.origin !== self.location.origin) return;
 
   // /dist/ JS bundles: NETWORK-FIRST so an F5 after a code deploy always pulls
   // the new build instead of serving a stale entry from the previous SW

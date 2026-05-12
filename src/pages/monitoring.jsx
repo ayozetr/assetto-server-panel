@@ -42,7 +42,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
 
   const [activity, setActivity] = useState([]);
   useEffect(() => {
-    const NOISE = /^(?:\s*content\/\S+\.(?:ini|kn5|ksanim|wav|fbx|dds)\s+ok\s*$|REQ\b|\{|\}|PAGE:|Serve |TCP packet|RECEIVED \d|Dispatching TCP|GET |POST |HEAD |listening on |plugin lines absent|plugin not configured|protocol version:|socket error:|parse error:)/i;
+    const NOISE = /^(?:\s*content\/\S+\.(?:ini|kn5|ksanim|wav|fbx|dds)\s+ok\s*$|REQ\b|\{|\}|PAGE:|Serve |TCP packet|RECEIVED \d|Dispatching TCP|GET |POST |HEAD |listening on |plugin lines absent|plugin not configured|protocol version:|socket error:|parse error:|WARNING:\s*MAX_CONTACTS_PER_KM\b|WARNING:\s*pitstop window\b|WARNING:\s*tyre\b|Loading\b|Reading\b|Reset\b)/i;
     // Resolve "trackId/layoutId" into a human-readable "<Track Name> (<Layout>)"
     // using the catalogue. Some mods carry no root ui_track.json, so the panel
     // falls back to the first layout's name as the track-level name (e.g.

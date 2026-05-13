@@ -151,7 +151,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
         <div className="card-header">
           <I2P.IconHistory size={14} style={{color:'var(--red)'}}/>
           <div className="card-title">{t('pl.history')}</div>
-          <span className="badge right">{filteredPast.length}</span>
+          <span className="badge">{filteredPast.length}</span>
           <div className="search right" style={{maxWidth:200}}>
             <I2P.IconSearch size={12} className="search-icon"/>
             <input className="input" placeholder="..." value={historySearch}

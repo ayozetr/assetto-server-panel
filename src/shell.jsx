@@ -182,33 +182,31 @@ function Topbar({ theme, setTheme, server, onServerAction, user, onMenuClick }) 
 
       <div className="topbar-spacer"></div>
 
-      {user.role === 'admin' && (
-        <div className="row topbar-actions" style={{gap: 6}}>
-          {server.status === 'stopped' && (
-            <button className="btn btn-primary btn-sm" onClick={() => onServerAction('start')}>
-              <I.IconPlay size={12}/> {t('topbar.start')}
+      <div className="row topbar-actions" style={{gap: 6}}>
+        {server.status === 'stopped' && (
+          <button className="btn btn-primary btn-sm" onClick={() => onServerAction('start')}>
+            <I.IconPlay size={12}/> {t('topbar.start')}
+          </button>
+        )}
+        {server.status === 'running' && (
+          <>
+            <button className="btn btn-sm" onClick={() => onServerAction('reload')} title={t('topbar.reload_hint')}>
+              <I.IconReload size={12}/> {t('topbar.reload')}
             </button>
-          )}
-          {server.status === 'running' && (
-            <>
-              <button className="btn btn-sm" onClick={() => onServerAction('reload')} title={t('topbar.reload_hint')}>
-                <I.IconReload size={12}/> {t('topbar.reload')}
-              </button>
-              <button className="btn btn-sm" onClick={() => onServerAction('restart')} title={t('topbar.restart_hint')}>
-                <I.IconPower size={12}/> {t('topbar.restart')}
-              </button>
-              <button className="btn btn-danger btn-sm" onClick={() => onServerAction('stop')}>
-                <I.IconStop size={12}/> {t('topbar.stop')}
-              </button>
-            </>
-          )}
-          {(server.status === 'starting' || server.status === 'stopping') && (
-            <button className="btn btn-sm" disabled>
-              <I.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {statusLabel}…
+            <button className="btn btn-sm" onClick={() => onServerAction('restart')} title={t('topbar.restart_hint')}>
+              <I.IconPower size={12}/> {t('topbar.restart')}
             </button>
-          )}
-        </div>
-      )}
+            <button className="btn btn-danger btn-sm" onClick={() => onServerAction('stop')}>
+              <I.IconStop size={12}/> {t('topbar.stop')}
+            </button>
+          </>
+        )}
+        {(server.status === 'starting' || server.status === 'stopping') && (
+          <button className="btn btn-sm" disabled>
+            <I.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {statusLabel}…
+          </button>
+        )}
+      </div>
 
       <button
         className="icon-btn"

@@ -197,20 +197,6 @@ function WhitelistEditor({ isAdmin }) {
   );
 }
 
-// Censors the token portion of a Discord webhook URL — shows the first/last
-// few characters so the admin can still recognise it, with the bulk hidden.
-// Used when the field is in "hide" mode (default after load).
-function maskDiscordWebhook(url) {
-  if (!url) return '';
-  const m = url.match(/^(https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/)(.+)$/);
-  if (!m) return url;
-  const prefix = m[1];
-  const tok    = m[2];
-  if (tok.length < 12) return url;
-  const dots = '•'.repeat(Math.min(Math.max(tok.length - 8, 4), 32));
-  return prefix + tok.slice(0, 4) + dots + tok.slice(-4);
-}
-
 function DiscordWebhookEditor({ isAdmin }) {
   const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell.useToast();
@@ -261,8 +247,6 @@ function DiscordWebhookEditor({ isAdmin }) {
     finally { setTesting(false); }
   };
 
-  const display = show ? url : maskDiscordWebhook(url);
-
   return (
     <div className="card" style={{gridColumn: 'span 2'}}>
       <div className="card-header">
@@ -276,11 +260,11 @@ function DiscordWebhookEditor({ isAdmin }) {
           <div style={{position:'relative'}}>
             <input
               className="input mono"
-              type="text"
-              value={display}
-              onChange={e => show && setUrl(e.target.value)}
+              type={show ? 'text' : 'password'}
+              value={url}
+              onChange={e => setUrl(e.target.value)}
               placeholder="https://discord.com/api/webhooks/…"
-              disabled={!isAdmin || !loaded || !show}
+              disabled={!isAdmin || !loaded}
               spellCheck={false}
               autoComplete="off"
               style={{paddingRight: 36, fontSize: 12}}

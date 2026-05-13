@@ -266,7 +266,7 @@ function DiscordWebhookEditor({ isAdmin }) {
   return (
     <div className="card" style={{gridColumn: 'span 2'}}>
       <div className="card-header">
-        <I4.IconDiscord size={14} style={{color: '#5865F2'}}/>
+        <I4.IconDiscord size={14} style={{color: 'var(--red)'}}/>
         <div className="card-title">{t('config.discord_title')}</div>
       </div>
       <div className="card-body col" style={{gap: 10}}>
@@ -370,6 +370,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
       <div className="grid-2">
         <div className="card">
           <div className="card-header">
+            <I4.IconUser size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">{t('config.identity')}</div>
           </div>
           <div className="card-body col" style={{gap: 14}}>
@@ -394,6 +395,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
 
         <div className="card">
           <div className="card-header">
+            <I4.IconLink size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">{t('config.network')}</div>
           </div>
           <div className="card-body col" style={{gap: 14}}>
@@ -426,6 +428,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
 
         <div className="card">
           <div className="card-header">
+            <I4.IconLock size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">{t('config.access')}</div>
           </div>
           <div className="card-body col" style={{gap: 14}}>

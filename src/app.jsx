@@ -349,7 +349,6 @@ function AppInner(props) {
   const isAdmin = user.role === 'admin';
 
   const handleServerAction = (action) => {
-    if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
     const transitional = action === 'stop' ? 'stopping' : 'starting';
     setServer(s => ({...s, status: transitional}));
     const msgMap = {
@@ -451,7 +450,6 @@ function AppInner(props) {
     }).catch(()=>{});
 
   const handleApplySession = () => {
-    if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return; }
     if (!sessionCfg.practiceEnabled && !sessionCfg.qualifyEnabled && !sessionCfg.raceEnabled) {
       toast.push(t('sess.no_session_enabled') || 'At least one session must be enabled', 'error');
       return;

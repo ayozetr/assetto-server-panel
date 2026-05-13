@@ -2158,7 +2158,7 @@ async function writeEntryList(slots, slotCount) {
 }
 
 async function apiSessionApply(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   try {
     const body = await readBody(req);
     const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
@@ -2886,7 +2886,7 @@ async function withServerActionLock(req, res, fn) {
 }
 
 async function apiServerStart(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
@@ -2907,7 +2907,7 @@ async function apiServerStart(req, res) {
 }
 
 async function apiServerStop(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
@@ -2920,7 +2920,7 @@ async function apiServerStop(req, res) {
 }
 
 async function apiServerRestart(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {

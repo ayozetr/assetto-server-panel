@@ -51,14 +51,14 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 return (
                   <div key={row.key} className="row" style={{gap: 12, alignItems: 'center'}}>
                     <div className={`switch ${enabled ? 'on' : ''}`} style={{flexShrink: 0}}
-                      onClick={() => isAdmin && set(row.flag, !enabled)}/>
+                      onClick={() => set(row.flag, !enabled)}/>
                     <div style={{flex: 1, fontSize: 13, fontWeight: 500, opacity: enabled ? 1 : 0.5}}>{row.label}</div>
                     <input
                       className="input" type="number" inputMode="numeric" min="1"
                       style={{width: 90, opacity: enabled ? 1 : 0.5}}
                       value={sessionCfg[row.value] ?? 0}
                       onChange={e => set(row.value, Number(e.target.value))}
-                      disabled={!isAdmin || !enabled}
+                      disabled={!enabled}
                     />
                     <div className="muted" style={{fontSize: 11, width: 36, opacity: enabled ? 1 : 0.5}}>
                       {row.unit === 'laps' ? t('sess.unit.laps') : t('sess.unit.min')}
@@ -71,7 +71,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               )}
               <div className="field" style={{marginTop: 4}}>
                 <label className="field-label">{t('sess.slots')}</label>
-                <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.maxClients} onChange={e => set('maxClients', Number(e.target.value))} disabled={!isAdmin} style={{maxWidth: 120}}/>
+                <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.maxClients} onChange={e => set('maxClients', Number(e.target.value))} style={{maxWidth: 120}}/>
               </div>
             </div>
           </div>
@@ -86,13 +86,13 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 <div className="field">
                   <label className="field-label">{t('sess.time')}</label>
                   <div className="row" style={{gap: 10}}>
-                    <input type="range" min="0" max="23" value={sessionCfg.time} onChange={e => set('time', Number(e.target.value))} style={{flex: 1, accentColor: 'var(--red)'}} disabled={!isAdmin}/>
+                    <input type="range" min="0" max="23" value={sessionCfg.time} onChange={e => set('time', Number(e.target.value))} style={{flex: 1, accentColor: 'var(--red)'}}/>
                     <div className="mono" style={{minWidth: 44, textAlign:'right'}}>{String(sessionCfg.time).padStart(2,'0')}:00</div>
                   </div>
                 </div>
                 <div className="field">
                   <label className="field-label">{t('sess.weather')}</label>
-                  <select className="select" value={sessionCfg.weather} onChange={e => set('weather', e.target.value)} disabled={!isAdmin}>
+                  <select className="select" value={sessionCfg.weather} onChange={e => set('weather', e.target.value)}>
                     <option value="3_clear">{t('sess.weather.clear')}</option>
                     <option value="4_mid_clear">{t('sess.weather.mid_clear')}</option>
                     <option value="5_light_clouds">{t('sess.weather.light_clouds')}</option>
@@ -106,12 +106,12 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
               <div className="grid-2">
                 <div className="field">
                   <label className="field-label">{t('sess.temp')}: {sessionCfg.airTemp}°C</label>
-                  <input type="range" min="0" max="40" value={sessionCfg.airTemp} onChange={e => set('airTemp', Number(e.target.value))} style={{accentColor: 'var(--red)'}} disabled={!isAdmin}/>
+                  <input type="range" min="0" max="40" value={sessionCfg.airTemp} onChange={e => set('airTemp', Number(e.target.value))} style={{accentColor: 'var(--red)'}}/>
                 </div>
                 <div className="field">
                   <label className="field-label">{t('sess.penalties')}</label>
                   <div className="row" style={{gap: 10, alignItems:'center', minHeight: 24}}>
-                    <div className={`switch ${sessionCfg.penalties ? 'on' : ''}`} onClick={() => isAdmin && set('penalties', !sessionCfg.penalties)}></div>
+                    <div className={`switch ${sessionCfg.penalties ? 'on' : ''}`} onClick={() => set('penalties', !sessionCfg.penalties)}></div>
                     <span className="muted" style={{fontSize: 12}}>{t('sess.penalties.hint')}</span>
                   </div>
                 </div>
@@ -138,7 +138,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
                 </div>
                 <div className="field" style={{marginTop: 12}}>
                   <label className="field-label">Layout</label>
-                  <select className="select" value={sessionCfg.layout} onChange={e => set('layout', e.target.value)} disabled={!isAdmin}>
+                  <select className="select" value={sessionCfg.layout} onChange={e => set('layout', e.target.value)}>
                     {track.layouts.map(l => (
                       <option key={l} value={l}>
                         {(window.AppUtils?.layoutShortName?.(track, l)) || track.layoutDetails?.[l]?.name || l || 'Default'}
@@ -195,11 +195,9 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, onApply
             </div>
           </div>
 
-          {isAdmin && (
-            <button className="btn btn-primary" style={{padding: '10px', justifyContent:'center'}} onClick={()=>setConfirmApply(true)}>
-              <I3S.IconCheck size={14}/> {t('sess.btn_apply')}
-            </button>
-          )}
+          <button className="btn btn-primary" style={{padding: '10px', justifyContent:'center'}} onClick={()=>setConfirmApply(true)}>
+            <I3S.IconCheck size={14}/> {t('sess.btn_apply')}
+          </button>
         </div>
       </div>
 

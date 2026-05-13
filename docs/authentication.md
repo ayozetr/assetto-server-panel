@@ -46,8 +46,60 @@ Then log in normally and use the **Reset password** flow.
 
 | Role | Access |
 |------|--------|
-| `admin` | Full access — server control, configuration, user management, mod upload, audit log, panel-user list |
-| `user` | Read access + mod upload + own profile — cannot change server config, manage users, view the panel-user list, wipe mod history, or read AC server passwords |
+| `admin` | Always passes every permission check. Exclusively allowed to manage panel users (create / delete / change role / reset password), edit the AC server `PASSWORD` and `ADMIN_PASSWORD` fields, wipe mod history, and consult the role-permissions card itself. |
+| `user` | Read access + own profile by default. Anything beyond that is configured per-permission by an admin (see [Granular permissions](#granular-permissions)). The defaults preserve the open grants from before the granular system existed: `serverControl`, `sessionEdit` and `modUpload` are on; the rest are off. |
+
+---
+
+## Granular permissions
+
+The `user` role is gated by a set of nine independent boolean toggles edited
+from the **Usuarios** page (admin only). They are stored as a single JSON value
+under the key `role_permissions_user` in `panel_settings`, and surface on
+`/api/auth/me` so the frontend can hide buttons / pages the user cannot use.
+
+| Permission | When `true`, the `user` role can… |
+|------------|------------------------------------|
+| `serverControl`    | Start / stop / restart / reload the AC server from the topbar. |
+| `sessionEdit`      | Edit the session (track, layout, cars, skins, weather, time, penalties) and apply it. |
+| `serverConfig`     | Edit `server_cfg.ini` — name, ports, race rules, etc. AC `PASSWORD` and `ADMIN_PASSWORD` stay admin-only inside the same endpoint. |
+| `whitelistManage`  | Add / remove Steam IDs from the whitelist (per-player button on Players + the editor on Configuración). |
+| `playerModeration` | Kick / ban connected drivers, edit panel nicknames. |
+| `modUpload`        | Upload mods. The Mods page still loads in read-only mode for users without this permission, so they can see the history. |
+| `discordWebhook`   | View / edit the Discord webhook URL and trigger the test post. |
+| `auditView`        | See the **Audit** page. |
+| `dbBackup`         | Download a manual `assetto.db` backup. |
+
+Every action is recorded in the audit log with the actor's username so a per-user
+trail survives even when a permission set is broad.
+
+Server-side checks live in a single helper:
+
+```js
+function checkPermission(req, perm) {
+  const sess = getSession(req);
+  if (!sess) return false;
+  if (userMustChangePassword(sess.username)) return false;
+  if (sess.role === 'admin') return true;
+  return !!getUserRolePermissions()[perm];
+}
+```
+
+Admin always passes. Users with a forced-change-password flag never do (they
+are bounced into the change-password modal regardless of role or permission).
+
+Editing a permission takes effect immediately for affected users: the panel
+re-reads `/api/auth/me` on mount, and any subsequent request from the affected
+user hits the updated server-side check. There is also a hard server-side
+recheck on `body.restart=true` inside `apiConfigUpdate` so a user with only
+`serverConfig` cannot bypass `serverControl` by saving + restart in one call.
+
+> **Reserved actions that no permission can grant a non-admin.** Managing
+> panel users (create / delete / change role / reset password), editing the
+> AC server `PASSWORD` and `ADMIN_PASSWORD` fields, wiping the mod-history
+> table, and reading or writing the role-permission set itself are all
+> admin-only by design — exposing them as toggles would let a `user` escalate
+> to admin or silently grant themselves more permissions.
 
 ---
 

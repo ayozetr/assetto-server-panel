@@ -45,6 +45,12 @@ Edit `server_cfg.ini` through a visual interface: server name, ports, slots, pas
 ### 👥 User management
 Create, edit and delete panel users. Each user has their own profile with password change and a built-in secure password generator (uses `crypto.getRandomValues`). The panel refuses to delete *or demote* the last remaining admin and revokes a user's active sessions when an admin resets their password.
 
+### 🔐 Granular role permissions
+The `user` role is gated by nine independent toggles edited from the **Usuarios** page: `serverControl`, `sessionEdit`, `serverConfig`, `whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`, `auditView`, `dbBackup`. Admin always passes every check. Defaults preserve the open grants from earlier deployments (server control / session edit / mod upload on; the rest off). Editing a permission takes effect on the affected user's next request — no re-login needed. Panel-user CRUD, AC `PASSWORD` / `ADMIN_PASSWORD` and the permission set itself are reserved to admins by design (cannot be exposed as toggles without enabling privilege escalation).
+
+### 🔔 Discord notifications for lap records
+Drop a Discord webhook URL into Configuración → Discord; the server posts a localized message every time a driver beats the previous best lap for a `(track, layout, car)` combination on the live UDP path. First-ever lap on a combo is **not** a record, so opening up new content doesn't spam the channel. The message uses the panel language stored server-side (en/es/it) and resolves track/car to their catalogue display names. Webhook URL is treated as a secret — never returned to non-admins / users without the `discordWebhook` permission.
+
 ### 🛡️ Security
 - **Sessions:** scrypt password hashing with cost params pinned in `SCRYPT_PARAMS` (constant-time compare), `HttpOnly; SameSite=Strict` cookies with 7-day TTL plus the `Secure` flag when the request arrived over HTTPS, automatic 401 → logout interceptor on the client.
 - **Forced first-login change:** seeded `Admin / Admin1234!` is locked into a blocking modal until the password is changed; server-side gate refuses every authenticated endpoint until the flag clears.
@@ -113,19 +119,20 @@ in the SQLite DB and log in normally.
 
 This is a **single-tenant admin tool**, not a multi-tenant web app. Trust assumptions:
 
-- **Authenticated users are trusted to operate the AC server.** Every logged-in user can upload mods, which extract files into the AC content directory and run inside the AC server process. There is **no sandbox** between mods and the host — a malicious mod can do anything `acServer` can do.
-- **Admins are fully trusted.** Admin role can change passwords, delete users, edit `server_cfg.ini`, restart the AC process, and download the SQLite DB.
-- **Do not expose the panel to the public internet without HTTPS and credentialled access.** Do not give panel accounts to anyone you would not give shell access to the host. Always set `TRUST_PROXY=1` when behind Cloudflare/Tunnel/reverse-proxy so rate limits and audit logs see real client IPs.
-- **The audit log is hash-chained but deletable.** Each row stores a SHA-256 of the previous row's hash, so silent edits are detectable with `node tools/verify-audit.js` against an external backup. Anyone with shell access to `assetto.db` can still wipe rows entirely — keep periodic backups via `/api/admin/backup` if you need provable history.
+- **Admins are fully trusted.** Admin role always passes every permission check. Exclusively allowed actions: managing panel users (create / delete / change role / reset password), editing the AC server `PASSWORD` and `ADMIN_PASSWORD` fields, wiping mod history, downloading the SQLite DB and reading or writing the role-permissions set itself. These are reserved by design — exposing them as toggles would let a `user` escalate to admin.
+- **The `user` role is configurable per-permission, not "read-only".** An admin can grant a user the ability to start/stop the AC server, edit `server_cfg.ini` (everything except the two AC passwords), apply session changes, kick/ban drivers, manage the whitelist, upload mods, edit the Discord webhook, view the audit log and download DB backups — one toggle each. Trust accordingly: granting `serverConfig` lets the user reshape the running server; granting `modUpload` lets the user push arbitrary code that runs inside the AC server process (there is **no sandbox** between mods and the host).
+- **Do not expose the panel to the public internet without HTTPS and credentialled access.** Do not give panel accounts to anyone you would not trust with the equivalent shell-level capability. Always set `TRUST_PROXY=1` when behind Cloudflare/Tunnel/reverse-proxy so rate limits and audit logs see real client IPs.
+- **The audit log is hash-chained but deletable.** Each row stores a SHA-256 of the previous row's hash, so silent edits are detectable with `node tools/verify-audit.js` against an external backup. Anyone with shell access to `assetto.db` can still wipe rows entirely — keep periodic backups via `/api/admin/backup` if you need provable history. Every permission-gated action is recorded with the actor's username, so a per-user trail survives even when a permission set is broad.
 
 What the panel **does** defend against:
 - Anonymous attackers (CSRF, brute-force on login, path traversal, INI injection, decompression bombs, malformed archives).
-- Compromised non-admin accounts (cannot read AC server passwords, cannot wipe history, cannot list/manage users).
+- Privilege escalation from a compromised user account — even with every toggle on, the user role cannot create/delete panel users, change another user's role or password, read the AC server `PASSWORD` / `ADMIN_PASSWORD`, wipe mod history, or edit the role-permissions set.
 - Stolen old SW caches (network-first navigation strategy ensures security fixes propagate without manual cache bumps).
 
 What the panel does **not** defend against:
-- Malicious mods (no sandboxing — admins are responsible for vetting upload sources).
+- Malicious mods (no sandboxing — only grant `modUpload` to people you trust to vet upload sources).
 - A compromised admin account (full control by design).
+- An over-permissioned user account — e.g. a user granted `serverConfig` can rewrite ports, ban-list flags and rules; a user granted `modUpload` can ship arbitrary native code. Defaults exist; the *configured* permission set is the operator's responsibility.
 - Filesystem access via the host shell or other services.
 
 ---

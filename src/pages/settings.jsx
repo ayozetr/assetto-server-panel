@@ -121,7 +121,7 @@ function UploadLimitCard({ isAdmin }) {
   );
 }
 
-function WhitelistEditor({ isAdmin }) {
+function WhitelistEditor({ canManage }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell.useToast();
   const [ids,     setIds]     = useStateC([]);
@@ -172,7 +172,7 @@ function WhitelistEditor({ isAdmin }) {
           {ids.map((id, i) => (
             <div key={id} style={{display:'flex', alignItems:'center', gap: 8, fontSize: 12}}>
               <span className="mono" style={{flex:1, color:'var(--text-muted)'}}>{id}</span>
-              {isAdmin && (
+              {canManage && (
                 <button className="icon-btn" style={{width:20,height:20}} onClick={() => setIds(prev => prev.filter((_, j) => j !== i))}>
                   <I4.IconX size={11}/>
                 </button>
@@ -181,7 +181,7 @@ function WhitelistEditor({ isAdmin }) {
           ))}
         </div>
       )}
-      {isAdmin && (
+      {canManage && (
         <div className="row" style={{gap: 6}}>
           <input className="input mono" placeholder="76561198000000000" value={newId}
             onChange={e=>setNewId(e.target.value)}
@@ -197,7 +197,7 @@ function WhitelistEditor({ isAdmin }) {
   );
 }
 
-function DiscordWebhookEditor({ isAdmin }) {
+function DiscordWebhookEditor({ canManage }) {
   const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell.useToast();
   const [url,     setUrl]     = useStateC('');
@@ -264,7 +264,7 @@ function DiscordWebhookEditor({ isAdmin }) {
               value={url}
               onChange={e => setUrl(e.target.value)}
               placeholder="https://discord.com/api/webhooks/…"
-              disabled={!isAdmin || !loaded}
+              disabled={!canManage || !loaded}
               spellCheck={false}
               autoComplete="off"
               style={{paddingRight: 36, fontSize: 12}}
@@ -273,14 +273,14 @@ function DiscordWebhookEditor({ isAdmin }) {
               type="button"
               onClick={() => setShow(v => !v)}
               title={show ? t('common.hide') || 'Hide' : t('common.show') || 'Show'}
-              disabled={!isAdmin || !loaded}
+              disabled={!canManage || !loaded}
               style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
             >
               {show ? <I4.IconEyeOff size={14}/> : <I4.IconEye size={14}/>}
             </button>
           </div>
         </div>
-        {isAdmin && (
+        {canManage && (
           <div className="row" style={{gap: 6, justifyContent: 'flex-end'}}>
             <button className="btn btn-sm" onClick={test} disabled={!loaded || testing || saving || !url}>
               {testing
@@ -324,11 +324,13 @@ function PasswordField({ value, onChange, disabled, placeholder }) {
   );
 }
 
-function PageConfig({ config, setConfig, isAdmin, onSave }) {
+function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin, onSave }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [dirty,  setDirty]  = useStateC(false);
   const [saving, setSaving] = useStateC(false);
   const set = (k, v) => { setConfig(c => ({...c, [k]: v})); setDirty(true); };
+  const canManageWhitelist = isAdmin || !!perms.whitelistManage;
+  const canManageDiscord   = isAdmin || !!perms.discordWebhook;
 
   const save = async (opts) => {
     setSaving(true);
@@ -344,7 +346,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
         <p className="page-sub">{t('config.sub')}</p>
       </div>
 
-      {!isAdmin && (
+      {!canEdit && (
         <div className="card" style={{marginBottom: 16, padding: '12px 16px', background: 'var(--bg-3)', display:'flex', alignItems:'center', gap: 10}}>
           <I4.IconLock size={14} style={{color: 'var(--text-muted)'}}/>
           <span style={{fontSize: 13, color: 'var(--text-muted)'}}>{t('config.admin_only')}</span>
@@ -360,11 +362,11 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
           <div className="card-body col" style={{gap: 14}}>
             <div className="field">
               <label className="field-label">{t('config.name')}</label>
-              <input className="input" value={config.name} onChange={e=>set('name', e.target.value)} disabled={!isAdmin}/>
+              <input className="input" value={config.name} onChange={e=>set('name', e.target.value)} disabled={!canEdit}/>
             </div>
             <div className="field">
               <label className="field-label">{t('config.welcome')}</label>
-              <input className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!isAdmin}/>
+              <input className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!canEdit}/>
               <span className="field-hint">{t('config.welcome_hint') || 'Newlines are not preserved by Assetto Corsa.'}</span>
             </div>
             <div className="row-between">
@@ -372,7 +374,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.public')}</div>
                 <div className="muted" style={{fontSize: 11.5}}>{t('config.public_sub')}</div>
               </div>
-              <div className={`switch ${config.publicLobby ? 'on' : ''}`} onClick={()=>isAdmin && set('publicLobby', !config.publicLobby)}></div>
+              <div className={`switch ${config.publicLobby ? 'on' : ''}`} onClick={()=>canEdit && set('publicLobby', !config.publicLobby)}></div>
             </div>
           </div>
         </div>
@@ -386,26 +388,26 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             <div className="grid-2">
               <div className="field">
                 <label className="field-label">{t('config.tcp')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.tcp} onChange={e=>set('tcp', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.tcp} onChange={e=>set('tcp', Number(e.target.value))} disabled={!canEdit}/>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.udp')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.udp} onChange={e=>set('udp', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.udp} onChange={e=>set('udp', Number(e.target.value))} disabled={!canEdit}/>
               </div>
             </div>
             <div className="grid-2">
               <div className="field">
                 <label className="field-label">{t('config.http')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.http} onChange={e=>set('http', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.http} onChange={e=>set('http', Number(e.target.value))} disabled={!canEdit}/>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.tickrate')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!canEdit}/>
               </div>
             </div>
             <div className="field">
               <label className="field-label">{t('config.max_clients')}</label>
-              <input className="input mono" type="number" inputMode="numeric" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!isAdmin}/>
+              <input className="input mono" type="number" inputMode="numeric" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!canEdit}/>
             </div>
           </div>
         </div>
@@ -430,9 +432,9 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.whitelist')}</div>
                 <div className="muted" style={{fontSize: 11.5}}>{t('config.whitelist_sub')}</div>
               </div>
-              <div className={`switch ${config.whitelist ? 'on' : ''}`} onClick={()=>isAdmin && set('whitelist', !config.whitelist)}></div>
+              <div className={`switch ${config.whitelist ? 'on' : ''}`} onClick={()=>canManageWhitelist && set('whitelist', !config.whitelist)}></div>
             </div>
-            {config.whitelist && <WhitelistEditor isAdmin={isAdmin}/>}
+            {config.whitelist && <WhitelistEditor canManage={canManageWhitelist}/>}
           </div>
         </div>
 
@@ -445,21 +447,21 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             <div className="grid-2">
               <div className="field">
                 <label className="field-label">{t('config.fuel')}</label>
-                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.fuelRate ?? 100} onChange={e=>set('fuelRate', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.fuelRate ?? 100} onChange={e=>set('fuelRate', Number(e.target.value))} disabled={!canEdit}/>
                 <span className="field-hint">{t('config.fuel_hint')}</span>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.damage')}</label>
-                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.damage ?? 100} onChange={e=>set('damage', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.damage ?? 100} onChange={e=>set('damage', Number(e.target.value))} disabled={!canEdit}/>
               </div>
               <div className="field" style={{gridColumn: 'span 2'}}>
                 <label className="field-label">{t('config.tyres')}</label>
-                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!isAdmin}/>
+                <input className="input mono" type="number" inputMode="numeric" min="0" max="200" value={config.tyreWear ?? 100} onChange={e=>set('tyreWear', Number(e.target.value))} disabled={!canEdit}/>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.abs')}</label>
                 <span className="field-hint" style={{marginBottom: 4}}>{t('config.abs_sub')}</span>
-                <select className="select" style={{width: '100%'}} value={config.abs ?? 0} onChange={e=>isAdmin && set('abs', Number(e.target.value))} disabled={!isAdmin}>
+                <select className="select" style={{width: '100%'}} value={config.abs ?? 0} onChange={e=>canEdit && set('abs', Number(e.target.value))} disabled={!canEdit}>
                   <option value={0}>{t('config.opt_no')}</option>
                   <option value={1}>{t('config.opt_factory')}</option>
                   <option value={2}>{t('config.opt_free')}</option>
@@ -468,7 +470,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
               <div className="field">
                 <label className="field-label">{t('config.tc')}</label>
                 <span className="field-hint" style={{marginBottom: 4}}>{t('config.tc_sub')}</span>
-                <select className="select" style={{width: '100%'}} value={config.tc ?? 0} onChange={e=>isAdmin && set('tc', Number(e.target.value))} disabled={!isAdmin}>
+                <select className="select" style={{width: '100%'}} value={config.tc ?? 0} onChange={e=>canEdit && set('tc', Number(e.target.value))} disabled={!canEdit}>
                   <option value={0}>{t('config.opt_no')}</option>
                   <option value={1}>{t('config.opt_factory')}</option>
                   <option value={2}>{t('config.opt_free')}</option>
@@ -478,20 +480,20 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             <div className="col" style={{gap: 12}}>
               <div className="row-between">
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autoclutch')}</div>
-                <div className={`switch ${config.autoclutch ? 'on' : ''}`} onClick={()=>isAdmin && set('autoclutch', !config.autoclutch)}></div>
+                <div className={`switch ${config.autoclutch ? 'on' : ''}`} onClick={()=>canEdit && set('autoclutch', !config.autoclutch)}></div>
               </div>
               <div className="row-between">
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.stability')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.stability_sub')}</div>
                 </div>
-                <div className={`switch ${config.stability ? 'on' : ''}`} onClick={()=>isAdmin && set('stability', !config.stability)}></div>
+                <div className={`switch ${config.stability ? 'on' : ''}`} onClick={()=>canEdit && set('stability', !config.stability)}></div>
               </div>
             </div>
           </div>
         </div>
 
-        <DiscordWebhookEditor isAdmin={isAdmin}/>
+        <DiscordWebhookEditor canManage={canManageDiscord}/>
 
         <div className="card">
           <div className="card-header">
@@ -505,14 +507,14 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autostart')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.autostart_sub')}</div>
                 </div>
-                <div className={`switch ${config.autoStart ? 'on' : ''}`} onClick={()=>isAdmin && set('autoStart', !config.autoStart)}></div>
+                <div className={`switch ${config.autoStart ? 'on' : ''}`} onClick={()=>canEdit && set('autoStart', !config.autoStart)}></div>
               </div>
               <div className="row-between">
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autorestart')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.autorestart_sub')}</div>
                 </div>
-                <div className={`switch ${config.autoRestart ? 'on' : ''}`} onClick={()=>isAdmin && set('autoRestart', !config.autoRestart)}></div>
+                <div className={`switch ${config.autoRestart ? 'on' : ''}`} onClick={()=>canEdit && set('autoRestart', !config.autoRestart)}></div>
               </div>
               <div className="field" style={{gridColumn: 'span 2'}}>
                 <label className="field-label">{t('config.lang')}</label>
@@ -538,7 +540,7 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
         <UploadLimitCard isAdmin={isAdmin}/>
       </div>
 
-      {isAdmin && (
+      {canEdit && (
         <div className="row" style={{marginTop: 20, justifyContent: 'flex-end', gap: 8, position:'sticky', bottom: 16, background:'var(--bg-2)', padding:'10px 0'}}>
           {dirty && !saving && <span className="badge badge-amber">{t('config.unsaved')}</span>}
           <button className="btn" onClick={()=>setDirty(false)} disabled={saving}>{t('common.cancel')}</button>
@@ -547,11 +549,13 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
               ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
               : <><I4.IconCheck size={13}/> {t('common.save')}</>}
           </button>
-          <button className="btn btn-primary" onClick={()=>save({ restart: true })} disabled={!dirty || saving}>
-            {saving
-              ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
-              : <><I4.IconPower size={13}/> {t('config.save_and_restart') || 'Guardar y reiniciar'}</>}
-          </button>
+          {(isAdmin || perms.serverControl) && (
+            <button className="btn btn-primary" onClick={()=>save({ restart: true })} disabled={!dirty || saving}>
+              {saving
+                ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
+                : <><I4.IconPower size={13}/> {t('config.save_and_restart') || 'Guardar y reiniciar'}</>}
+            </button>
+          )}
         </div>
       )}
     </>

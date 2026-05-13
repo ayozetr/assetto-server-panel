@@ -74,7 +74,7 @@ function HistoryItem({ item, t }) {
   );
 }
 
-function PageMods({ isAdmin, refreshContent }) {
+function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k) => k;
   const toast = window.AppShell.useToast();
 
@@ -220,6 +220,14 @@ function PageMods({ isAdmin, refreshContent }) {
 
         {/* ── Left col: uploader ── */}
         <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+          {!canUpload && (
+            <div className="card" style={{padding: '14px 16px', background: 'var(--bg-3)', display:'flex', alignItems:'center', gap: 10}}>
+              <I5.IconLock size={14} style={{color: 'var(--text-muted)'}}/>
+              <span style={{fontSize: 13, color: 'var(--text-muted)'}}>{t('mods.no_permission') || 'You do not have permission to upload mods.'}</span>
+            </div>
+          )}
+
+          {canUpload && <>
 
           {/* Drop zone */}
           <div
@@ -362,6 +370,7 @@ function PageMods({ isAdmin, refreshContent }) {
               )}
             </div>
           )}
+          </>}
         </div>
 
         {/* ── Right col: info + history ── */}

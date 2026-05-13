@@ -159,7 +159,9 @@ function App() {
           // Mirror the server flag in both directions — true → true (forces modal),
           // false → false (clears stale local state). Without this, a user who cleared
           // the flag on a different browser keeps seeing the forced-change modal here.
-          else setUser(u => ({ ...u, mustChangePassword: !!d.mustChangePassword }));
+          // Also overlay the latest permission set so a granular toggle change in
+          // Usuarios (or a role flip) takes effect without re-login.
+          else setUser(u => ({ ...u, mustChangePassword: !!d.mustChangePassword, permissions: d.permissions || u?.permissions || {} }));
         })
         .catch(() => {});
     }
@@ -347,6 +349,8 @@ function AppInner(props) {
 
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const isAdmin = user.role === 'admin';
+  const perms = user.permissions || {};
+  const can   = (p) => isAdmin || !!perms[p];
 
   const handleServerAction = (action) => {
     const transitional = action === 'stop' ? 'stopping' : 'starting';
@@ -502,7 +506,7 @@ function AppInner(props) {
   };
 
   const handleSaveConfig = (opts = {}) => {
-    if (!isAdmin) { toast.push(t('common.no_permissions'), 'warn'); return Promise.reject(new Error('no admin')); }
+    if (!can('serverConfig')) { toast.push(t('common.no_permissions'), 'warn'); return Promise.reject(new Error('no permission')); }
     const restart = opts.restart === true;
     return fetch('/api/config', {
       method: 'PUT',
@@ -542,14 +546,14 @@ function AppInner(props) {
 
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
-  else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} setPastPlayers={setPastPlayers} server={server} isAdmin={isAdmin} onKick={handleKick} onBan={handleBan}/>;
+  else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} setPastPlayers={setPastPlayers} server={server} isAdmin={isAdmin} canModerate={can('playerModeration')} canWhitelist={can('whitelistManage')} onKick={handleKick} onBan={handleBan}/>;
   else if (page === 'logs')      content = <PageLogs server={server}/>;
   else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes}/>;
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;
-  else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} refreshContent={refreshContent}/>;
-  else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} onApply={handleApplySession}/>;
-  else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} onSave={handleSaveConfig}/>;
+  else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} canUpload={can('modUpload')} refreshContent={refreshContent}/>;
+  else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} canEdit={can('sessionEdit')} onApply={handleApplySession}/>;
+  else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} perms={perms} canEdit={can('serverConfig')} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
   else if (page === 'audit')     content = <PageAudit/>;
   else if (page === 'profile')   content = <PageProfile user={user} setUser={setUser}/>;

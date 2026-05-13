@@ -202,6 +202,42 @@ function userMustChangePassword(username) {
   } catch { return false; }
 }
 
+// Canonical list of granular permissions exposed via the Usuarios card. Any
+// permission referenced in route guards must appear here so the UI surfaces
+// it and the defaults block above seeds a value for it.
+const ROLE_PERMISSIONS = [
+  'serverControl', 'sessionEdit', 'serverConfig', 'whitelistManage',
+  'playerModeration', 'modUpload', 'discordWebhook', 'auditView', 'dbBackup',
+];
+
+function getUserRolePermissions() {
+  const fallback = Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, false]));
+  if (!db) return fallback;
+  try {
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'role_permissions_user'`).get();
+    if (!row?.value) return fallback;
+    const parsed = JSON.parse(row.value);
+    // Re-key against the canonical list so a stale row (older deploy that knew
+    // fewer permissions) cannot accidentally grant something we just added.
+    const out = {};
+    for (const p of ROLE_PERMISSIONS) out[p] = !!parsed[p];
+    return out;
+  } catch { return fallback; }
+}
+
+// Per-request permission check. Admin always passes (subject to the must-
+// change-password gate, same as checkAdminAuth). Users consult the stored
+// JSON for this role. Callers should follow the pattern:
+//   if (!checkPermission(req, 'X')) return json(res, 403, { error: ... });
+function checkPermission(req, perm) {
+  const sess = getSession(req);
+  if (!sess) return false;
+  if (userMustChangePassword(sess.username)) return false;
+  if (sess.role === 'admin') return true;
+  const perms = getUserRolePermissions();
+  return !!perms[perm];
+}
+
 // ── MIME ──────────────────────────────────────────────────────────────────────
 const MIME = {
   '.html':        'text/html; charset=utf-8',
@@ -333,6 +369,22 @@ try {
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('lang', 'en')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('chunked_upload', '0')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('discord_webhook', '')`).run();
+  // Default permission set for the `user` role. Mirrors the live state right
+  // before this granular-permissions feature shipped (server control, session
+  // edit and mod upload were already open to users), so an upgrade in place
+  // doesn't yank capabilities away from existing accounts.
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('role_permissions_user', ?)`)
+    .run(JSON.stringify({
+      serverControl:    true,
+      sessionEdit:      true,
+      modUpload:        true,
+      serverConfig:     false,
+      whitelistManage:  false,
+      playerModeration: false,
+      discordWebhook:   false,
+      auditView:        false,
+      dbBackup:         false,
+    }));
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
@@ -1435,7 +1487,7 @@ function clampInt(v, lo, hi) { const n = parseInt(v); return isNaN(n) ? null : M
 function intOr(v, fallback) { const n = parseInt(v); return isNaN(n) ? fallback : n; }
 
 async function apiConfigUpdate(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
   if (!checkRateLimit('config-put', clientIp(req), 30, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many config writes' });
   try {
@@ -1450,10 +1502,19 @@ async function apiConfigUpdate(req, res) {
     const rejected = [];
     const set = (key, ok, name) => { if (ok) applied.push(name); else if (name) rejected.push(name); };
 
+    // PASSWORD/ADMIN_PASSWORD are AC server credentials. Letting a permissioned
+    // user rewrite them would let them lock out admins (regular PASSWORD) or
+    // hand themselves the in-game admin command via ADMIN_PASSWORD. Hard-gate
+    // these to checkAdminAuth even when serverConfig is granted.
+    const sensitiveAdminOnly = checkAdminAuth(req);
     if (body.name        !== undefined) { s['NAME']                    = sanitizeIniText(body.name).slice(0, 255);     applied.push('name'); }
     if (body.welcome     !== undefined) { s['WELCOME_MESSAGE']         = sanitizeIniText(body.welcome).slice(0, 255);  applied.push('welcome'); }
-    if (body.password    !== undefined) { s['PASSWORD']                = sanitizeIniPassword(body.password).slice(0, 64);  applied.push('password'); }
-    if (body.adminPass   !== undefined) { s['ADMIN_PASSWORD']          = sanitizeIniPassword(body.adminPass).slice(0, 64); applied.push('adminPass'); }
+    if (body.password    !== undefined && sensitiveAdminOnly) { s['PASSWORD']                = sanitizeIniPassword(body.password).slice(0, 64);  applied.push('password'); }
+    if (body.adminPass   !== undefined && sensitiveAdminOnly) { s['ADMIN_PASSWORD']          = sanitizeIniPassword(body.adminPass).slice(0, 64); applied.push('adminPass'); }
+    if ((body.password !== undefined || body.adminPass !== undefined) && !sensitiveAdminOnly) {
+      if (body.password  !== undefined) rejected.push('password');
+      if (body.adminPass !== undefined) rejected.push('adminPass');
+    }
     if (body.tcp         !== undefined) { const p = validPort(body.tcp);         set('TCP_PORT',  p && (s['TCP_PORT']                = String(p)),  'tcp'); }
     if (body.udp         !== undefined) { const p = validPort(body.udp);         set('UDP_PORT',  p && (s['UDP_PORT']                = String(p)),  'udp'); }
     if (body.http        !== undefined) { const p = validPort(body.http);        set('HTTP_PORT', p && (s['HTTP_PORT']               = String(p)),  'http'); }
@@ -1473,9 +1534,13 @@ async function apiConfigUpdate(req, res) {
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'config.save', 'server_cfg.ini');
 
-    // Optional auto-restart if requested
+    // Optional auto-restart if requested. Requires serverControl on top of
+    // serverConfig — otherwise a user with only config-edit could bypass
+    // server-lifecycle gating via the convenience restart=true flag.
     let restarted = false, restartError = null;
-    if (body.restart === true) {
+    if (body.restart === true && !checkPermission(req, 'serverControl')) {
+      restartError = 'restart skipped — serverControl permission required';
+    } else if (body.restart === true) {
       const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
       if (wasRunning) {
         const k = await killAC();
@@ -1999,7 +2064,7 @@ function apiTrackLayoutThumb(trackId, layout, res) {
 
 // ── Player kick / ban ─────────────────────────────────────────────────────────
 async function apiPlayerKick(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body  = await readBody(req);
     const carId = body.carId;
@@ -2030,7 +2095,7 @@ async function apiPlayerKick(req, res) {
 }
 
 async function apiPlayerBan(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
     const guid = body.guid;
@@ -2049,7 +2114,7 @@ async function apiPlayerBan(req, res) {
 // lap times (joined by GUID) can be rendered as "Apodo (in-game)" without
 // touching the laps the acServer importer already wrote.
 async function apiPlayerNickname(req, res, guid) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 500, { error: 'Database unavailable' });
   if (!/^\d{17}$/.test(guid)) return json(res, 400, { error: 'guid must be 17 digits' });
   try {
@@ -2084,7 +2149,7 @@ function apiWhitelistGet(res) {
 }
 
 async function apiWhitelistPut(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'whitelistManage')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
     if (!Array.isArray(body.ids)) return json(res, 400, { error: 'ids array required' });
@@ -2097,7 +2162,7 @@ async function apiWhitelistPut(req, res) {
 // Add a single GUID to the whitelist file. Used by the per-player button on the
 // Players page so the caller doesn't have to read-modify-write the whole list.
 async function apiWhitelistAdd(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'whitelistManage')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
     const guid = String(body.guid || '').trim();
@@ -2158,7 +2223,7 @@ async function writeEntryList(slots, slotCount) {
 }
 
 async function apiSessionApply(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'sessionEdit')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
     const raw  = await fsp.readFile(AC_CFG_FILE, 'utf8');
@@ -2886,7 +2951,7 @@ async function withServerActionLock(req, res, fn) {
 }
 
 async function apiServerStart(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'serverControl')) return json(res, 403, { error: 'Forbidden' });
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
@@ -2907,7 +2972,7 @@ async function apiServerStart(req, res) {
 }
 
 async function apiServerStop(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'serverControl')) return json(res, 403, { error: 'Forbidden' });
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
@@ -2920,7 +2985,7 @@ async function apiServerStop(req, res) {
 }
 
 async function apiServerRestart(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'serverControl')) return json(res, 403, { error: 'Forbidden' });
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
@@ -3043,7 +3108,10 @@ async function apiAuthLogin(req, res) {
     _clearLoginAttempt(ip); // reset on success
     const token = createSession(username, user.role);
     res.setHeader('Set-Cookie', sessionCookieHeader(token, requestIsHttps(req)));
-    json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1 } });
+    const permissions = user.role === 'admin'
+      ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
+      : getUserRolePermissions();
+    json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1, permissions } });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -3071,7 +3139,10 @@ function apiAuthMe(req, res) {
       mustChange = row?.must_change_password === 1;
     } catch {}
   }
-  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: mustChange });
+  const permissions = sess.role === 'admin'
+    ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
+    : getUserRolePermissions();
+  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: mustChange, permissions });
 }
 
 async function apiAuthChangePassword(req, res) {
@@ -3209,14 +3280,15 @@ function apiPanelSettingsGet(req, res) {
   const chunkedRow  = db.prepare(`SELECT value FROM panel_settings WHERE key = 'chunked_upload'`).get();
   const webhookRow  = db.prepare(`SELECT value FROM panel_settings WHERE key = 'discord_webhook'`).get();
   // The webhook URL is effectively a secret (anyone with it can post to the
-  // channel). Only return the raw value to admins; everyone else just gets a
-  // boolean so the UI can disable the field.
-  const isAdmin = checkAdminAuth(req);
+  // channel). Return the raw value only to admins or to users with the
+  // discordWebhook permission. Everyone else just gets the configured flag so
+  // the UI can render a disabled placeholder.
+  const canSeeWebhook = checkPermission(req, 'discordWebhook');
   json(res, 200, {
     uploadMaxMb:    parseInt(mbRow?.value || '500', 10),
     lang:           langRow?.value || 'en',
     chunkedUpload:  chunkedRow?.value === '1',
-    discordWebhook: isAdmin ? (webhookRow?.value || '') : '',
+    discordWebhook: canSeeWebhook ? (webhookRow?.value || '') : '',
     discordConfigured: !!(webhookRow?.value),
   });
 }
@@ -3228,23 +3300,32 @@ function isValidDiscordWebhook(url) {
 }
 
 async function apiPanelSettingsPut(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  // discordWebhook is the only field a permissioned user can edit; everything
+  // else here (upload limits, panel-wide language default, chunked toggle)
+  // stays admin-only because they affect every panel user.
+  const isAdmin       = checkAdminAuth(req);
+  const canSetWebhook = checkPermission(req, 'discordWebhook');
+  if (!isAdmin && !canSetWebhook) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 503, { error: 'Database unavailable' });
   try {
     const body = await readBody(req);
     if (body.uploadMaxMb !== undefined) {
+      if (!isAdmin) return json(res, 403, { error: 'Forbidden (admin only)' });
       const mb = parseInt(body.uploadMaxMb, 10);
       if (!mb || mb < 1 || mb > 10240) return json(res, 400, { error: 'Invalid value (1–10240 MB)' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('upload_max_mb', ?)`).run(String(mb));
     }
     if (body.lang !== undefined) {
+      if (!isAdmin) return json(res, 403, { error: 'Forbidden (admin only)' });
       if (!['en', 'es', 'it'].includes(body.lang)) return json(res, 400, { error: 'Unsupported language' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('lang', ?)`).run(body.lang);
     }
     if (body.chunkedUpload !== undefined) {
+      if (!isAdmin) return json(res, 403, { error: 'Forbidden (admin only)' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('chunked_upload', ?)`).run(body.chunkedUpload ? '1' : '0');
     }
     if (body.discordWebhook !== undefined) {
+      if (!canSetWebhook) return json(res, 403, { error: 'Forbidden' });
       const url = typeof body.discordWebhook === 'string' ? body.discordWebhook.trim() : '';
       if (!isValidDiscordWebhook(url)) return json(res, 400, { error: 'Invalid Discord webhook URL' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('discord_webhook', ?)`).run(url);
@@ -3254,12 +3335,37 @@ async function apiPanelSettingsPut(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// ── Role permissions ─────────────────────────────────────────────────────────
+// Admin-managed toggles that control what users with role='user' can do.
+// Effective perms for the current session are returned by /api/auth/me; these
+// endpoints are for the admin UI to read/write the canonical role config.
+
+function apiRolePermissionsGet(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  json(res, 200, { permissions: getUserRolePermissions() });
+}
+
+async function apiRolePermissionsPut(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 503, { error: 'Database unavailable' });
+  try {
+    const body = await readBody(req);
+    const next = {};
+    for (const p of ROLE_PERMISSIONS) next[p] = !!body[p];
+    db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('role_permissions_user', ?)`)
+      .run(JSON.stringify(next));
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'role.permissions.update', 'user',
+      Object.entries(next).filter(([, v]) => v).map(([k]) => k).join(',') || '(none)');
+    json(res, 200, { ok: true, permissions: next });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // Posts a synchronous test message to the Discord webhook. Accepts an optional
 // `url` in the body so the UI can verify a URL before saving it; if absent, the
 // stored one is used. Responds only after Discord answers (or times out) so the
 // admin gets a definitive ok/error in the toast.
 async function apiDiscordWebhookTest(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'discordWebhook')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
     let url = typeof body.url === 'string' ? body.url.trim() : '';
@@ -3677,7 +3783,7 @@ async function apiAdminStats(req, res) {
 // Admin: download a consistent DB snapshot via SQLite VACUUM INTO. Streams the
 // resulting file as `assetto-YYYY-MM-DD.db`, then deletes the temp copy.
 async function apiAdminBackup(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'dbBackup')) return respond(res, 401, 'text/plain', 'Unauthorized');
   if (!db) return json(res, 503, { error: 'Database unavailable' });
   const stamp = new Date().toISOString().slice(0, 10);
   const tmpPath = path.join(os.tmpdir(), `assetto-backup-${stamp}-${crypto.randomBytes(4).toString('hex')}.db`);
@@ -3703,7 +3809,7 @@ async function apiAdminBackup(req, res) {
 }
 
 function apiAuditGet(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'auditView')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 200, { rows: [], hasMore: false });
   const qs     = new URLSearchParams(req.url.split('?')[1] || '');
   const limit  = Math.min(Math.max(parseInt(qs.get('limit')) || 50, 1), 500);
@@ -3900,8 +4006,8 @@ async function cleanupOldChunks() {
 }
 
 async function apiModUploadChunk(req, res) {
-  const uploadedBy = checkAnyAuth(req)?.username || null;
-  if (!uploadedBy) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'modUpload')) return json(res, 403, { error: 'Forbidden' });
+  const uploadedBy = checkAnyAuth(req)?.username || 'unknown';
   // Each chunk is a separate request; allow up to 4096 chunks/hour per IP (≈ one full
   // 20 GB upload at 5 MB/chunk before lockout). Stops scripted spam without breaking
   // legitimate uploads.
@@ -4012,7 +4118,7 @@ async function apiModUploadChunk(req, res) {
 
 // ── Mod upload endpoint ───────────────────────────────────────────────────────
 async function apiModUpload(req, res) {
-  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!checkPermission(req, 'modUpload')) return json(res, 403, { error: 'Forbidden' });
   if (!checkRateLimit('mod-upload', clientIp(req), 30, 60 * 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many uploads (max 30/hour)' });
 
@@ -4116,6 +4222,10 @@ function handler(req, res) {
     if (urlPath === '/api/panel/settings' && req.method === 'GET') return apiPanelSettingsGet(req, res);
     if (urlPath === '/api/panel/settings' && req.method === 'PUT') return apiPanelSettingsPut(req, res);
     if (urlPath === '/api/discord/webhook/test' && req.method === 'POST') return apiDiscordWebhookTest(req, res);
+
+    // Role permissions
+    if (urlPath === '/api/permissions/role' && req.method === 'GET') return apiRolePermissionsGet(req, res);
+    if (urlPath === '/api/permissions/role' && req.method === 'PUT') return apiRolePermissionsPut(req, res);
 
     // Mod upload & history
     if (urlPath === '/api/mods/upload'       && req.method === 'POST')   return apiModUpload(req, res);

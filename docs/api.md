@@ -44,9 +44,31 @@ Invalidate the current session and clear the cookie.
 ---
 
 ### `GET /api/auth/me`
-Return the currently authenticated user.
+Return the currently authenticated user, including their effective permission
+set so the frontend can render conditional UI without an extra fetch.
 
-**Response:** `{ "username": "Admin", "role": "admin", "mustChangePassword": false }`
+**Response:**
+```json
+{
+  "username": "Admin",
+  "role": "admin",
+  "mustChangePassword": false,
+  "permissions": {
+    "serverControl":    true,
+    "sessionEdit":      true,
+    "serverConfig":     true,
+    "whitelistManage":  true,
+    "playerModeration": true,
+    "modUpload":        true,
+    "discordWebhook":   true,
+    "auditView":        true,
+    "dbBackup":         true
+  }
+}
+```
+
+Admin always gets every permission as `true`. Users get whatever the admin has
+configured via the Usuarios → Permissions card (see `/api/permissions/role`).
 
 ---
 
@@ -400,6 +422,34 @@ in the body, useful for verifying before saving).
 
 **Body:** `{ "url": "https://discord.com/api/webhooks/..." }` (optional — falls
 back to the saved webhook when absent)
+
+---
+
+## Role permissions
+
+### `GET /api/permissions/role`
+Return the canonical permission set for the `user` role.
+
+**Auth required:** yes (admin)
+
+**Response:** `{ "permissions": { "serverControl": true, "sessionEdit": true, ... } }`
+
+---
+
+### `PUT /api/permissions/role`
+Update the permission set for the `user` role. Unknown keys are dropped;
+missing keys become `false`.
+
+**Auth required:** yes (admin)
+
+**Body:** `{ "serverControl": true, "sessionEdit": false, ... }`
+
+**Audit:** logs `role.permissions.update` with the list of enabled perms.
+
+Permission keys recognised: `serverControl`, `sessionEdit`, `serverConfig`,
+`whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`,
+`auditView`, `dbBackup`. Panel-user CRUD and AC server passwords stay
+admin-only and are NOT toggleable from this endpoint.
 
 ---
 

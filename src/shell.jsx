@@ -50,9 +50,9 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
     { id: 'mods', label: t('nav.mods'), icon: I.IconUpload, group: 'content' },
     { id: 'session', label: t('nav.session'), icon: I.IconFlag, group: 'content' },
 
-    { id: 'config', label: t('nav.config'), icon: I.IconSettings, group: 'admin', adminOnly: true },
+    { id: 'config', label: t('nav.config'), icon: I.IconSettings, group: 'admin', requires: 'serverConfig' },
     { id: 'users',  label: t('nav.users'),  icon: I.IconUsers,    group: 'admin', adminOnly: true },
-    { id: 'audit',  label: t('nav.audit'),  icon: I.IconHistory,  group: 'admin', adminOnly: true },
+    { id: 'audit',  label: t('nav.audit'),  icon: I.IconHistory,  group: 'admin', requires: 'auditView' },
     // profile is accessible only via the key icon in the footer, not listed in the nav
   ];
   const groups = {
@@ -89,7 +89,11 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
           {g.items.map(item => {
             const Icon = item.icon;
             const isAdmin = user.role === 'admin';
-            const disabled = item.adminOnly && !isAdmin;
+            const perms = user.permissions || {};
+            const disabled = !isAdmin && (
+              (item.adminOnly === true) ||
+              (item.requires && !perms[item.requires])
+            );
             return (
               <button
                 key={item.id}
@@ -182,31 +186,33 @@ function Topbar({ theme, setTheme, server, onServerAction, user, onMenuClick }) 
 
       <div className="topbar-spacer"></div>
 
-      <div className="row topbar-actions" style={{gap: 6}}>
-        {server.status === 'stopped' && (
-          <button className="btn btn-primary btn-sm" onClick={() => onServerAction('start')}>
-            <I.IconPlay size={12}/> {t('topbar.start')}
-          </button>
-        )}
-        {server.status === 'running' && (
-          <>
-            <button className="btn btn-sm" onClick={() => onServerAction('reload')} title={t('topbar.reload_hint')}>
-              <I.IconReload size={12}/> {t('topbar.reload')}
+      {(user.role === 'admin' || user.permissions?.serverControl) && (
+        <div className="row topbar-actions" style={{gap: 6}}>
+          {server.status === 'stopped' && (
+            <button className="btn btn-primary btn-sm" onClick={() => onServerAction('start')}>
+              <I.IconPlay size={12}/> {t('topbar.start')}
             </button>
-            <button className="btn btn-sm" onClick={() => onServerAction('restart')} title={t('topbar.restart_hint')}>
-              <I.IconPower size={12}/> {t('topbar.restart')}
+          )}
+          {server.status === 'running' && (
+            <>
+              <button className="btn btn-sm" onClick={() => onServerAction('reload')} title={t('topbar.reload_hint')}>
+                <I.IconReload size={12}/> {t('topbar.reload')}
+              </button>
+              <button className="btn btn-sm" onClick={() => onServerAction('restart')} title={t('topbar.restart_hint')}>
+                <I.IconPower size={12}/> {t('topbar.restart')}
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => onServerAction('stop')}>
+                <I.IconStop size={12}/> {t('topbar.stop')}
+              </button>
+            </>
+          )}
+          {(server.status === 'starting' || server.status === 'stopping') && (
+            <button className="btn btn-sm" disabled>
+              <I.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {statusLabel}…
             </button>
-            <button className="btn btn-danger btn-sm" onClick={() => onServerAction('stop')}>
-              <I.IconStop size={12}/> {t('topbar.stop')}
-            </button>
-          </>
-        )}
-        {(server.status === 'starting' || server.status === 'stopping') && (
-          <button className="btn btn-sm" disabled>
-            <I.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {statusLabel}…
-          </button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <button
         className="icon-btn"

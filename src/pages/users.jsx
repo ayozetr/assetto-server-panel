@@ -171,6 +171,8 @@ function PageUsers({ users, setUsers, isAdmin }) {
         </table>
       </div>
 
+      <RolePermissionsCard/>
+
       {editing && <UserModal user={editing} onClose={()=>setEditing(null)} onSave={saveUser}/>}
       {confirmDel && (
         <ConfirmModal
@@ -181,6 +183,117 @@ function PageUsers({ users, setUsers, isAdmin }) {
         />
       )}
     </>
+  );
+}
+
+// Canonical list, matches ROLE_PERMISSIONS in server.js. Each entry maps the
+// permission key to its UI label/hint i18n keys. If the order or content here
+// drifts from the backend the page just hides whatever isn't returned.
+const PERMISSION_DEFS = [
+  { key: 'serverControl',    label: 'perm.serverControl',    hint: 'perm.serverControl_hint' },
+  { key: 'sessionEdit',      label: 'perm.sessionEdit',      hint: 'perm.sessionEdit_hint' },
+  { key: 'serverConfig',     label: 'perm.serverConfig',     hint: 'perm.serverConfig_hint' },
+  { key: 'whitelistManage',  label: 'perm.whitelistManage',  hint: 'perm.whitelistManage_hint' },
+  { key: 'playerModeration', label: 'perm.playerModeration', hint: 'perm.playerModeration_hint' },
+  { key: 'modUpload',        label: 'perm.modUpload',        hint: 'perm.modUpload_hint' },
+  { key: 'discordWebhook',   label: 'perm.discordWebhook',   hint: 'perm.discordWebhook_hint' },
+  { key: 'auditView',        label: 'perm.auditView',        hint: 'perm.auditView_hint' },
+  { key: 'dbBackup',         label: 'perm.dbBackup',         hint: 'perm.dbBackup_hint' },
+];
+
+function RolePermissionsCard() {
+  const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const toast = window.AppShell.useToast();
+  const [perms,   setPerms]   = useStateU(null);
+  const [saving,  setSaving]  = useStateU(false);
+  const [dirty,   setDirty]   = useStateU(false);
+
+  useEffectU(() => {
+    fetch('/api/permissions/role')
+      .then(r => r.json())
+      .then(d => { if (d.permissions) setPerms(d.permissions); })
+      .catch(() => {});
+  }, []);
+
+  const toggle = (k) => {
+    setPerms(p => ({ ...p, [k]: !p[k] }));
+    setDirty(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch('/api/permissions/role', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(perms),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        setDirty(false);
+        toast.push(t('perm.saved'), 'success');
+      } else {
+        toast.push(d.error || t('common.error'), 'error');
+      }
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="card" style={{marginTop: 20}}>
+      <div className="card-header">
+        <I4U.IconShield size={14} style={{color:'var(--red)'}}/>
+        <div className="card-title">{t('perm.title')}</div>
+      </div>
+      <div className="card-body col" style={{gap: 14}}>
+        <div style={{
+          padding: '10px 12px', borderRadius: 'var(--radius)',
+          background: 'var(--bg-3)', fontSize: 12.5, color: 'var(--text-muted)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <I4U.IconShield size={13} style={{color:'var(--red)', flexShrink: 0}}/>
+          <span>{t('perm.admin_note')}</span>
+        </div>
+
+        {perms === null ? (
+          <div className="muted" style={{fontSize: 12.5}}>{t('common.loading')}</div>
+        ) : (
+          <div className="col" style={{gap: 10}}>
+            {PERMISSION_DEFS.map(def => {
+              const on = !!perms[def.key];
+              return (
+                <div key={def.key} className="row-between" style={{gap: 12}}>
+                  <div style={{flex: 1, minWidth: 0}}>
+                    <div style={{fontSize: 13, fontWeight: 500}}>{t(def.label)}</div>
+                    <div className="muted" style={{fontSize: 11.5}}>{t(def.hint)}</div>
+                  </div>
+                  <div
+                    className={`switch ${on ? 'on' : ''}`}
+                    style={{flexShrink: 0}}
+                    onClick={() => toggle(def.key)}
+                    role="switch"
+                    aria-checked={on}
+                    title={on ? t('common.on') || 'on' : t('common.off') || 'off'}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="row" style={{justifyContent:'flex-end', gap: 6}}>
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={save}
+            disabled={!dirty || saving || perms === null}
+          >
+            {saving
+              ? <><I4U.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
+              : <><I4U.IconCheck size={12}/> {t('common.save')}</>}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -55,7 +55,8 @@ function NicknameModal({ player, onSave, onClose }) {
   );
 }
 
-function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, server, isAdmin, onKick, onBan }) {
+function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, server, isAdmin, canModerate = isAdmin, canWhitelist = isAdmin, onKick, onBan }) {
+  const showLiveActions = canModerate || canWhitelist;
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
   const [players, setPlayers] = usePlayersState(initialPlayers);
@@ -167,7 +168,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
               <th style={{width: 110}}>{t('pl.col.best_lap')}</th>
               <th style={{width: 100}}>{t('pl.col.time')}</th>
               <th style={{width: 160}}>{t('pl.hist_col.date')}</th>
-              {isAdmin && <th style={{width: 80}}></th>}
+              {canModerate && <th style={{width: 80}}></th>}
             </tr>
           </thead>
           <tbody>
@@ -204,7 +205,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                 <td className="mono">{fmtMs(p.bestMs)}</td>
                 <td className="mono muted">{p.totalTime}</td>
                 <td className="mono muted" style={{fontSize: 12}}>{p.lastSeen}</td>
-                {isAdmin && (
+                {canModerate && (
                   <td>
                     <button
                       className="icon-btn"
@@ -275,7 +276,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
               <th style={{width: 110}}>{t('pl.col.best')}</th>
               <th style={{width: 110}}>{t('pl.col.last')}</th>
               <th style={{width: 70}}>{t('pl.col.ping')}</th>
-              {isAdmin && <th style={{width: 140}}></th>}
+              {showLiveActions && <th style={{width: 140}}></th>}
             </tr>
           </thead>
           <tbody>
@@ -307,23 +308,29 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                     {p.ping}ms
                   </span>
                 </td>
-                {isAdmin && (
+                {showLiveActions && (
                   <td>
                     <div className="row" style={{gap: 4}}>
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => handleWhitelist(p)}
-                        disabled={!p.steam || whitelisting[p.steam]}
-                        title={t('pl.wl_tip') || 'Add to whitelist'}
-                      >
-                        <I2P.IconShield size={12}/> {t('pl.wl') || 'Whitelist'}
-                      </button>
-                      <button className="btn btn-sm" onClick={() => onKick(p)}>
-                        <I2P.IconKick size={12}/> {t('pl.kick')}
-                      </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => onBan(p)}>
-                        {t('pl.ban')}
-                      </button>
+                      {canWhitelist && (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => handleWhitelist(p)}
+                          disabled={!p.steam || whitelisting[p.steam]}
+                          title={t('pl.wl_tip') || 'Add to whitelist'}
+                        >
+                          <I2P.IconShield size={12}/> {t('pl.wl') || 'Whitelist'}
+                        </button>
+                      )}
+                      {canModerate && (
+                        <>
+                          <button className="btn btn-sm" onClick={() => onKick(p)}>
+                            <I2P.IconKick size={12}/> {t('pl.kick')}
+                          </button>
+                          <button className="btn btn-sm btn-danger" onClick={() => onBan(p)}>
+                            {t('pl.ban')}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 )}

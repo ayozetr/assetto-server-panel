@@ -197,6 +197,124 @@ function WhitelistEditor({ isAdmin }) {
   );
 }
 
+// Censors the token portion of a Discord webhook URL — shows the first/last
+// few characters so the admin can still recognise it, with the bulk hidden.
+// Used when the field is in "hide" mode (default after load).
+function maskDiscordWebhook(url) {
+  if (!url) return '';
+  const m = url.match(/^(https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/)(.+)$/);
+  if (!m) return url;
+  const prefix = m[1];
+  const tok    = m[2];
+  if (tok.length < 12) return url;
+  const dots = '•'.repeat(Math.min(Math.max(tok.length - 8, 4), 32));
+  return prefix + tok.slice(0, 4) + dots + tok.slice(-4);
+}
+
+function DiscordWebhookEditor({ isAdmin }) {
+  const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const toast = window.AppShell.useToast();
+  const [url,     setUrl]     = useStateC('');
+  const [show,    setShow]    = useStateC(false);
+  const [loaded,  setLoaded]  = useStateC(false);
+  const [saving,  setSaving]  = useStateC(false);
+  const [testing, setTesting] = useStateC(false);
+
+  useEffectC(() => {
+    fetch('/api/panel/settings')
+      .then(r => r.json())
+      .then(d => { setUrl(d.discordWebhook || ''); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch('/api/panel/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discordWebhook: url }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.push(t('config.discord_saved'), 'success');
+        setShow(false);
+      } else {
+        toast.push(d.error || t('common.error'), 'error');
+      }
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const test = async () => {
+    setTesting(true);
+    try {
+      const r = await fetch('/api/discord/webhook/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const d = await r.json();
+      if (d.ok) toast.push(t('config.discord_test_ok'), 'success');
+      else      toast.push(d.error || t('config.discord_test_fail'), 'error');
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setTesting(false); }
+  };
+
+  const display = show ? url : maskDiscordWebhook(url);
+
+  return (
+    <div className="card" style={{gridColumn: 'span 2'}}>
+      <div className="card-header">
+        <I4.IconDiscord size={14} style={{color: '#5865F2'}}/>
+        <div className="card-title">{t('config.discord_title')}</div>
+      </div>
+      <div className="card-body col" style={{gap: 10}}>
+        <div className="field">
+          <label className="field-label">{t('config.discord_webhook')}</label>
+          <span className="field-hint" style={{marginBottom: 6}}>{t('config.discord_webhook_hint')}</span>
+          <div style={{position:'relative'}}>
+            <input
+              className="input mono"
+              type="text"
+              value={display}
+              onChange={e => show && setUrl(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/…"
+              disabled={!isAdmin || !loaded || !show}
+              spellCheck={false}
+              autoComplete="off"
+              style={{paddingRight: 36, fontSize: 12}}
+            />
+            <button
+              type="button"
+              onClick={() => setShow(v => !v)}
+              title={show ? t('common.hide') || 'Hide' : t('common.show') || 'Show'}
+              disabled={!isAdmin || !loaded}
+              style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
+            >
+              {show ? <I4.IconEyeOff size={14}/> : <I4.IconEye size={14}/>}
+            </button>
+          </div>
+        </div>
+        {isAdmin && (
+          <div className="row" style={{gap: 6, justifyContent: 'flex-end'}}>
+            <button className="btn btn-sm" onClick={test} disabled={!loaded || testing || saving || !url}>
+              {testing
+                ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('config.discord_testing')}</>
+                : <><I4.IconBell size={12}/> {t('config.discord_test')}</>}
+            </button>
+            <button className="btn btn-sm btn-primary" onClick={save} disabled={!loaded || saving || testing}>
+              {saving
+                ? <><I4.IconRefresh size={12} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>
+                : <><I4.IconCheck size={12}/> {t('common.save')}</>}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PasswordField({ value, onChange, disabled, placeholder }) {
   const [show, setShow] = useStateC(false);
   return (
@@ -385,6 +503,8 @@ function PageConfig({ config, setConfig, isAdmin, onSave }) {
             </div>
           </div>
         </div>
+
+        <DiscordWebhookEditor isAdmin={isAdmin}/>
 
         <div className="card">
           <div className="card-header">

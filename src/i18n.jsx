@@ -425,6 +425,16 @@ const dict = {
     'config.upload_security_note': 'Anti Zip-Slip · Whitelist of allowed extensions · Surgical extraction of the mod root only',
     'config.chunked_upload': 'Split uploads into chunks',
     'config.chunked_upload_hint': 'Splits files into 50 MB pieces. Enable if uploads fail behind Cloudflare or a reverse proxy.',
+    'config.discord_title': 'Discord',
+    'config.discord_webhook': 'Discord Webhook',
+    'config.discord_webhook_hint': 'Receive a message in your channel each time a driver sets a new lap record for a track + layout + car combination.',
+    'config.discord_test': 'Test',
+    'config.discord_testing': 'Testing…',
+    'config.discord_test_ok': 'Test message sent',
+    'config.discord_test_fail': 'Discord webhook test failed',
+    'config.discord_saved': 'Discord webhook saved',
+    'common.show': 'Show',
+    'common.hide': 'Hide',
   },
   es: {
     // Sidebar
@@ -851,6 +861,16 @@ const dict = {
     'config.upload_security_note': 'Anti Zip-Slip · Lista blanca de extensiones · Extracción quirúrgica solo de la carpeta raíz',
     'config.chunked_upload': 'Dividir subidas en fragmentos',
     'config.chunked_upload_hint': 'Divide el archivo en trozos de 50 MB. Actívalo si las subidas fallan detrás de Cloudflare o un proxy.',
+    'config.discord_title': 'Discord',
+    'config.discord_webhook': 'Webhook de Discord',
+    'config.discord_webhook_hint': 'Recibe un mensaje en tu canal cada vez que un piloto haga un récord de vuelta en una combinación circuito + layout + coche.',
+    'config.discord_test': 'Probar',
+    'config.discord_testing': 'Probando…',
+    'config.discord_test_ok': 'Mensaje de prueba enviado',
+    'config.discord_test_fail': 'La prueba del webhook ha fallado',
+    'config.discord_saved': 'Webhook de Discord guardado',
+    'common.show': 'Mostrar',
+    'common.hide': 'Ocultar',
   },
   it: {
     // Sidebar
@@ -1277,6 +1297,16 @@ const dict = {
     'config.upload_security_note': 'Anti Zip-Slip · Whitelist estensioni · Estrazione chirurgica solo della root',
     'config.chunked_upload': 'Carica in frammenti',
     'config.chunked_upload_hint': 'Divide il file in pezzi da 50 MB. Attiva se gli upload falliscono dietro Cloudflare o un proxy.',
+    'config.discord_title': 'Discord',
+    'config.discord_webhook': 'Webhook Discord',
+    'config.discord_webhook_hint': 'Ricevi un messaggio nel tuo canale ogni volta che un pilota stabilisce un nuovo record sul giro per una combinazione tracciato + layout + auto.',
+    'config.discord_test': 'Prova',
+    'config.discord_testing': 'Test in corso…',
+    'config.discord_test_ok': 'Messaggio di prova inviato',
+    'config.discord_test_fail': 'Test del webhook fallito',
+    'config.discord_saved': 'Webhook Discord salvato',
+    'common.show': 'Mostra',
+    'common.hide': 'Nascondi',
   }
 };
 

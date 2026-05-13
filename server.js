@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const http          = require('http');
+const https         = require('https');
 const fs            = require('fs');
 const { AsyncLocalStorage } = require('async_hooks');
 const fsp           = fs.promises;
@@ -331,6 +332,7 @@ try {
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('lang', 'en')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('chunked_upload', '0')`).run();
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('discord_webhook', '')`).run();
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
@@ -702,6 +704,153 @@ function formatTotalTime(ms) {
 
 function isValidContentId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id) && !id.includes('..');
+}
+
+// Synchronous display-name resolvers used by the Discord notifier on the
+// (rare) record-lap path. Mirrors the priority order of apiCars/apiTracks
+// (AC content first, kunos assets fallback) but avoids building the full
+// catalogue — we only need a single name. Silent failures fall back to
+// formatName(id) so a missing ui_car.json never crashes the UDP path.
+function _readUiJsonSync(file) {
+  try { return parseLooseJson(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+function carDisplayName(carId) {
+  if (!isValidContentId(carId)) return formatName(carId || '');
+  const ac = _readUiJsonSync(path.join(AC_CARS_DIR, carId, 'ui', 'ui_car.json'));
+  if (ac?.name) return ac.name;
+  const kn = _readUiJsonSync(path.join(KUNOS_ASSETS_DIR, 'cars', carId, 'ui', 'ui_car.json'));
+  if (kn?.name) return kn.name;
+  return formatName(carId);
+}
+function trackDisplayName(trackId, layoutId) {
+  if (!isValidContentId(trackId)) return formatName(trackId || '');
+  const layout = layoutId && isValidContentId(layoutId) ? layoutId : '';
+  // Multi-layout: read ui/<layout>/ui_track.json (or kunos fallback)
+  let layoutName = '';
+  let trackName  = '';
+  if (layout) {
+    const l = _readUiJsonSync(path.join(AC_TRACKS_DIR, trackId, 'ui', layout, 'ui_track.json'))
+           || _readUiJsonSync(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'ui', layout, 'ui_track.json'));
+    if (l?.name) layoutName = l.name;
+  }
+  // Single-layout or fallback base name
+  const base = _readUiJsonSync(path.join(AC_TRACKS_DIR, trackId, 'ui', 'ui_track.json'))
+            || _readUiJsonSync(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'ui', 'ui_track.json'));
+  if (base?.name) trackName = base.name;
+  if (!trackName && !layoutName) return formatName(trackId);
+  if (!layout || !layoutName) return trackName || formatName(trackId);
+  // If the layout name already contains the base track name (common in
+  // mod tracks that prefix each layout with the track), don't repeat it.
+  if (trackName && layoutName.toLowerCase().includes(trackName.toLowerCase())) {
+    return layoutName;
+  }
+  if (!trackName) return layoutName;
+  return `${trackName} (${layoutName})`;
+}
+
+function formatLapTime(ms) {
+  if (!ms || ms < 0) return '0:00.000';
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const t = ms % 1000;
+  return `${m}:${String(s).padStart(2, '0')}.${String(t).padStart(3, '0')}`;
+}
+
+// Localized record-message templates. Server-side because the webhook fires
+// from the UDP path with nobody necessarily looking at the panel — the panel
+// language stored in panel_settings.lang is the source of truth.
+const DISCORD_RECORD_TEMPLATES = {
+  en: ({ name, time, track, car }) => `**${name}** has set a new record of **${time}** at **${track}** with the **${car}**!`,
+  es: ({ name, time, track, car }) => `¡El piloto **${name}** ha hecho un **${time}** en **${track}** con un **${car}**!`,
+  it: ({ name, time, track, car }) => `Il pilota **${name}** ha segnato un nuovo record di **${time}** a **${track}** con la **${car}**!`,
+};
+
+const DISCORD_TEST_TEMPLATES = {
+  en: 'Discord webhook test from the Assetto panel — record notifications are working.',
+  es: 'Prueba de webhook de Discord desde el panel Assetto — las notificaciones de récord funcionan.',
+  it: 'Prova del webhook Discord dal pannello Assetto — le notifiche di record funzionano.',
+};
+
+function getPanelLang() {
+  try {
+    const row = db?.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
+    const v = row?.value;
+    return DISCORD_RECORD_TEMPLATES[v] ? v : 'en';
+  } catch { return 'en'; }
+}
+
+function getDiscordWebhook() {
+  try {
+    const row = db?.prepare(`SELECT value FROM panel_settings WHERE key = 'discord_webhook'`).get();
+    return row?.value || '';
+  } catch { return ''; }
+}
+
+// Fire-and-forget POST to the Discord webhook. Times out after 5s so a Discord
+// outage cannot stall the UDP handler. Errors are logged at warn level only —
+// missing a notification is never worth crashing the server for.
+function postDiscordMessage(content) {
+  const url = getDiscordWebhook();
+  if (!url) return;
+  let parsed;
+  try { parsed = new URL(url); } catch { return; }
+  const payload = JSON.stringify({ content });
+  const req = https.request({
+    method: 'POST',
+    hostname: parsed.hostname,
+    path: parsed.pathname + parsed.search,
+    headers: {
+      'Content-Type':   'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      'User-Agent':     'assetto-dashboard',
+    },
+    timeout: 5000,
+  }, (res) => {
+    // Drain so the socket can be reused / closed.
+    res.on('data', () => {});
+    res.on('end', () => {
+      if (res.statusCode >= 400) {
+        log.warn(`[discord] webhook returned ${res.statusCode}`);
+      }
+    });
+  });
+  req.on('timeout', () => { req.destroy(new Error('discord webhook timeout')); });
+  req.on('error', (e) => { log.warn('[discord] webhook error:', e.message); });
+  req.write(payload);
+  req.end();
+}
+
+// Detect a per (track, layout, car) record from the just-inserted lap.
+// Called after a successful INSERT into `laps` (valid only — cuts==0).
+// Fires the Discord notification iff the new lap beats the previous best for
+// that combination. First-ever valid lap for a combo is NOT a record.
+function maybeNotifyRecord({ guid, name, lapMs, car, track, trackConfig, lapId }) {
+  if (!db) return;
+  if (!getDiscordWebhook()) return;
+  try {
+    const prev = db.prepare(`
+      SELECT MIN(ms) AS best
+      FROM laps
+      WHERE track = ? AND track_config = ? AND car = ? AND valid = 1 AND id != ?
+    `).get(track, trackConfig || '', car, lapId);
+    const prevBest = prev?.best;
+    if (prevBest == null || lapMs >= prevBest) return;
+
+    const playerRow = db.prepare(`SELECT name, nickname FROM players WHERE guid = ?`).get(guid);
+    const displayName = (playerRow?.nickname && playerRow.nickname.trim()) || playerRow?.name || name || '—';
+
+    const lang = getPanelLang();
+    const tpl  = DISCORD_RECORD_TEMPLATES[lang] || DISCORD_RECORD_TEMPLATES.en;
+    const content = tpl({
+      name:  displayName,
+      time:  formatLapTime(lapMs),
+      track: trackDisplayName(track, trackConfig),
+      car:   carDisplayName(car),
+    });
+    postDiscordMessage(content);
+  } catch (e) {
+    log.warn('[discord] record check failed:', e.message);
+  }
 }
 
 function isValidSkinName(name) {
@@ -2471,6 +2620,15 @@ function udpParseEvent(buf) {
             UPDATE players SET total_laps = total_laps + 1, last_seen = ?, last_car = ?, last_track = ?
             WHERE guid = ?
           `).run(date, car.model, udpState.session.track || '', car.guid);
+          maybeNotifyRecord({
+            guid:        car.guid,
+            name:        car.name,
+            lapMs:       lapTime,
+            car:         car.model,
+            track:       udpState.session.track  || '',
+            trackConfig: udpState.session.config || '',
+            lapId:       ins.lastInsertRowid,
+          });
         }
       } catch (e) { log.warn('[UDP] lap insert failed:', e.message); }
       break;
@@ -3044,16 +3202,29 @@ function apiPanelUserDelete(req, res, username) {
 }
 
 // ── Panel settings (upload_max_mb, etc.) ──────────────────────────────────────
-function apiPanelSettingsGet(res) {
-  if (!db) return json(res, 200, { uploadMaxMb: 500, chunkedUpload: false, lang: 'en' });
-  const mbRow      = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
-  const langRow    = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
-  const chunkedRow = db.prepare(`SELECT value FROM panel_settings WHERE key = 'chunked_upload'`).get();
+function apiPanelSettingsGet(req, res) {
+  if (!db) return json(res, 200, { uploadMaxMb: 500, chunkedUpload: false, lang: 'en', discordWebhook: '' });
+  const mbRow       = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+  const langRow     = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
+  const chunkedRow  = db.prepare(`SELECT value FROM panel_settings WHERE key = 'chunked_upload'`).get();
+  const webhookRow  = db.prepare(`SELECT value FROM panel_settings WHERE key = 'discord_webhook'`).get();
+  // The webhook URL is effectively a secret (anyone with it can post to the
+  // channel). Only return the raw value to admins; everyone else just gets a
+  // boolean so the UI can disable the field.
+  const isAdmin = checkAdminAuth(req);
   json(res, 200, {
-    uploadMaxMb:   parseInt(mbRow?.value || '500', 10),
-    lang:          langRow?.value || 'en',
-    chunkedUpload: chunkedRow?.value === '1',
+    uploadMaxMb:    parseInt(mbRow?.value || '500', 10),
+    lang:           langRow?.value || 'en',
+    chunkedUpload:  chunkedRow?.value === '1',
+    discordWebhook: isAdmin ? (webhookRow?.value || '') : '',
+    discordConfigured: !!(webhookRow?.value),
   });
+}
+
+function isValidDiscordWebhook(url) {
+  if (typeof url !== 'string') return false;
+  if (url === '') return true; // empty clears the setting
+  return /^https:\/\/(canary\.|ptb\.)?discord(app)?\.com\/api\/webhooks\/\d{17,20}\/[A-Za-z0-9_-]{50,}$/.test(url);
 }
 
 async function apiPanelSettingsPut(req, res) {
@@ -3073,8 +3244,65 @@ async function apiPanelSettingsPut(req, res) {
     if (body.chunkedUpload !== undefined) {
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('chunked_upload', ?)`).run(body.chunkedUpload ? '1' : '0');
     }
+    if (body.discordWebhook !== undefined) {
+      const url = typeof body.discordWebhook === 'string' ? body.discordWebhook.trim() : '';
+      if (!isValidDiscordWebhook(url)) return json(res, 400, { error: 'Invalid Discord webhook URL' });
+      db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('discord_webhook', ?)`).run(url);
+      insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'panel.discord_webhook', '', url ? 'set' : 'cleared');
+    }
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// Posts a synchronous test message to the Discord webhook. Accepts an optional
+// `url` in the body so the UI can verify a URL before saving it; if absent, the
+// stored one is used. Responds only after Discord answers (or times out) so the
+// admin gets a definitive ok/error in the toast.
+async function apiDiscordWebhookTest(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  try {
+    const body = await readBody(req);
+    let url = typeof body.url === 'string' ? body.url.trim() : '';
+    if (!url) url = getDiscordWebhook();
+    if (!url)          return json(res, 400, { error: 'No webhook configured' });
+    if (!isValidDiscordWebhook(url) || url === '') return json(res, 400, { error: 'Invalid Discord webhook URL' });
+
+    const lang = getPanelLang();
+    const content = DISCORD_TEST_TEMPLATES[lang] || DISCORD_TEST_TEMPLATES.en;
+    const payload = JSON.stringify({ content });
+
+    let parsed;
+    try { parsed = new URL(url); } catch { return json(res, 400, { error: 'Invalid Discord webhook URL' }); }
+
+    await new Promise((resolve) => {
+      const r = https.request({
+        method: 'POST',
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        headers: {
+          'Content-Type':   'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'User-Agent':     'assetto-dashboard',
+        },
+        timeout: 5000,
+      }, (resp) => {
+        let buf = '';
+        resp.on('data', (c) => { buf += c.toString().slice(0, 512); });
+        resp.on('end', () => {
+          if (resp.statusCode < 400) {
+            json(res, 200, { ok: true });
+          } else {
+            json(res, 502, { error: `Discord responded ${resp.statusCode}: ${buf.slice(0, 200)}` });
+          }
+          resolve();
+        });
+      });
+      r.on('timeout', () => { r.destroy(); json(res, 504, { error: 'Discord webhook timed out' }); resolve(); });
+      r.on('error', (e) => { json(res, 502, { error: e.message }); resolve(); });
+      r.write(payload);
+      r.end();
+    });
+  } catch (e) { try { json(res, 500, { error: e.message }); } catch {} }
 }
 
 // ── Multipart parser (native, no dependencies) ────────────────────────────────
@@ -3885,8 +4113,9 @@ function handler(req, res) {
     if (urlPath === '/api/panel/users' && req.method === 'POST') return apiPanelUserCreate(req, res);
 
     // Panel settings
-    if (urlPath === '/api/panel/settings' && req.method === 'GET') return apiPanelSettingsGet(res);
+    if (urlPath === '/api/panel/settings' && req.method === 'GET') return apiPanelSettingsGet(req, res);
     if (urlPath === '/api/panel/settings' && req.method === 'PUT') return apiPanelSettingsPut(req, res);
+    if (urlPath === '/api/discord/webhook/test' && req.method === 'POST') return apiDiscordWebhookTest(req, res);
 
     // Mod upload & history
     if (urlPath === '/api/mods/upload'       && req.method === 'POST')   return apiModUpload(req, res);

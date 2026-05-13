@@ -369,7 +369,10 @@ Clear all upload history.
 ## Panel settings
 
 ### `GET /api/panel/settings`
-Read panel settings (`upload_max_mb`, `chunked_upload`, `lang`).
+Read panel settings (`upload_max_mb`, `chunked_upload`, `lang`, `discord_webhook`).
+
+The `discordWebhook` field is only returned to admins; non-admins get an empty
+string plus a `discordConfigured` boolean so the UI can disable the field.
 
 **Auth required:** yes
 
@@ -380,7 +383,23 @@ Update one or more panel settings.
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "uploadMaxMb": 1000, "chunkedUpload": true, "lang": "en" }`
+**Body:** `{ "uploadMaxMb": 1000, "chunkedUpload": true, "lang": "en", "discordWebhook": "https://discord.com/api/webhooks/..." }`
+
+`discordWebhook` must match a Discord webhook URL or be an empty string to
+clear the setting. When set, the server posts a record notification to that
+webhook every time a driver beats the previous best lap for a (track, layout,
+car) combination via live UDP. The message language follows the stored `lang`.
+
+---
+
+### `POST /api/discord/webhook/test`
+Post a localized test message to the saved Discord webhook (or to a URL passed
+in the body, useful for verifying before saving).
+
+**Auth required:** yes (admin)
+
+**Body:** `{ "url": "https://discord.com/api/webhooks/..." }` (optional — falls
+back to the saved webhook when absent)
 
 ---
 

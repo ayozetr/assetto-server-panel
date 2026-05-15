@@ -271,7 +271,8 @@ const dict = {
     'log.sub': 'Real-time output of the server process.',
     'log.empty': 'No logs recorded.',
     'log.clear': 'Clear logs',
-    'log.clear_confirm': 'Are you sure you want to discard all current logs in memory?',
+    'log.clear_confirm': 'This permanently wipes the in-memory buffer AND truncates the log file on disk — open tabs are wiped via SSE and a page refresh will not bring the lines back. Continue?',
+    'log.clear_err': 'Failed to clear logs',
 
     // Cars
     'cars.title': 'Cars',
@@ -754,7 +755,8 @@ const dict = {
     'log.sub': 'Salida en tiempo real del proceso del servidor.',
     'log.empty': 'No hay logs registrados.',
     'log.clear': 'Limpiar logs',
-    'log.clear_confirm': '¿Seguro que quieres descartar todos los logs actuales en memoria?',
+    'log.clear_confirm': 'Esto borra permanentemente el buffer en memoria Y trunca el archivo de logs en disco — todas las pestañas abiertas se vacían vía SSE y un F5 no traerá las líneas de vuelta. ¿Continuar?',
+    'log.clear_err': 'No se pudieron limpiar los logs',
 
     // Cars
     'cars.title': 'Coches',
@@ -1237,7 +1239,8 @@ const dict = {
     'log.sub': 'Output in tempo reale.',
     'log.empty': 'Nessun log registrato.',
     'log.clear': 'Pulisci log',
-    'log.clear_confirm': 'Sei sicuro di voler eliminare tutti i log correnti in memoria?',
+    'log.clear_confirm': 'Questo cancella permanentemente il buffer in memoria E tronca il file di log su disco — tutte le schede aperte vengono svuotate via SSE e un F5 non li riporterà indietro. Continuare?',
+    'log.clear_err': 'Impossibile pulire i log',
 
     // Cars
     'cars.title': 'Auto',

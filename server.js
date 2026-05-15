@@ -1363,6 +1363,26 @@ function apiLogs(req, res) {
   json(res, 200, { lines: logBuffer.slice(-n) });
 }
 
+// Persistent clear — drops the in-memory buffer, truncates AC_LOG_FILE so the
+// next server restart doesn't reload the old lines via loadLogFileIntoBuffer,
+// and broadcasts a `clear` SSE event so every open tab wipes its state.
+// Admin-only because it affects every connected viewer + persists across
+// restarts; non-admins still see the (now hidden) button as a no-op.
+function apiLogsClear(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  try {
+    logBuffer = [];
+    // Keep logSeq monotonic so older client refs (clearedSeqRef) don't accidentally
+    // un-suppress freshly-issued ids that happen to overlap with the pre-clear range.
+    try { fs.truncateSync(AC_LOG_FILE, 0); } catch {}
+    for (const r of [...sseClients]) {
+      try { r.write(`event: clear\ndata: {}\n\n`); } catch { sseClients.delete(r); }
+    }
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'logs.clear');
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // Per-user concurrent SSE connection cap. Without this an authenticated user can
 // open arbitrarily many `/api/logs/stream` connections (one per browser tab × N
 // tabs × N devices) and pin file descriptors + heartbeat timers. Six is generous
@@ -4372,6 +4392,7 @@ function handler(req, res) {
     // Data endpoints
     if (urlPath === '/api/metrics'         && req.method === 'GET') return apiMetrics(res);
     if (urlPath === '/api/logs'            && req.method === 'GET') return apiLogs(req, res);
+    if (urlPath === '/api/logs/clear'      && req.method === 'POST') return apiLogsClear(req, res);
     if (urlPath === '/api/logs/stream'     && req.method === 'GET') return apiLogsStream(req, res);
     if (urlPath === '/api/config'          && req.method === 'GET') return apiConfig(req, res);
     if (urlPath === '/api/config'          && req.method === 'PUT') return apiConfigUpdate(req, res);

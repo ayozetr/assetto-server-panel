@@ -3,17 +3,15 @@
 const { useState: useLogsState, useEffect: useLogsEffect, useRef: useLogsRef } = React;
 const I2L = window.AppIcons;
 
-function PageLogs({ server }) {
+function PageLogs({ server, isAdmin }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
   const [paused, setPaused] = useLogsState(false);
   const [filter, setFilter] = useLogsState('all');
   const [logs, setLogs] = useLogsState([]);
   const [confirmClear, setConfirmClear] = useLogsState(false);
+  const [clearing, setClearing] = useLogsState(false);
   const ref = useLogsRef(null);
-  // Highest log id at the time the user pressed "Clear". Used to suppress
-  // re-display of old entries when the SSE reconnects (server replays its
-  // 500-line buffer on every connect via the `init` event).
-  const clearedSeqRef = useLogsRef(0);
 
   useLogsEffect(() => {
     if (paused) return;
@@ -28,14 +26,15 @@ function PageLogs({ server }) {
       es.addEventListener('init', e => {
         try {
           const data = JSON.parse(e.data);
-          const cutoff = clearedSeqRef.current;
-          setLogs(Array.isArray(data) ? data.filter(l => l.id > cutoff) : []);
+          setLogs(Array.isArray(data) ? data : []);
         } catch {}
       });
+      // Server-side clear (POST /api/logs/clear) broadcasts this to every
+      // open tab so the visible state stays in sync with the now-empty buffer.
+      es.addEventListener('clear', () => setLogs([]));
       es.onmessage = e => {
         try {
           const line = JSON.parse(e.data);
-          if (line.id <= clearedSeqRef.current) return; // honour clear cutoff for incoming
           setLogs(prev => {
             const next = [...prev, line];
             return next.length > 500 ? next.slice(-500) : next;
@@ -83,9 +82,11 @@ function PageLogs({ server }) {
           <button className="btn btn-sm" onClick={() => setPaused(p => !p)}>
             {paused ? <><I2L.IconPlay size={11}/> {t('log.play')}</> : <><I2L.IconStop size={11}/> {t('log.pause')}</>}
           </button>
-          <button className="btn btn-sm" onClick={() => setConfirmClear(true)}>
-            <I2L.IconTrash size={11}/> {t('log.clear')}
-          </button>
+          {isAdmin && (
+            <button className="btn btn-sm" onClick={() => setConfirmClear(true)} disabled={clearing}>
+              <I2L.IconTrash size={11}/> {t('log.clear')}
+            </button>
+          )}
           <button className="btn btn-sm" onClick={() => {
             const text = filtered.map(l => `[${l.time}] [${l.lvl.toUpperCase()}] [${l.tag}] ${l.msg}`).join('\n');
             const a = document.createElement('a');
@@ -114,11 +115,23 @@ function PageLogs({ server }) {
           title={t('log.clear')}
           message={t('log.clear_confirm')}
           onCancel={() => setConfirmClear(false)}
-          onConfirm={() => {
-            // Remember the latest seen id so reconnects don't replay old buffer
-            clearedSeqRef.current = logs.length ? logs[logs.length - 1].id : clearedSeqRef.current;
-            setLogs([]);
-            setConfirmClear(false);
+          onConfirm={async () => {
+            setClearing(true);
+            try {
+              const r = await fetch('/api/logs/clear', { method: 'POST' });
+              if (!r.ok) {
+                toast.push(t('log.clear_err') || 'Failed to clear', 'warn');
+              } else {
+                // Optimistic local wipe; the SSE `clear` event will also
+                // reach this tab and any others, keeping them all in sync.
+                setLogs([]);
+              }
+            } catch {
+              toast.push(t('log.clear_err') || 'Failed to clear', 'warn');
+            } finally {
+              setClearing(false);
+              setConfirmClear(false);
+            }
           }}
         />
       )}

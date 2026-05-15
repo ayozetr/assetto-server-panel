@@ -554,7 +554,7 @@ function AppInner(props) {
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
   else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} setPastPlayers={setPastPlayers} server={server} isAdmin={isAdmin} canModerate={can('playerModeration')} canWhitelist={can('whitelistManage')} onKick={handleKick} onBan={handleBan}/>;
-  else if (page === 'logs')      content = <PageLogs server={server}/>;
+  else if (page === 'logs')      content = <PageLogs server={server} isAdmin={isAdmin}/>;
   else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes} pastPlayers={pastPlayers} isAdmin={isAdmin} onLapAdded={refreshLapTimes}/>;
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;

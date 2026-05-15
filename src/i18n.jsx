@@ -302,6 +302,12 @@ const dict = {
     'cars.modal.btn_add_slot': 'Add',
     'cars.modal.btn_add': 'Add to session',
     'cars.modal.btn_add_more': 'Add more',
+    'cars.delete.btn': 'Delete this car from disk (mods only)',
+    'cars.delete.confirm': 'Permanently delete the mod car "{name}" from /content/cars? This removes the folder and all its skins from disk and cannot be undone.',
+    'cars.delete.ok': 'Mod car deleted',
+    'tracks.delete.btn': 'Delete this track from disk (mods only)',
+    'tracks.delete.confirm': 'Permanently delete the mod track "{name}" from /content/tracks? This removes the folder and every layout from disk and cannot be undone.',
+    'tracks.delete.ok': 'Mod track deleted',
 
     // Tracks
     'tracks.title': 'Tracks',
@@ -789,6 +795,12 @@ const dict = {
     'cars.modal.btn_add_slot': 'Añadir',
     'cars.modal.btn_add': 'Añadir a sesión',
     'cars.modal.btn_add_more': 'Añadir otro',
+    'cars.delete.btn': 'Borrar este coche del disco (solo mods)',
+    'cars.delete.confirm': 'Eliminar permanentemente el mod "{name}" de /content/cars. Borra la carpeta y todas sus skins del disco. No se puede deshacer.',
+    'cars.delete.ok': 'Coche mod borrado',
+    'tracks.delete.btn': 'Borrar este tramo del disco (solo mods)',
+    'tracks.delete.confirm': 'Eliminar permanentemente el tramo mod "{name}" de /content/tracks. Borra la carpeta y todos sus trazados del disco. No se puede deshacer.',
+    'tracks.delete.ok': 'Tramo mod borrado',
 
     // Tracks
     'tracks.title': 'Tramos',
@@ -1276,6 +1288,12 @@ const dict = {
     'cars.modal.btn_add_slot': 'Aggiungi',
     'cars.modal.btn_add': 'Aggiungi a sessione',
     'cars.modal.btn_add_more': 'Aggiungi altro',
+    'cars.delete.btn': 'Elimina questa auto dal disco (solo mod)',
+    'cars.delete.confirm': 'Eliminare definitivamente la mod "{name}" da /content/cars? Rimuove la cartella e tutte le skin dal disco. Operazione irreversibile.',
+    'cars.delete.ok': 'Auto mod eliminata',
+    'tracks.delete.btn': 'Elimina questo tracciato dal disco (solo mod)',
+    'tracks.delete.confirm': 'Eliminare definitivamente il tracciato mod "{name}" da /content/tracks? Rimuove la cartella e tutti i layout dal disco. Operazione irreversibile.',
+    'tracks.delete.ok': 'Tracciato mod eliminato',
 
     // Tracks
     'tracks.title': 'Tracciati',

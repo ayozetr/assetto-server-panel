@@ -380,6 +380,24 @@ Whenever the body carries `cars`, `entry_list.ini` is rewritten so every `[CAR_n
 
 ---
 
+### `DELETE /api/content/cars/:id`
+Recursively delete a **mod** car directory from `AC_CARS_DIR`. Refuses Kunos IDs (`KUNOS_CAR_IDS.has(id)` → `403 { error: "Kunos content cannot be deleted" }`) — the bundled DLC catalogue is the authoritative fallback the rest of the panel reads when an installed `ui_car.json` is missing/empty, so wiping it would break Discord notifications, Recent Activity, and the cars/tracks pages' Kunos toggle. Path is locked to `AC_CARS_DIR + sep` after `path.resolve` (defense-in-depth on top of `isValidContentId`'s `..` block).
+
+**Auth required:** yes (admin only — strictly `checkAdminAuth`)
+
+**Response:** `{ "ok": true }` on success, `404 { error: "Not found" }` if the directory doesn't exist, `400 { error: "Invalid ID" }` on a malformed id.
+
+A `car.delete` row is written to the audit log. The Tiempos page button calls this and also strips the deleted id from `sessionCfg.slots` so Apply doesn't reference a now-missing mod (acServer refuses to boot when a `[CAR_n].MODEL` is unknown).
+
+---
+
+### `DELETE /api/content/tracks/:id`
+Same as the car-delete endpoint, against `AC_TRACKS_DIR`. Refuses Kunos track IDs. Audited as `track.delete`. The Tracks page button also clears `sessionCfg.trackId` if the deleted track was the active one, so the next Apply doesn't write a missing track to `server_cfg.ini`.
+
+**Auth required:** yes (admin only — strictly `checkAdminAuth`)
+
+---
+
 ### `GET /api/content/cars/:id/thumb`
 Serve the car's badge/preview image. Falls back to the bundled Kunos asset.
 

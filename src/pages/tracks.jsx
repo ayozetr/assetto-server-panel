@@ -46,7 +46,7 @@ function LoadingImg({ src, alt, style, fallback = null }) {
 }
 
 // ── Track modal (multi-layout tracks) ─────────────────────────────────────────
-function TrackModal({ track, sessionCfg, setSessionCfg, onClose, t }) {
+function TrackModal({ track, sessionCfg, setSessionCfg, onClose, onDelete, isAdmin, t }) {
   const isSelected    = sessionCfg.trackId === track.id;
   const hasLayouts    = track.layouts.length > 1;
   const [activeLayout, setActiveLayout] = useStateT(
@@ -166,16 +166,30 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose, t }) {
 
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>{t('common.close')}</button>
-          <button
-            className="btn btn-primary"
-            style={isActiveSelected ? {background:'transparent', borderColor:'var(--red)', color:'var(--red)'} : {}}
-            onClick={selectAndClose}
-          >
-            {isActiveSelected
-              ? <><I3T.IconCheck size={12}/> {t('tracks.modal.btn_selected')}</>
-              : <><I3T.IconCheck size={12}/> {t('tracks.modal.btn_select')}</>
-            }
-          </button>
+          <div className="row" style={{gap:6, alignItems:'center'}}>
+            {isAdmin && !track.isKunos && onDelete && (
+              <button
+                className="btn btn-sm btn-danger"
+                title={t('tracks.delete.btn')}
+                onClick={() => {
+                  if (!window.confirm(t('tracks.delete.confirm', { name: track.name }))) return;
+                  onDelete().then(() => onClose()).catch(() => {});
+                }}
+              >
+                <I3T.IconTrash size={12}/> {t('common.delete')}
+              </button>
+            )}
+            <button
+              className="btn btn-primary"
+              style={isActiveSelected ? {background:'transparent', borderColor:'var(--red)', color:'var(--red)'} : {}}
+              onClick={selectAndClose}
+            >
+              {isActiveSelected
+                ? <><I3T.IconCheck size={12}/> {t('tracks.modal.btn_selected')}</>
+                : <><I3T.IconCheck size={12}/> {t('tracks.modal.btn_select')}</>
+              }
+            </button>
+          </div>
         </div>
 
       </div>
@@ -283,7 +297,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal, t }) {
 }
 
 // ── PageTracks ────────────────────────────────────────────────────────────────
-function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
+function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded, isAdmin, onDelete }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [query,      setQuery]      = useStateT('');
   const [country,    setCountry]    = useStateT('all');
@@ -411,6 +425,8 @@ function PageTracks({ tracks, sessionCfg, setSessionCfg, tracksLoaded }) {
           sessionCfg={sessionCfg}
           setSessionCfg={setSessionCfg}
           onClose={() => setModalTrack(null)}
+          isAdmin={isAdmin}
+          onDelete={onDelete ? () => onDelete(modalTrack.id) : null}
           t={t}
         />
       )}

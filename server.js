@@ -2140,6 +2140,34 @@ async function apiTracks(res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Admin-only recursive delete of a mod car or mod track from the AC content
+// directory. Refuses Kunos IDs (the bundled DLC catalogue is the source of
+// truth for the kunos toggle on the panel — wiping it would break the asset
+// fallback resolution the rest of the panel relies on). The mtime-keyed
+// content cache invalidates itself on the next GET because removing the
+// directory changes the parent's mtime.
+async function apiContentDelete(req, res, kind, id) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!isValidContentId(id)) return json(res, 400, { error: 'Invalid ID' });
+  const isCar    = kind === 'cars';
+  const kunosSet = isCar ? KUNOS_CAR_IDS : KUNOS_TRACK_IDS;
+  if (kunosSet.has(id)) return json(res, 403, { error: 'Kunos content cannot be deleted' });
+  const baseDir  = isCar ? AC_CARS_DIR : AC_TRACKS_DIR;
+  const target   = path.resolve(path.join(baseDir, id));
+  // Defense in depth on top of isValidContentId — make absolutely sure the
+  // resolved path is still inside the content root before rm -rf.
+  if (!target.startsWith(path.resolve(baseDir) + path.sep)) {
+    return json(res, 400, { error: 'Invalid path' });
+  }
+  try {
+    const st = await fsp.stat(target).catch(() => null);
+    if (!st || !st.isDirectory()) return json(res, 404, { error: 'Not found' });
+    await fsp.rm(target, { recursive: true, force: true });
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', isCar ? 'car.delete' : 'track.delete', id);
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // Serve car badge image (badge.png/webp from ui folder), falling back to bundled Kunos assets
 function apiCarThumb(carId, res) {
   if (!isValidContentId(carId)) return respond(res, 400, 'text/plain', 'Invalid ID');
@@ -4455,6 +4483,11 @@ function handler(req, res) {
     if (urlPath === '/api/laps'            && req.method === 'POST') return apiLapCreate(req, res);
     if (urlPath === '/api/cars'            && req.method === 'GET') return apiCars(res);
     if (urlPath === '/api/tracks'          && req.method === 'GET') return apiTracks(res);
+    // Admin-only delete of mod content (Kunos refused server-side)
+    const carDeleteMatch   = urlPath.match(/^\/api\/content\/cars\/([^/]+)$/);
+    const trackDeleteMatch = urlPath.match(/^\/api\/content\/tracks\/([^/]+)$/);
+    if (carDeleteMatch   && req.method === 'DELETE') return apiContentDelete(req, res, 'cars',   decodeURIComponent(carDeleteMatch[1]));
+    if (trackDeleteMatch && req.method === 'DELETE') return apiContentDelete(req, res, 'tracks', decodeURIComponent(trackDeleteMatch[1]));
     return json(res, 404, { error: 'Unknown endpoint' });
   }
 

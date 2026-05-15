@@ -45,7 +45,7 @@ function LoadingImg({ src, alt, style, fallback = null }) {
 }
 
 // ── Car modal ─────────────────────────────────────────────────────────────────
-function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
+function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, onDelete, isAdmin, t }) {
   // Preselect the skin the admin previously chose for this car (if any) so
   // reopening the modal doesn't lose context.
   const initialIdx = useMemoB(() => {
@@ -180,6 +180,18 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, t }) {
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>{t('common.close')}</button>
           <div className="row" style={{gap:6, alignItems:'center'}}>
+            {isAdmin && !car.isKunos && onDelete && (
+              <button
+                className="btn btn-sm btn-danger"
+                title={t('cars.delete.btn')}
+                onClick={() => {
+                  if (!window.confirm(t('cars.delete.confirm', { name: car.name }))) return;
+                  onDelete().then(() => onClose()).catch(() => {});
+                }}
+              >
+                <I3.IconTrash size={12}/> {t('common.delete')}
+              </button>
+            )}
             {count > 0 && (
               <button className="btn btn-sm" onClick={onRemove} title={t('cars.modal.btn_remove')}>
                 <I3.IconX size={12}/> {t('common.remove')}
@@ -299,7 +311,7 @@ function CarCard({ car, count, onOpen, t }) {
 }
 
 // ── PageCars ──────────────────────────────────────────────────────────────────
-function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
+function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded, isAdmin, onDelete }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [query,     setQuery]     = useStateB('');
   const [brand,     setBrand]     = useStateB('all');
@@ -476,6 +488,8 @@ function PageCars({ cars, sessionCfg, setSessionCfg, carsLoaded }) {
           onAdd={(skin) => addCar(modalCar.id, skin)}
           onRemove={() => removeCar(modalCar.id)}
           onClose={() => setModalCar(null)}
+          isAdmin={isAdmin}
+          onDelete={onDelete ? () => onDelete(modalCar.id) : null}
           t={t}
         />
       )}

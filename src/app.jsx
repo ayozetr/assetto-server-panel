@@ -559,13 +559,41 @@ function AppInner(props) {
       .catch(() => {});
   }, [setLapTimes]);
 
+  // Admin-only mod-content deletion. Optimistically removes the row from
+  // local state (the next /api/cars or /api/tracks fetch confirms) and also
+  // strips the deleted id from sessionCfg so the Session-Apply doesn't
+  // reference a now-missing mod and refuse to boot the server.
+  const handleDeleteCar = React.useCallback(async (carId) => {
+    const r = await fetch(`/api/content/cars/${encodeURIComponent(carId)}`, { method: 'DELETE' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      toast.push(d.error || t('common.error'), 'error');
+      throw new Error(d.error || 'delete failed');
+    }
+    setCars(prev => prev.filter(c => c.id !== carId));
+    setSessionCfg(s => ({ ...s, slots: (s.slots || []).filter(slot => slot.id !== carId) }));
+    toast.push(t('cars.delete.ok'), 'success');
+  }, [setCars, setSessionCfg, toast, t]);
+
+  const handleDeleteTrack = React.useCallback(async (trackId) => {
+    const r = await fetch(`/api/content/tracks/${encodeURIComponent(trackId)}`, { method: 'DELETE' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      toast.push(d.error || t('common.error'), 'error');
+      throw new Error(d.error || 'delete failed');
+    }
+    setTracks(prev => prev.filter(tr => tr.id !== trackId));
+    setSessionCfg(s => s.trackId === trackId ? { ...s, trackId: '', layout: '' } : s);
+    toast.push(t('tracks.delete.ok'), 'success');
+  }, [setTracks, setSessionCfg, toast, t]);
+
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
   else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} setPastPlayers={setPastPlayers} server={server} isAdmin={isAdmin} canModerate={can('playerModeration')} canWhitelist={can('whitelistManage')} onKick={handleKick} onBan={handleBan}/>;
   else if (page === 'logs')      content = <PageLogs server={server} isAdmin={isAdmin}/>;
   else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes} pastPlayers={pastPlayers} isAdmin={isAdmin} onLapAdded={refreshLapTimes}/>;
-  else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
-  else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;
+  else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars} isAdmin={isAdmin} onDelete={handleDeleteCar}/>;
+  else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks} isAdmin={isAdmin} onDelete={handleDeleteTrack}/>;
   else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} canUpload={can('modUpload')} refreshContent={refreshContent}/>;
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} canEdit={can('sessionEdit')} onApply={handleApplySession}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} perms={perms} canEdit={can('serverConfig')} onSave={handleSaveConfig}/>;

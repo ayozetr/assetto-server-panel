@@ -98,11 +98,15 @@ recheck on `body.restart=true` inside `apiConfigUpdate` so a user with only
 > panel users (create / delete / change role / reset password), editing the
 > AC server `PASSWORD` and `ADMIN_PASSWORD` fields, wiping the mod-history
 > table, reading or writing the role-permission set itself, **inserting a
-> manual lap via `POST /api/laps`**, and **clearing the persistent log
-> buffer via `POST /api/logs/clear`** are all admin-only by design —
+> manual lap via `POST /api/laps`**, **clearing the persistent log buffer
+> via `POST /api/logs/clear`**, and **deleting a mod car/track via
+> `DELETE /api/content/{cars,tracks}/:id`** are all admin-only by design —
 > exposing them as toggles would let a `user` escalate to admin, silently
-> grant themselves more permissions, falsify the lap-time records or wipe
-> the on-disk log audit trail for every connected viewer.
+> grant themselves more permissions, falsify the lap-time records, wipe
+> the on-disk log audit trail for every connected viewer, or `rm -rf` the
+> server's content directory. The Kunos catalogue is hard-refused at the
+> server (the bundled DLC tree is the authoritative fallback for the rest
+> of the panel) — even an admin cannot delete it via this endpoint.
 
 ---
 

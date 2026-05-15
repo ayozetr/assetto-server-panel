@@ -97,9 +97,12 @@ recheck on `body.restart=true` inside `apiConfigUpdate` so a user with only
 > **Reserved actions that no permission can grant a non-admin.** Managing
 > panel users (create / delete / change role / reset password), editing the
 > AC server `PASSWORD` and `ADMIN_PASSWORD` fields, wiping the mod-history
-> table, and reading or writing the role-permission set itself are all
-> admin-only by design — exposing them as toggles would let a `user` escalate
-> to admin or silently grant themselves more permissions.
+> table, reading or writing the role-permission set itself, **inserting a
+> manual lap via `POST /api/laps`**, and **clearing the persistent log
+> buffer via `POST /api/logs/clear`** are all admin-only by design —
+> exposing them as toggles would let a `user` escalate to admin, silently
+> grant themselves more permissions, falsify the lap-time records or wipe
+> the on-disk log audit trail for every connected viewer.
 
 ---
 

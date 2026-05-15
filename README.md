@@ -20,7 +20,7 @@ A full web interface to manage your Assetto Corsa server without touching the te
 ## Features
 
 ### 📊 Real-time monitoring
-Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events.
+Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events. Admin-only **persistent "Limpiar logs"** drops the in-memory buffer AND truncates `AC_LOG_FILE` on disk, then broadcasts an SSE `clear` event so every open tab wipes in lock-step — refreshing the page no longer brings the lines back. Activity card resolves car model IDs to their catalogue display name (`Toyota AE86` instead of `ks_toyota_ae86`).
 
 ### 🏎️ Player management
 Live player table with car, lap count, best/last time and country flag. Kick and ban directly from the panel. Full history of every player who has ever joined the server. **Per-player admin-set nicknames** — pencil button in the history table opens a modal to attach a real name to an in-game alias; the panel then renders rows as "Nickname (in-game)" everywhere, including historic lap times.
@@ -40,7 +40,7 @@ Per-session (Practice / Qualify / Race) enable toggles — when a session is dis
 Upload mods as `.zip`, `.rar` or `.7z` straight from the browser. The server automatically detects whether it's a car or a track and installs it in the right folder. Works remotely too, with chunked upload support for Cloudflare and other proxies.
 
 ### ⚙️ Server configuration
-Edit `server_cfg.ini` through a visual interface: server name, ports, slots, passwords (with show/hide toggle), driving aids, whitelist and more. Race-rule and behaviour options persist correctly even at value `0`.
+Edit `server_cfg.ini` through a visual interface: server name, ports, slots, passwords (with show/hide toggle), driving aids, whitelist and more. Race-rule and behaviour options persist correctly even at value `0`. **Country + city selector** writes a `[GEO_PARAMS]` section in the canonical `"<Name>, <ISO2>"` format Content Manager and the acstuff lobby read to render the server flag — the panel creates the section on first save and leaves `IP=` blank so the lobby fills it from the registration packet (so dynamic-IP / NAT setups don't end up advertising a stale address). Requires an `acServer` restart to reach the lobby, same as any other `server_cfg.ini` change.
 
 ### 👥 User management
 Create, edit and delete panel users. Each user has their own profile with password change and a built-in secure password generator (uses `crypto.getRandomValues`). The panel refuses to delete *or demote* the last remaining admin and revokes a user's active sessions when an admin resets their password.

@@ -138,7 +138,7 @@ Return the last N log lines from the in-memory buffer (max 500).
 ---
 
 ### `GET /api/logs/stream`
-Server-Sent Events stream. Pushes an `init` event with the full current buffer, then a `message` event for each new log line.
+Server-Sent Events stream. Pushes an `init` event with the full current buffer, then a `message` event for each new log line, plus a `clear` event whenever `POST /api/logs/clear` fires (all open tabs wipe their state in lock-step).
 
 **Auth required:** yes
 
@@ -149,7 +149,21 @@ event: init
 data: [...]
 
 data: { "id": 42, "time": "...", "lvl": "OK", "tag": "...", "msg": "..." }
+
+event: clear
+data: {}
 ```
+
+---
+
+### `POST /api/logs/clear`
+Persistent wipe — drops the in-memory `logBuffer`, truncates `AC_LOG_FILE` on disk (so the next process restart's `loadLogFileIntoBuffer` reads an empty file instead of replaying the old lines), and broadcasts the `clear` SSE event above so every connected tab empties its state. A `logs.clear` row is written to the audit log.
+
+**Auth required:** yes (admin — strictly `checkAdminAuth`)
+
+**Response:** `{ "ok": true }`
+
+The "Limpiar logs" button in the Logs page invokes this. Non-admins don't see the button — the action affects every viewer and is irreversible.
 
 ---
 
@@ -176,15 +190,30 @@ In addition to the `[SERVER]` mapping, the response carries per-session values u
 | `penalties`    | inverse of `[SERVER].RACE_GAS_PENALTY_DISABLED` |
 | `slots`        | ordered array of `{ "id": "<carId>", "skin": "<skinName>"\|null }` parsed from each `[CAR_n]` block of `entry_list.ini`; preserves the grid layout so the Session page restores 1:1 on F5 |
 | `cars`         | deduplicated list of `[SERVER].CARS` ids (convenience — same set the running server allows) |
+| `country`      | English name parsed from `[GEO_PARAMS].COUNTRY` (everything before the comma), e.g. `Spain` |
+| `countryIso`   | ISO-3166-1 alpha-2 code parsed from `[GEO_PARAMS].COUNTRY` (after the comma), e.g. `ES` — empty when the row has no comma or the suffix doesn't match `/^[A-Z]{2}$/` |
+| `city`         | `[GEO_PARAMS].CITY` |
 
 ---
 
 ### `PUT /api/config`
-Write a JSON object back to `server_cfg.ini`. A `.bak` backup is created before writing.
+Write a JSON object back to `server_cfg.ini`. Backups: a single `server_cfg.ini.bak` (legacy) plus a rotating set of timestamped copies (`server_cfg.ini.<timestamp>.bak`) are created before every write — see `rotateConfigBackup`.
 
-**Auth required:** yes (admin)
+**Auth required:** yes — requires the `serverConfig` permission. `password` / `adminPass` writes additionally require `admin` (a user with only `serverConfig` granted can't lock admins out via the AC server password). `restart=true` additionally requires `serverControl` — otherwise the convenience flag would bypass server-lifecycle gating.
 
-**Body:** JSON object with any subset of config keys. Port values must be integers in range 1–65535.
+**Body:** JSON object with any subset of config keys. Port values must be integers in range 1–65535. Country/city/iso are written into `[GEO_PARAMS]`, which is created on first write:
+
+| Body key      | INI target | Notes |
+| ---           | ---        | ---   |
+| `country`     | `[GEO_PARAMS].COUNTRY` | Combined with `countryIso` as `"<Name>, <ISO2>"` — the format Content Manager and the acstuff lobby render with a flag. Empty string clears the row. |
+| `countryIso`  | `[GEO_PARAMS].COUNTRY` | ISO-3166-1 alpha-2; non-matches are dropped, leaving just the name in the row. Sending only `countryIso` patches the suffix of the existing row. |
+| `city`        | `[GEO_PARAMS].CITY`    | Free text, capped to 64 chars. |
+
+`[GEO_PARAMS].IP` is always left blank so the lobby fills it from the registration packet — hard-coding it would break servers behind dynamic IPs / NAT.
+
+The `[GEO_PARAMS]` value is read by the lobby at registration time, so changes require an AC server restart to reach Content Manager. Send `restart: true` in the same PUT to trigger it (gated by `serverControl` as noted above).
+
+**Response:** `{ "ok": true, "restarted": false, "restartError": null, "applied": ["country", "city"], "rejected": [] }` — `applied` and `rejected` list the body keys that passed/failed validation so the UI can flag bad inputs instead of guessing why a save "didn't take".
 
 ---
 
@@ -321,6 +350,8 @@ Insert a lap manually. Used by the "Añadir tiempo" popup on the Tiempos page to
 | `session_date` | no | `YYYY-MM-DD`. Defaults to today. |
 
 The driver is also upserted into the `players` table (`total_laps` incremented) so the new pilot shows up on the Jugadores page. A `lap.create` audit log entry is written and, if the lap beats the previous best for `(track, layout, car)`, the Discord webhook fires the same record-broken notification used by the UDP path.
+
+The Tiempos page popup builds its driver dropdown from `/api/players/history`, so the common case ("backfill a lap for an existing pilot") sends the player's real Steam GUID and the lap lands on their existing `players` row instead of creating a `manual:<slug>` synthetic. A "Custom" sentinel in the dropdown re-reveals free-text name + GUID inputs for pilots who have never connected.
 
 ---
 

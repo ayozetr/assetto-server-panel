@@ -408,7 +408,6 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                     <option key={code} value={code}>{name}</option>
                   ))}
                 </select>
-                <span className="field-hint">{t('config.country_hint')}</span>
               </div>
               <div className="field">
                 <label className="field-label">{t('config.city')}</label>

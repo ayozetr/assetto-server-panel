@@ -12,7 +12,193 @@ const fmtDelta = (ms) => {
 const PAGE_SIZE         = 50; // records view (best lap per driver+track)
 const PAGE_SIZE_ALL     = 10; // every-lap view — smaller because it lists raw rows
 
-function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
+// Parse a user-entered lap time into milliseconds. Accepts either pure ms
+// (e.g. "92456") or the canonical "m:ss.mmm" format that fmtMs produces, with
+// optional 1- or 2-digit minutes and 1-3 digit ms. Returns NaN on malformed
+// input so the modal can flag it.
+function parseLapTimeInput(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return NaN;
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  const m = s.match(/^(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?$/);
+  if (!m) return NaN;
+  const mins  = parseInt(m[1], 10);
+  const secs  = parseInt(m[2], 10);
+  const msStr = (m[3] || '0').padEnd(3, '0').slice(0, 3);
+  const ms    = parseInt(msStr, 10);
+  if (secs >= 60) return NaN;
+  return mins * 60_000 + secs * 1000 + ms;
+}
+
+function AddLapModal({ cars, tracks, onSave, onClose }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const [driverName, setDriverName] = uSt('');
+  const [driverGuid, setDriverGuid] = uSt('');
+  const [trackId,    setTrackId]    = uSt(tracks[0]?.id || '');
+  const [layout,     setLayout]     = uSt('');
+  const [carId,      setCarId]      = uSt(cars[0]?.id || '');
+  const [timeStr,    setTimeStr]    = uSt('');
+  const [s1Str,      setS1Str]      = uSt('');
+  const [s2Str,      setS2Str]      = uSt('');
+  const [s3Str,      setS3Str]      = uSt('');
+  const [valid,      setValid]      = uSt(true);
+  const [date,       setDate]       = uSt(() => new Date().toISOString().slice(0, 10));
+  const [submitting, setSubmitting] = uSt(false);
+  const [error,      setError]      = uSt('');
+
+  const selectedTrack = uMt(() => tracks.find(t => t.id === trackId), [tracks, trackId]);
+  const trackLayouts  = uMt(() => {
+    const ls = selectedTrack?.layouts;
+    if (!Array.isArray(ls)) return [];
+    return ls.filter(l => l && l !== '');
+  }, [selectedTrack]);
+
+  // Reset layout when the track changes so a stale value from the previous
+  // track can't sneak into the payload.
+  uEt(() => { setLayout(''); }, [trackId]);
+
+  const submit = async () => {
+    setError('');
+    if (!driverName.trim()) { setError(t('times.add.driver')); return; }
+    if (!carId)             { setError(t('times.add.car')); return; }
+    if (!trackId)           { setError(t('times.add.track')); return; }
+    const ms = parseLapTimeInput(timeStr);
+    if (!Number.isFinite(ms) || ms <= 0) { setError(t('times.add.err_time')); return; }
+    const s1 = s1Str ? parseLapTimeInput(s1Str) : 0;
+    const s2 = s2Str ? parseLapTimeInput(s2Str) : 0;
+    const s3 = s3Str ? parseLapTimeInput(s3Str) : 0;
+
+    setSubmitting(true);
+    try {
+      const r = await fetch('/api/laps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          driver_name:  driverName.trim(),
+          driver_guid:  driverGuid.trim(),
+          car:          carId,
+          track:        trackId,
+          track_config: layout,
+          ms,
+          s1: Number.isFinite(s1) ? s1 : 0,
+          s2: Number.isFinite(s2) ? s2 : 0,
+          s3: Number.isFinite(s3) ? s3 : 0,
+          valid,
+          session_date: date,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (r.status === 409) setError(t('times.add.err_dup'));
+        else setError(data.error || t('times.add.err_generic'));
+        setSubmitting(false);
+        return;
+      }
+      onSave();
+    } catch (e) {
+      setError(t('times.add.err_generic'));
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth: 560}}>
+        <div className="modal-header">
+          <ITi.IconTimer size={15}/>
+          <div className="modal-title">{t('times.add.title')}</div>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label className="field-label">{t('times.add.driver')}</label>
+            <input
+              className="input" autoFocus maxLength={64}
+              value={driverName} onChange={e=>setDriverName(e.target.value)}
+            />
+            <span className="field-hint">{t('times.add.driver_hint')}</span>
+          </div>
+
+          <div className="field">
+            <label className="field-label">{t('times.add.guid')}</label>
+            <input
+              className="input mono" maxLength={64} placeholder="76561198…"
+              value={driverGuid} onChange={e=>setDriverGuid(e.target.value)}
+            />
+            <span className="field-hint">{t('times.add.guid_hint')}</span>
+          </div>
+
+          <div className="row" style={{gap: 8, flexWrap: 'wrap'}}>
+            <div className="field" style={{flex: '1 1 220px', minWidth: 200}}>
+              <label className="field-label">{t('times.add.track')}</label>
+              <select className="select" value={trackId} onChange={e=>setTrackId(e.target.value)}>
+                {tracks.map(tr => <option key={tr.id} value={tr.id}>{tr.name}</option>)}
+              </select>
+            </div>
+            {trackLayouts.length > 0 && (
+              <div className="field" style={{flex: '1 1 160px', minWidth: 160}}>
+                <label className="field-label">{t('times.add.layout')}</label>
+                <select className="select" value={layout} onChange={e=>setLayout(e.target.value)}>
+                  <option value="">{t('times.add.layout_none')}</option>
+                  {trackLayouts.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="field">
+            <label className="field-label">{t('times.add.car')}</label>
+            <select className="select" value={carId} onChange={e=>setCarId(e.target.value)}>
+              {cars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div className="field">
+            <label className="field-label">{t('times.add.time')}</label>
+            <input
+              className="input mono" placeholder="1:32.456"
+              value={timeStr} onChange={e=>setTimeStr(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !submitting) submit(); }}
+            />
+            <span className="field-hint">{t('times.add.time_hint')}</span>
+          </div>
+
+          <div className="field">
+            <label className="field-label">{t('times.add.sectors')}</label>
+            <div className="row" style={{gap: 6}}>
+              <input className="input mono" style={{flex: 1}} placeholder="S1" value={s1Str} onChange={e=>setS1Str(e.target.value)}/>
+              <input className="input mono" style={{flex: 1}} placeholder="S2" value={s2Str} onChange={e=>setS2Str(e.target.value)}/>
+              <input className="input mono" style={{flex: 1}} placeholder="S3" value={s3Str} onChange={e=>setS3Str(e.target.value)}/>
+            </div>
+          </div>
+
+          <div className="row" style={{gap: 12, flexWrap: 'wrap', alignItems: 'flex-end'}}>
+            <div className="field" style={{flex: '1 1 180px'}}>
+              <label className="field-label">{t('times.add.date')}</label>
+              <input type="date" className="input" value={date} onChange={e=>setDate(e.target.value)}/>
+            </div>
+            <label className="row" style={{gap: 6, fontSize: 13, cursor:'pointer', paddingBottom: 6}}
+                   onClick={()=>setValid(v=>!v)}>
+              <div className={`checkbox ${valid ? 'on' : ''}`}></div>
+              {t('times.add.valid')}
+            </label>
+          </div>
+
+          {error && (
+            <div style={{color: 'var(--red)', fontSize: 12, marginTop: 8}}>{error}</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose} disabled={submitting}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={submit} disabled={submitting}>
+            <ITi.IconCheck size={13}/> {submitting ? '…' : t('times.add.submit')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, isAdmin, onLapAdded }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [trackId,  setTrackId]  = uSt('all');
   const [carId,    setCarId]    = uSt('all');
@@ -22,6 +208,8 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
   const [view,     setView]     = uSt('records'); // records | all | compare
   const [page,     setPage]     = uSt(1);
   const [selectedPlayers, setSelectedPlayers] = uSt([]);
+  const [showAddModal, setShowAddModal] = uSt(false);
+  const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
 
   // Reset to page 1 whenever filters or view change
   uEt(() => { setPage(1); }, [trackId, carId, validOnly, dateFrom, dateTo, view]);
@@ -107,9 +295,16 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
           <button className={view === 'all'     ? 'active' : ''} onClick={()=>setView('all')}    >{t('times.tab.all')}</button>
           <button className={view === 'compare' ? 'active' : ''} onClick={()=>setView('compare')}>{t('times.tab.compare')}</button>
         </div>
-        <button className="btn btn-sm right" onClick={exportCSV}>
-          <ITi.IconDownload size={11}/> CSV
-        </button>
+        <div className="right row" style={{gap: 6}}>
+          {isAdmin && (
+            <button className="btn btn-sm btn-primary" onClick={()=>setShowAddModal(true)}>
+              <ITi.IconPlus size={11}/> {t('times.add')}
+            </button>
+          )}
+          <button className="btn btn-sm" onClick={exportCSV}>
+            <ITi.IconDownload size={11}/> CSV
+          </button>
+        </div>
 
         {/* Track / car / validity filters */}
         <div className="row" style={{gap: 6, flexWrap:'wrap'}}>
@@ -332,6 +527,19 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded }) {
             t={t}
           />
         </>
+      )}
+
+      {showAddModal && (
+        <AddLapModal
+          cars={cars}
+          tracks={tracks}
+          onSave={() => {
+            setShowAddModal(false);
+            toast.push(t('times.add.ok'), 'ok');
+            if (typeof onLapAdded === 'function') onLapAdded();
+          }}
+          onClose={() => setShowAddModal(false)}
+        />
       )}
     </>
   );

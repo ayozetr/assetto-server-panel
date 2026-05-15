@@ -300,6 +300,30 @@ Lap times from imported result files. Supports server-side filtering — push th
 
 ---
 
+### `POST /api/laps`
+Insert a lap manually. Used by the "Añadir tiempo" popup on the Tiempos page to backfill a record that wasn't captured by the UDP listener / result importer (e.g. server outage, external timing source). Shares the `laps_dedup_runtime` UNIQUE index with the other importers; re-submitting the same `(driver_guid, ms, car, track, track_config)` returns `409`.
+
+**Auth required:** yes (admin only — strictly `checkAdminAuth`)
+
+**Body:**
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `driver_name` | yes | Display name, capped to 64 chars. |
+| `driver_guid` | no | 17-digit Steam GUID. If empty or malformed, a synthetic `manual:<slug>` GUID is generated from the name so future joins still work. |
+| `car` | yes | Car content ID. |
+| `track` | yes | Track content ID. |
+| `track_config` | no | Layout name. |
+| `ms` | yes | Lap time in milliseconds; must be a positive integer below 999_000_000. |
+| `s1`, `s2`, `s3` | no | Sector times in ms. When all three are 0, `s1` is seeded with the full lap time (matching the UDP-capture convention). |
+| `valid` | no | Defaults to `true`. When `false`, `cuts` defaults to 1. |
+| `cuts` | no | Cut count for invalid laps. |
+| `session_date` | no | `YYYY-MM-DD`. Defaults to today. |
+
+The driver is also upserted into the `players` table (`total_laps` incremented) so the new pilot shows up on the Jugadores page. A `lap.create` audit log entry is written and, if the lap beats the previous best for `(track, layout, car)`, the Discord webhook fires the same record-broken notification used by the UDP path.
+
+---
+
 ### `POST /api/session/apply`
 Write the *Session* page state to `server_cfg.ini`. Auto-restarts the AC server if it is running (unless `restart: false`).
 

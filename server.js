@@ -1735,6 +1735,103 @@ function apiResults(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Admin-only manual lap insert. Used by the "Añadir tiempo" popup on the
+// Tiempos page when an admin wants to backfill a lap that wasn't captured
+// (e.g. server outage, external timing source). Shares the laps_dedup_runtime
+// UNIQUE index with the UDP + JSON importers, so re-submitting the same
+// (driver_guid, ms, car, track, track_config) is silently a no-op.
+async function apiLapCreate(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 500, { error: 'Database unavailable' });
+  try {
+    const body = await readBody(req);
+
+    const driverName = String(body.driver_name || body.player || '').trim().slice(0, 64);
+    if (!driverName) return json(res, 400, { error: 'driver_name required' });
+
+    // GUID is optional — when missing we synthesise a deterministic one from
+    // the driver name so the player row + future joins still work. A real
+    // 17-digit Steam GUID is preferred; anything that doesn't match is stored
+    // verbatim but prefixed with `manual:` so it can never collide with a
+    // captured Steam GUID.
+    const rawGuid = String(body.driver_guid || '').trim();
+    let driverGuid;
+    if (/^\d{17}$/.test(rawGuid)) {
+      driverGuid = rawGuid;
+    } else if (rawGuid) {
+      driverGuid = 'manual:' + rawGuid.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+    } else {
+      driverGuid = 'manual:' + driverName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 32);
+    }
+
+    const car   = String(body.car   || '').trim().slice(0, 128);
+    const track = String(body.track || '').trim().slice(0, 128);
+    if (!car)   return json(res, 400, { error: 'car required' });
+    if (!track) return json(res, 400, { error: 'track required' });
+    const trackConfig = String(body.track_config || body.layout || '').trim().slice(0, 64);
+
+    const ms = Math.round(Number(body.ms));
+    if (!Number.isFinite(ms) || ms <= 0 || ms >= 999_000_000) {
+      return json(res, 400, { error: 'ms must be a positive integer below 999_000_000' });
+    }
+
+    const s1 = Math.max(0, Math.round(Number(body.s1) || 0));
+    const s2 = Math.max(0, Math.round(Number(body.s2) || 0));
+    const s3 = Math.max(0, Math.round(Number(body.s3) || 0));
+
+    const valid = body.valid === false ? 0 : 1;
+    const cuts  = valid ? 0 : Math.max(1, Math.round(Number(body.cuts) || 1));
+
+    // Session date — accept YYYY-MM-DD; default to today.
+    let sessionDate = String(body.session_date || body.date || '').trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+      sessionDate = new Date().toISOString().slice(0, 10);
+    }
+
+    const lapTimestamp = Math.max(0, Math.round(Number(body.lap_timestamp) || 0));
+
+    const ins = db.prepare(`
+      INSERT OR IGNORE INTO laps
+        (driver_name, driver_guid, car, track, track_config, ms, lap_timestamp,
+         s1, s2, s3, cuts, valid, session_date, source_file)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
+    `).run(
+      driverName, driverGuid, car, track, trackConfig, ms, lapTimestamp,
+      s1 || ms, s2, s3, cuts, valid, sessionDate,
+    );
+
+    if (ins.changes === 0) {
+      return json(res, 409, { error: 'Duplicate lap (same driver/time/car/track already exists)' });
+    }
+
+    // Keep the players table in sync so the manual driver shows up on the
+    // Jugadores page and joins for nickname rendering work.
+    db.prepare(`
+      INSERT INTO players (guid, name, nation, first_seen, last_seen, total_laps, last_car, last_track)
+      VALUES (?, ?, '', ?, ?, 1, ?, ?)
+      ON CONFLICT(guid) DO UPDATE SET
+        name       = excluded.name,
+        last_seen  = excluded.last_seen,
+        total_laps = players.total_laps + 1,
+        last_car   = excluded.last_car,
+        last_track = excluded.last_track
+    `).run(driverGuid, driverName, sessionDate, sessionDate, car, track);
+
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    insertAuditLog(actor, 'lap.create', String(ins.lastInsertRowid),
+      `${driverName} ${formatLapTime(ms)} @ ${track}${trackConfig ? '/' + trackConfig : ''} (${car})`);
+
+    if (valid && cuts === 0) {
+      maybeNotifyRecord({
+        guid: driverGuid, name: driverName, lapMs: ms,
+        car, track, trackConfig, lapId: ins.lastInsertRowid,
+      });
+    }
+
+    json(res, 200, { ok: true, id: ins.lastInsertRowid });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 function apiPlayersHistory(res) {
   if (!db) return json(res, 200, []);
   try {
@@ -4281,6 +4378,7 @@ function handler(req, res) {
     if (urlPath === '/api/players'         && req.method === 'GET') return apiPlayers(res);
     if (urlPath === '/api/players/history' && req.method === 'GET') return apiPlayersHistory(res);
     if (urlPath === '/api/results'         && req.method === 'GET') return apiResults(req, res);
+    if (urlPath === '/api/laps'            && req.method === 'POST') return apiLapCreate(req, res);
     if (urlPath === '/api/cars'            && req.method === 'GET') return apiCars(res);
     if (urlPath === '/api/tracks'          && req.method === 'GET') return apiTracks(res);
     return json(res, 404, { error: 'Unknown endpoint' });

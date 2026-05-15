@@ -315,7 +315,7 @@ function App() {
         server={serverDisplay} setServer={setServer}
         players={players} setPlayers={setPlayers}
         pastPlayers={pastPlayers} setPastPlayers={setPastPlayers}
-        lapTimes={lapTimes}
+        lapTimes={lapTimes} setLapTimes={setLapTimes}
         users={users} setUsers={setUsers}
         cars={cars} setCars={setCars}
         tracks={tracks} setTracks={setTracks}
@@ -342,7 +342,7 @@ function AppInner(props) {
   const {
     user, page, setPage, theme, setTheme,
     server, setServer, players, setPlayers, pastPlayers, setPastPlayers,
-    lapTimes, users, setUsers, cars, setCars, tracks, setTracks,
+    lapTimes, setLapTimes, users, setUsers, cars, setCars, tracks, setTracks,
     sessionCfg, setSessionCfg, config, setConfig, setUser, osInfo,
     dataLoaded, backendDown,
   } = props;
@@ -544,11 +544,18 @@ function AppInner(props) {
     fetch('/api/tracks').then(r => r.json()).then(d => { if (Array.isArray(d) && d.length) setTracks(d); }).catch(() => {});
   }, [setCars, setTracks]);
 
+  const refreshLapTimes = React.useCallback(() => {
+    fetch('/api/results')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setLapTimes(d); })
+      .catch(() => {});
+  }, [setLapTimes]);
+
   let content = null;
   if      (page === 'dashboard') content = <PageDashboard server={server} players={players} sessionCfg={sessionCfg} tracks={tracks} cars={cars}/>;
   else if (page === 'players')   content = <PagePlayers players={players} pastPlayers={pastPlayers} setPastPlayers={setPastPlayers} server={server} isAdmin={isAdmin} canModerate={can('playerModeration')} canWhitelist={can('whitelistManage')} onKick={handleKick} onBan={handleBan}/>;
   else if (page === 'logs')      content = <PageLogs server={server}/>;
-  else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes}/>;
+  else if (page === 'times')     content = <PageTimes cars={cars} tracks={tracks} lapTimes={lapTimes} lapTimesLoaded={dataLoaded.lapTimes} isAdmin={isAdmin} onLapAdded={refreshLapTimes}/>;
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks}/>;
   else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} canUpload={can('modUpload')} refreshContent={refreshContent}/>;

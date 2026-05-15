@@ -5,6 +5,26 @@
 const { useState: useStateC, useEffect: useEffectC } = React;
 const I4 = window.AppIcons;
 
+// Country picker list. ISO2 + English name; backend writes the GEO_PARAMS.COUNTRY
+// row as "<name>, <ISO2>" which is what Content Manager / acstuff lobby expects.
+const COUNTRY_OPTIONS = [
+  ['AR','Argentina'], ['AU','Australia'], ['AT','Austria'], ['BE','Belgium'],
+  ['BR','Brazil'], ['BG','Bulgaria'], ['CA','Canada'], ['CL','Chile'],
+  ['CN','China'], ['CO','Colombia'], ['HR','Croatia'], ['CZ','Czech Republic'],
+  ['DK','Denmark'], ['EE','Estonia'], ['FI','Finland'], ['FR','France'],
+  ['DE','Germany'], ['GR','Greece'], ['HK','Hong Kong'], ['HU','Hungary'],
+  ['IS','Iceland'], ['IN','India'], ['IE','Ireland'], ['IL','Israel'],
+  ['IT','Italy'], ['JP','Japan'], ['LV','Latvia'], ['LT','Lithuania'],
+  ['LU','Luxembourg'], ['MY','Malaysia'], ['MX','Mexico'], ['MC','Monaco'],
+  ['NL','Netherlands'], ['NZ','New Zealand'], ['NO','Norway'], ['PE','Peru'],
+  ['PH','Philippines'], ['PL','Poland'], ['PT','Portugal'], ['RO','Romania'],
+  ['RU','Russia'], ['SG','Singapore'], ['SK','Slovakia'], ['SI','Slovenia'],
+  ['ZA','South Africa'], ['KR','South Korea'], ['ES','Spain'], ['SE','Sweden'],
+  ['CH','Switzerland'], ['TW','Taiwan'], ['TH','Thailand'], ['TR','Turkey'],
+  ['UA','Ukraine'], ['AE','United Arab Emirates'], ['GB','United Kingdom'],
+  ['US','United States'], ['UY','Uruguay'], ['VE','Venezuela'], ['VN','Vietnam'],
+];
+
 function ConfirmModal({ title, message, onCancel, onConfirm }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   // Esc closes; backdrop click closes; click on dialog does not bubble.
@@ -368,6 +388,37 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
               <label className="field-label">{t('config.welcome')}</label>
               <input className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!canEdit}/>
               <span className="field-hint">{t('config.welcome_hint') || 'Newlines are not preserved by Assetto Corsa.'}</span>
+            </div>
+            <div className="grid-2">
+              <div className="field">
+                <label className="field-label">{t('config.country')}</label>
+                <select
+                  className="select"
+                  value={config.countryIso || ''}
+                  disabled={!canEdit}
+                  onChange={e => {
+                    const iso = e.target.value;
+                    const opt = COUNTRY_OPTIONS.find(([code]) => code === iso);
+                    setConfig(c => ({ ...c, countryIso: iso, country: opt ? opt[1] : '' }));
+                    setDirty(true);
+                  }}
+                >
+                  <option value="">{t('config.country_none')}</option>
+                  {COUNTRY_OPTIONS.map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
+                  ))}
+                </select>
+                <span className="field-hint">{t('config.country_hint')}</span>
+              </div>
+              <div className="field">
+                <label className="field-label">{t('config.city')}</label>
+                <input
+                  className="input" maxLength={64}
+                  value={config.city || ''}
+                  onChange={e=>set('city', e.target.value)}
+                  disabled={!canEdit}
+                />
+              </div>
             </div>
             <div className="row-between">
               <div>

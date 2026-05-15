@@ -1437,6 +1437,18 @@ function apiConfig(req, res) {
     const q   = ini['QUALIFY']   || null;
     const r0  = ini['RACE']      || null;
     const w   = ini['WEATHER_0'] || {};
+    const g   = ini['GEO_PARAMS'] || {};
+    // GEO_PARAMS.COUNTRY uses the "<Name>, <ISO2>" convention CM expects.
+    // Split it back out for the form so the panel can present a country
+    // picker; tolerate "Name" without the comma + ISO2 (some servers only
+    // set the name).
+    const rawCountry = (g['COUNTRY'] || '').trim();
+    let countryName = '', countryIso = '';
+    if (rawCountry) {
+      const parts = rawCountry.split(',').map(s => s.trim()).filter(Boolean);
+      countryName = parts[0] || '';
+      if (parts[1] && /^[A-Za-z]{2}$/.test(parts[1])) countryIso = parts[1].toUpperCase();
+    }
     // entry_list.ini is the source of truth for the grid layout — each
     // [CAR_n] block defines one slot's MODEL + SKIN. We walk them in order
     // so the Session page's "Selected Cars" list restores 1:1 after F5,
@@ -1497,6 +1509,10 @@ function apiConfig(req, res) {
       airTemp:      intOr(w['BASE_TEMPERATURE_AMBIENT'], 18),
       // RACE_GAS_PENALTY_DISABLED is inverted: "1" means penalties OFF.
       penalties:    s['RACE_GAS_PENALTY_DISABLED'] !== '1',
+      // GEO_PARAMS — country + city for the Content Manager listing.
+      country:      countryName,
+      countryIso:   countryIso,
+      city:         (g['CITY'] || '').trim(),
     });
   });
 }
@@ -1549,6 +1565,43 @@ async function apiConfigUpdate(req, res) {
     if (body.autoclutch  !== undefined) { s['AUTOCLUTCH_ALLOWED']      = body.autoclutch ? '1' : '0'; applied.push('autoclutch'); }
     if (body.stability   !== undefined) { s['STABILITY_ALLOWED']       = body.stability  ? '1' : '0'; applied.push('stability'); }
     if (body.whitelist   !== undefined) { s['WELCOME_WHITELIST_ENABLED']= body.whitelist  ? '1' : '0'; applied.push('whitelist'); }
+
+    // GEO_PARAMS — Content Manager reads COUNTRY="<Name>, <ISO2>" from the
+    // lobby payload to render the country flag + name. The section is
+    // created on first write (patchINI appends missing sections); subsequent
+    // writes update the same lines.
+    if (body.country !== undefined || body.countryIso !== undefined || body.city !== undefined) {
+      const g = ini['GEO_PARAMS'] = ini['GEO_PARAMS'] || {};
+      if (body.country !== undefined) {
+        const name = sanitizeIniText(body.country).slice(0, 64).trim();
+        const iso  = body.countryIso !== undefined
+          ? sanitizeIniText(body.countryIso).toUpperCase().slice(0, 2)
+          : (g['COUNTRY'] || '').split(',')[1]?.trim() || '';
+        const valid = /^[A-Z]{2}$/.test(iso);
+        if (name) {
+          g['COUNTRY'] = valid ? `${name}, ${iso}` : name;
+          applied.push('country');
+        } else {
+          // Empty name = clear the row
+          g['COUNTRY'] = '';
+          applied.push('country');
+        }
+      } else if (body.countryIso !== undefined) {
+        // ISO updated without a name — patch the second field in place
+        const cur  = (g['COUNTRY'] || '').split(',')[0].trim();
+        const iso  = sanitizeIniText(body.countryIso).toUpperCase().slice(0, 2);
+        const valid = /^[A-Z]{2}$/.test(iso);
+        g['COUNTRY'] = cur ? (valid ? `${cur}, ${iso}` : cur) : '';
+        applied.push('countryIso');
+      }
+      if (body.city !== undefined) {
+        g['CITY'] = sanitizeIniText(body.city).slice(0, 64).trim();
+        applied.push('city');
+      }
+      // Leave IP blank so the lobby fills it from the registration packet —
+      // hard-coding it would break servers behind dynamic IPs / NAT.
+      if (!('IP' in g)) g['IP'] = '';
+    }
 
     await rotateConfigBackup();
     await fsp.writeFile(AC_CFG_FILE, patchINI(raw, ini), 'utf8');

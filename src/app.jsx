@@ -129,6 +129,7 @@ function App() {
     whitelist: false, autoStart: false, autoRestart: true,
     fuelRate: 100, damage: 100, tyreWear: 100,
     abs: 0, tc: 0, autoclutch: false,
+    country: '', countryIso: '', city: '',
   });
 
   const [cars,   setCars]   = uS([]);

@@ -43,6 +43,16 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const [activity, setActivity] = useState([]);
   useEffect(() => {
     const NOISE = /^(?:\s*content\/\S+\.(?:ini|kn5|ksanim|wav|fbx|dds)\s+ok\s*$|REQ\b|\{|\}|PAGE:|Serve |TCP packet|RECEIVED \d|Dispatching TCP|GET |POST |HEAD |listening on |plugin lines absent|plugin not configured|protocol version:|socket error:|parse error:|WARNING:\s*MAX_CONTACTS_PER_KM\b|WARNING:\s*pitstop window\b|WARNING:\s*tyre\b|Loading\b|Reading\b|Reset\b)/i;
+    // Resolve `ks_toyota_ae86` → "Toyota AE86" from the cars catalogue
+    // so the activity card never leaks the raw folder ID. Falls back to a
+    // formatName-style title-cased version when the car isn't loaded yet
+    // (catalogue still fetching) so the line is at least readable.
+    const formatCarId = (rawId) => {
+      if (!rawId) return '';
+      const c = (cars || []).find(c => c && c.id === rawId);
+      if (c?.name) return c.name;
+      return rawId.replace(/[_-]+/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+    };
     const formatTrackPath = (raw) => {
       if (!raw) return '';
       const [trackId, layoutId] = raw.includes('/') ? raw.split('/') : raw.split('-');
@@ -64,7 +74,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
       const body = stripPrefix(l.msg).trim();
       let m;
       if ((m = body.match(/^JOIN\s+(.+?)\s+\([^)]+\)\s+car_id=\d+\s+model=(\S+)/))) {
-        return { ...l, kind: 'join',  text: `${m[1]} se ha unido (${m[2]})` };
+        return { ...l, kind: 'join',  text: `${m[1]} se ha unido (${formatCarId(m[2])})` };
       }
       if ((m = body.match(/^LEAVE\s+(.+?)\s+car_id=/))) {
         return { ...l, kind: 'leave', text: `${m[1]} ha salido` };
@@ -107,7 +117,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
     load();
     const id = setInterval(load, 8000);
     return () => clearInterval(id);
-  }, [tracks]);
+  }, [tracks, cars]);
 
   return (
     <>

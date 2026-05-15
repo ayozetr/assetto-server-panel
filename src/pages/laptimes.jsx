@@ -30,10 +30,38 @@ function parseLapTimeInput(raw) {
   return mins * 60_000 + secs * 1000 + ms;
 }
 
-function AddLapModal({ cars, tracks, onSave, onClose }) {
+function AddLapModal({ cars, tracks, pastPlayers, onSave, onClose }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
-  const [driverName, setDriverName] = uSt('');
-  const [driverGuid, setDriverGuid] = uSt('');
+  // Past players come from /api/players/history — admin picks one from the
+  // dropdown instead of typing name + GUID. The "__custom__" sentinel keeps
+  // the manual-entry escape hatch for brand-new pilots that have never
+  // joined the server.
+  const sortedPlayers = uMt(() => {
+    const seen = new Set();
+    const out = [];
+    for (const p of (pastPlayers || [])) {
+      const guid = p.steam || p.id;
+      if (!guid || seen.has(guid)) continue;
+      seen.add(guid);
+      out.push({
+        guid,
+        name:     p.name || guid,
+        nickname: p.nickname || '',
+      });
+    }
+    out.sort((a, b) => {
+      const la = (a.nickname || a.name).toLowerCase();
+      const lb = (b.nickname || b.name).toLowerCase();
+      return la < lb ? -1 : la > lb ? 1 : 0;
+    });
+    return out;
+  }, [pastPlayers]);
+
+  const [driverGuidSel, setDriverGuidSel] = uSt(sortedPlayers[0]?.guid || '__custom__');
+  const [customName,    setCustomName]    = uSt('');
+  const [customGuid,    setCustomGuid]    = uSt('');
+  const isCustom = driverGuidSel === '__custom__' || sortedPlayers.length === 0;
+
   const [trackId,    setTrackId]    = uSt(tracks[0]?.id || '');
   const [layout,     setLayout]     = uSt('');
   const [carId,      setCarId]      = uSt(cars[0]?.id || '');
@@ -59,9 +87,19 @@ function AddLapModal({ cars, tracks, onSave, onClose }) {
 
   const submit = async () => {
     setError('');
-    if (!driverName.trim()) { setError(t('times.add.driver')); return; }
-    if (!carId)             { setError(t('times.add.car')); return; }
-    if (!trackId)           { setError(t('times.add.track')); return; }
+    let driverName, driverGuid;
+    if (isCustom) {
+      driverName = customName.trim();
+      driverGuid = customGuid.trim();
+      if (!driverName) { setError(t('times.add.driver')); return; }
+    } else {
+      const p = sortedPlayers.find(x => x.guid === driverGuidSel);
+      if (!p) { setError(t('times.add.driver')); return; }
+      driverName = p.name;
+      driverGuid = p.guid;
+    }
+    if (!carId)   { setError(t('times.add.car'));   return; }
+    if (!trackId) { setError(t('times.add.track')); return; }
     const ms = parseLapTimeInput(timeStr);
     if (!Number.isFinite(ms) || ms <= 0) { setError(t('times.add.err_time')); return; }
     const s1 = s1Str ? parseLapTimeInput(s1Str) : 0;
@@ -74,8 +112,8 @@ function AddLapModal({ cars, tracks, onSave, onClose }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          driver_name:  driverName.trim(),
-          driver_guid:  driverGuid.trim(),
+          driver_name:  driverName,
+          driver_guid:  driverGuid,
           car:          carId,
           track:        trackId,
           track_config: layout,
@@ -111,21 +149,41 @@ function AddLapModal({ cars, tracks, onSave, onClose }) {
         <div className="modal-body">
           <div className="field">
             <label className="field-label">{t('times.add.driver')}</label>
-            <input
-              className="input" autoFocus maxLength={64}
-              value={driverName} onChange={e=>setDriverName(e.target.value)}
-            />
-            <span className="field-hint">{t('times.add.driver_hint')}</span>
+            <select
+              className="select" autoFocus
+              value={driverGuidSel} onChange={e=>setDriverGuidSel(e.target.value)}
+            >
+              {sortedPlayers.map(p => (
+                <option key={p.guid} value={p.guid}>
+                  {p.nickname ? `${p.nickname} (${p.name})` : p.name}
+                </option>
+              ))}
+              <option value="__custom__">{t('times.add.driver_custom')}</option>
+            </select>
+            <span className="field-hint">
+              {sortedPlayers.length === 0 ? t('times.add.no_players') : t('times.add.driver_hint')}
+            </span>
           </div>
 
-          <div className="field">
-            <label className="field-label">{t('times.add.guid')}</label>
-            <input
-              className="input mono" maxLength={64} placeholder="76561198…"
-              value={driverGuid} onChange={e=>setDriverGuid(e.target.value)}
-            />
-            <span className="field-hint">{t('times.add.guid_hint')}</span>
-          </div>
+          {isCustom && (
+            <>
+              <div className="field">
+                <label className="field-label">{t('times.add.custom_name')}</label>
+                <input
+                  className="input" maxLength={64}
+                  value={customName} onChange={e=>setCustomName(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="field-label">{t('times.add.guid')}</label>
+                <input
+                  className="input mono" maxLength={64} placeholder="76561198…"
+                  value={customGuid} onChange={e=>setCustomGuid(e.target.value)}
+                />
+                <span className="field-hint">{t('times.add.guid_hint')}</span>
+              </div>
+            </>
+          )}
 
           <div className="row" style={{gap: 8, flexWrap: 'wrap'}}>
             <div className="field" style={{flex: '1 1 220px', minWidth: 200}}>
@@ -198,7 +256,7 @@ function AddLapModal({ cars, tracks, onSave, onClose }) {
   );
 }
 
-function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, isAdmin, onLapAdded }) {
+function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmin, onLapAdded }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [trackId,  setTrackId]  = uSt('all');
   const [carId,    setCarId]    = uSt('all');
@@ -533,6 +591,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, isAdmin, onLapAdded
         <AddLapModal
           cars={cars}
           tracks={tracks}
+          pastPlayers={pastPlayers}
           onSave={() => {
             setShowAddModal(false);
             toast.push(t('times.add.ok'), 'ok');

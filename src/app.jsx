@@ -189,6 +189,13 @@ function App() {
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
             ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
+            // Per-session enable flags MUST be applied even when false (the
+            // default state has all three on; without this an F5 after the
+            // admin disabled Qualify/Race wipes their selection back to "all
+            // enabled" because the section is gone from the INI).
+            ...(typeof d.practiceEnabled === 'boolean' ? { practiceEnabled: d.practiceEnabled } : {}),
+            ...(typeof d.qualifyEnabled  === 'boolean' ? { qualifyEnabled:  d.qualifyEnabled  } : {}),
+            ...(typeof d.raceEnabled     === 'boolean' ? { raceEnabled:     d.raceEnabled     } : {}),
             ...(d.weather    ? { weather: d.weather } : {}),
             time:      hour,
             airTemp:   Number.isFinite(d.airTemp) ? d.airTemp : s.airTemp,

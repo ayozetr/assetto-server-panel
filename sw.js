@@ -7,7 +7,7 @@
 //   - same-origin static    : stale-while-revalidate
 
 // Bump on every behaviour change so old caches are dropped at activate-time.
-const CACHE_NAME  = 'ac-panel-v34';
+const CACHE_NAME  = 'ac-panel-v35';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -91,7 +91,13 @@ self.addEventListener('fetch', (event) => {
   // cache is updated on every successful network response; if the network is
   // unreachable the SW returns the last good response with a header marker so
   // the UI can hint that data may be stale.
-  const OFFLINE_API_PATHS = ['/api/cars', '/api/tracks', '/api/config', '/api/results', '/api/players/history'];
+  //
+  // NEVER add an endpoint here whose response contains secrets. /api/config is
+  // explicitly excluded: for admins it returns the AC server PASSWORD and
+  // ADMIN_PASSWORD in clear text, and Cache Storage persists to disk — those
+  // values would survive logout and remain readable by any later XSS or by
+  // anyone with filesystem access to the browser profile.
+  const OFFLINE_API_PATHS = ['/api/cars', '/api/tracks', '/api/results', '/api/players/history'];
   const isOfflineable = request.method === 'GET'
     && url.pathname.startsWith(API_PREFIX)
     && OFFLINE_API_PATHS.includes(url.pathname);

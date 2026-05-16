@@ -30,21 +30,28 @@ if (_missingExtractors.length) {
 // Outside a request scope (startup, sweepers, AC spawn callbacks…) the id is
 // omitted and the line still gets a timestamp + level.
 const _reqContext = new AsyncLocalStorage();
+// Re-entrant guard. log.* feeds appendLog, which iterates SSE clients and may
+// trigger a write failure that someone in the future could decide to log via
+// log.warn — instant infinite loop. The flag short-circuits the inner call
+// to a console-only emit, breaking the cycle without losing the message.
+let _logEmitDepth = 0;
 function _logEmit(level, args) {
   const ctx    = _reqContext.getStore();
   const ts     = new Date().toISOString();
   const prefix = ctx?.reqId ? `${ts} ${level} [${ctx.reqId}]` : `${ts} ${level}`;
   const stream = (level === 'ERROR' || level === 'WARN') ? console.error : console.log;
   stream(prefix, ...args);
+  if (_logEmitDepth > 0) return; // mid-broadcast — don't loop back through appendLog
   // Mirror into logBuffer so the Dashboard activity card sees [UDP] events
   // and other panel-internal log lines, not just stdout from a spawned
   // acServer child (which is empty whenever acServer was adopted via pidof).
+  _logEmitDepth++;
   try {
     if (typeof appendLog === 'function') {
       const body = args.map(a => typeof a === 'string' ? a : (a && a.stack) || String(a)).join(' ');
       appendLog(`${prefix} ${body}`);
     }
-  } catch {}
+  } catch {} finally { _logEmitDepth--; }
 }
 const log = {
   info:  (...args) => _logEmit('INFO',  args),
@@ -737,9 +744,25 @@ function readBody(req) {
   if (!ct.includes('application/json')) return Promise.reject(new Error('Content-Type must be application/json'));
   return new Promise((resolve, reject) => {
     let raw = '';
-    req.on('data', chunk => { raw += chunk; if (raw.length > 512_000) reject(new Error('Body too large')); });
-    req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { reject(new Error('Invalid JSON')); } });
-    req.on('error', reject);
+    let settled = false;
+    const settle = (fn, arg) => { if (settled) return; settled = true; clearTimeout(timer); fn(arg); };
+    // Hard timeout: a slow-loris client could otherwise stream a few bytes
+    // every minute and tie up a file descriptor + this promise forever. 30s
+    // is far longer than any real JSON body needs (the largest legitimate
+    // payload is ~10 MB chunked upload, which streams in seconds).
+    const timer = setTimeout(() => {
+      try { req.destroy(); } catch {}
+      settle(reject, new Error('Request body timeout'));
+    }, 30000);
+    req.on('data', chunk => {
+      raw += chunk;
+      if (raw.length > 512_000) {
+        try { req.destroy(); } catch {}
+        settle(reject, new Error('Body too large'));
+      }
+    });
+    req.on('end', () => { try { settle(resolve, JSON.parse(raw)); } catch { settle(reject, new Error('Invalid JSON')); } });
+    req.on('error', e => settle(reject, e));
   });
 }
 
@@ -1506,18 +1529,32 @@ function apiLogsStream(req, res) {
   userSet.add(res);
   _sseByUser.set(user, userSet);
 
-  const heartbeat = setInterval(() => {
-    try { res.write(': ping\n\n'); } catch { clearInterval(heartbeat); }
-  }, 25000);
-  req.on('close', () => {
+  // Single cleanup path used by every termination route (req close, write
+  // failure during heartbeat, write failure during appendLog broadcast).
+  // Without this the heartbeat-failure branch would only stop the timer,
+  // leaving the res object pinned in sseClients and _sseByUser forever and
+  // burning per-user SSE cap until the next legitimate close.
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    clearInterval(heartbeat);
     sseClients.delete(res);
     const set = _sseByUser.get(user);
     if (set) {
       set.delete(res);
       if (set.size === 0) _sseByUser.delete(user);
     }
-    clearInterval(heartbeat);
-  });
+  };
+
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n'); }
+    catch { cleanup(); try { res.destroy(); } catch {} }
+  }, 25000);
+  req.on('close', cleanup);
+  req.on('error', cleanup);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
 }
 
 function apiConfig(req, res) {
@@ -4366,7 +4403,42 @@ const MAX_ARCHIVE_ENTRIES   = 50_000;                 // total entries
 const MAX_ARCHIVE_TOTAL_B   = 5 * 1024 * 1024 * 1024; // 5 GB extracted total
 const MAX_ARCHIVE_ENTRY_B   = 2 * 1024 * 1024 * 1024; // 2 GB single file
 
+// Cap how many extractors can run at once. processModBuffer reads the whole
+// archive buffer into RAM (the extractors operate on Buffer), so with the
+// 2 GB hard cap a handful of concurrent uploads could OOM the panel. Two
+// concurrent extractors is enough to keep one user productive while a slow
+// upload runs in the background; a third waits in line.
+const MAX_CONCURRENT_EXTRACTORS = 2;
+let _activeExtractors = 0;
+const _extractorWaiters = [];
+function _acquireExtractor() {
+  if (_activeExtractors < MAX_CONCURRENT_EXTRACTORS) {
+    _activeExtractors++;
+    return Promise.resolve();
+  }
+  return new Promise(resolve => _extractorWaiters.push(resolve));
+}
+function _releaseExtractor() {
+  const next = _extractorWaiters.shift();
+  if (next) {
+    // Hand off the slot directly so the count stays at MAX while we wake the
+    // next waiter; otherwise a parallel call could race in between.
+    next();
+  } else {
+    _activeExtractors = Math.max(0, _activeExtractors - 1);
+  }
+}
+
 async function processModBuffer(buffer, filename) {
+  await _acquireExtractor();
+  try {
+    return await _processModBufferInner(buffer, filename);
+  } finally {
+    _releaseExtractor();
+  }
+}
+
+async function _processModBufferInner(buffer, filename) {
   const ext = path.extname(filename).toLowerCase();
   if (!['.zip', '.rar', '.7z'].includes(ext))
     throw Object.assign(new Error(`Unsupported format: ${ext}. Use .zip, .rar or .7z`), { status: 400 });
@@ -5114,3 +5186,21 @@ function shutdown() {
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT',  shutdown);
+
+// Last-resort error handlers. Without these, any unhandled exception or
+// rejection inside an async route handler crashes the panel — and on crash
+// systemd restarts the process, but the in-flight request never sees a
+// response (browser hangs until timeout) and the audit trail loses the
+// triggering event. Log loudly so ops can find the root cause; let systemd
+// restart us on a *fatal* error (uncaughtException with no recovery).
+process.on('unhandledRejection', (reason) => {
+  try { log.error('unhandled rejection:', reason && (reason.stack || reason.message || String(reason))); }
+  catch { /* swallow — never let the handler itself crash */ }
+});
+process.on('uncaughtException', (err) => {
+  try { log.error('uncaught exception:', err && (err.stack || err.message || String(err))); }
+  catch {}
+  // The process is in an undefined state after an uncaughtException. Don't
+  // pretend we can keep serving — let systemd Restart=on-failure pick us up.
+  setTimeout(() => process.exit(1), 100).unref();
+});

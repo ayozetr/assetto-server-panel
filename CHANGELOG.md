@@ -254,7 +254,7 @@ redistribution and attribution requirements.
 
 This release closes the entire CRITICAL backlog and ~30 HIGH-severity findings
 from the 2026-05-16 security audit. Production deployment verified on the
-maintainer's panel (<redacted-ip>) with backup, restart and post-deploy smoke
+maintainer's panel with backup, restart and post-deploy smoke
 test. No breaking API or data-format changes.
 
 ### Security

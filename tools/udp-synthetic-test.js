@@ -89,22 +89,28 @@ function send(pkt, tag) {
   });
 }
 
+// Two placeholder drivers exercising the parser end-to-end. Names and Steam
+// GUIDs here are obvious fakes (the trailing-zero block on the GUIDs gives
+// it away) so the script is safe to publish without leaking real player PII.
+// If you fork this for your own integration testing, keep the placeholder
+// pattern — never paste live Steam IDs into a file that lands in version
+// control.
 (async () => {
   send(newSessionPkt(), 'NEW_SESSION');
   await new Promise(r => setTimeout(r, 200));
-  send(newConnectionPkt(0, 'SampleDriver',        '76561198000000024', 'ks_toyota_ae86'), 'JOIN SampleDriver');
+  send(newConnectionPkt(0, 'DriverOne', '76561198000000001', 'ks_toyota_ae86'), 'JOIN DriverOne');
   await new Promise(r => setTimeout(r, 200));
-  send(newConnectionPkt(1, 'Sample Driver', '76561198000000023', 'ks_toyota_ae86'), 'JOIN SampleDriver');
+  send(newConnectionPkt(1, 'DriverTwo', '76561198000000002', 'ks_toyota_ae86'), 'JOIN DriverTwo');
   await new Promise(r => setTimeout(r, 400));
-  send(lapCompletedPkt(0, 250217, 0, 1), 'LAP SampleDriver 4:10.217');
+  send(lapCompletedPkt(0, 250217, 0, 1), 'LAP DriverOne 4:10.217');
   await new Promise(r => setTimeout(r, 200));
-  send(lapCompletedPkt(1, 288071, 0, 1), 'LAP SampleDriver 4:48.071');
+  send(lapCompletedPkt(1, 288071, 0, 1), 'LAP DriverTwo 4:48.071');
   await new Promise(r => setTimeout(r, 200));
-  send(lapCompletedPkt(1, 277298, 0, 2), 'LAP SampleDriver 4:37.298');
+  send(lapCompletedPkt(1, 277298, 0, 2), 'LAP DriverTwo 4:37.298');
   await new Promise(r => setTimeout(r, 200));
-  send(lapCompletedPkt(1, 277298, 0, 2), 'LAP SampleDriver 4:37.298 (DUPLICATE — should not double-insert)');
+  send(lapCompletedPkt(1, 277298, 0, 2), 'LAP DriverTwo 4:37.298 (DUPLICATE — should not double-insert)');
   await new Promise(r => setTimeout(r, 300));
-  send(connectionClosedPkt(0, 'SampleDriver', '76561198000000024', 'ks_toyota_ae86'), 'LEAVE SampleDriver');
+  send(connectionClosedPkt(0, 'DriverOne', '76561198000000001', 'ks_toyota_ae86'), 'LEAVE DriverOne');
   await new Promise(r => setTimeout(r, 300));
   sock.close();
 })();

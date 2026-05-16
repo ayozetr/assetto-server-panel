@@ -10,6 +10,74 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-05-17
+
+Two-factor authentication is now available for panel accounts. The
+implementation is RFC 6238 TOTP with the same defaults every off-the-shelf
+authenticator app expects (HMAC-SHA1, 30-second step, 6 digits), so any
+existing app — Aegis, Authy, Bitwarden, 2FAS, Google Authenticator — can
+manage the secret without configuration.
+
+### Added
+
+- **`POST /api/auth/2fa/setup`** — server generates a fresh 20-byte secret,
+  base32-encodes it, stores it in `panel_users.totp_pending`, and returns
+  the secret + an `otpauth://totp/...` provisioning URI for the client to
+  render. No QR-image library is bundled — the secret never leaves
+  first-party control. [`<this commit>`]
+- **`POST /api/auth/2fa/confirm`** — client sends the current 6-digit code;
+  if it verifies against the pending secret with ±1-step drift tolerance,
+  the secret is promoted to `totp_secret` and `totp_enabled` flips to 1.
+  Audit row `user.2fa.enable`.
+- **`POST /api/auth/2fa/disable`** — requires the current password AND a
+  valid TOTP code (proves both that you're the live user and that you
+  still have the authenticator). Audit row `user.2fa.disable`.
+- **`GET /api/auth/2fa/status`** — used by the Profile UI to render the
+  enable/disable view. Returns `{ enabled, pending }`.
+- **Login flow update.** `POST /api/auth/login` now returns
+  `{ ok: false, needsTotp: true }` when the username + password are valid
+  but the account has 2FA enabled. The client resubmits with `totp`
+  appended; an incorrect code returns `401 { needsTotp: true }`. Bad-code
+  attempts count against the same per-IP login rate-limit bucket as bad
+  passwords, so a brute-forcer cannot grind through the 1M code space.
+- **Profile page 2FA card.** Three-state UI: idle (button to enable),
+  setup (account label + base32 secret in copy-friendly boxes, expandable
+  otpauth:// URI, 6-digit confirmation input), enabled (status badge +
+  disable form). Manual-key entry is the primary flow because every
+  modern authenticator app supports it without a QR scanner.
+- **Login screen 2FA field.** Username + password stay populated when the
+  server requests a second factor; a third input appears with
+  `inputMode="numeric"` + `autoComplete="one-time-code"` so mobile
+  keyboards and password managers behave correctly.
+- **i18n keys** for the entire 2FA flow in `en/es/it`
+  (`profile.tfa.*`, `login.totp*`).
+- **Smoke test coverage**: `npm test` now asserts the RFC 6238 reference
+  vector at `t=59` and the status / setup / wrong-code endpoint shapes.
+
+### Migrations
+
+Three numbered, idempotent additions to `panel_users` (recorded in
+`schema_migrations`):
+
+- `008 panel_users_totp_secret`  — `TEXT NOT NULL DEFAULT ''`
+- `009 panel_users_totp_enabled` — `INTEGER NOT NULL DEFAULT 0`
+- `010 panel_users_totp_pending` — `TEXT NOT NULL DEFAULT ''`
+
+Existing installs upgrade in place on boot. Accounts without 2FA configured
+keep working exactly as before; 2FA is opt-in per account.
+
+### Security notes
+
+- Secret generation uses `crypto.randomBytes(20)` (CSPRNG) and is rendered
+  to base32 via an inline encoder. No third-party TOTP library is on the
+  dependency surface.
+- TOTP verification uses `crypto.timingSafeEqual` to prevent timing leaks
+  on individual digit positions.
+- The setup secret lives in `totp_pending` until confirmed; an interrupted
+  flow leaves no enabled-but-orphan state.
+- `apiAuthMe` returns the live `twoFactorEnabled` flag so the Profile UI
+  always reflects server truth without an extra round-trip on mount.
+
 ## [1.2.0] — 2026-05-16
 
 Operator-driven release: portability + supply-chain hardening + a major
@@ -115,7 +183,7 @@ redistribution and attribution requirements.
 - **better-sqlite3 bumped** 12.9.0 → 12.10.0 (semver minor, audit
   clean). [`1605efc`]
 
-## [1.1.0] — 2026-05-16
+## [1.1.0] — 2026-05-14
 
 This release closes the entire CRITICAL backlog and ~30 HIGH-severity findings
 from the 2026-05-16 security audit. Production deployment verified on the

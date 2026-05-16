@@ -217,7 +217,234 @@ function PageProfile({ user, setUser }) {
           </div>
         </div>
       </div>
+
+      <TwoFactorCard user={user} setUser={setUser} t={t}/>
     </>
+  );
+}
+
+// ── Two-factor authentication card ───────────────────────────────────────────
+// Three states managed by status + a local UI step:
+//   - disabled  + step "idle"      → show "Enable 2FA" button
+//   - disabled  + step "setup"     → show secret + otpauth + 6-digit code input
+//   - enabled                      → show "Disable" form (password + code)
+//
+// The QR is rendered as a raw otpauth:// URI in a copy-friendly box; manual
+// entry of the secret works in every authenticator app (Aegis, Authy,
+// Bitwarden, 2FAS, Google Authenticator). We deliberately avoid pulling in a
+// QR-image library — the otpauth secret should never be sent to a third-party
+// QR-generator service, and shipping a JS QR encoder would add ~30 KB to the
+// bundle for a one-time setup screen.
+function TwoFactorCard({ user, setUser, t }) {
+  const toast = window.AppShell.useToast();
+  const [enabled, setEnabled] = useStateP(false);
+  const [pending, setPending] = useStateP(false);
+  const [loaded,  setLoaded]  = useStateP(false);
+  const [step,    setStep]    = useStateP('idle'); // 'idle' | 'setup' | 'disable'
+  const [secret,  setSecret]  = useStateP('');
+  const [otpauth, setOtpauth] = useStateP('');
+  const [code,    setCode]    = useStateP('');
+  const [pw,      setPw]      = useStateP('');
+  const [busy,    setBusy]    = useStateP(false);
+
+  const refresh = () => fetch('/api/auth/2fa/status').then(r => r.json()).then(d => {
+    setEnabled(!!d.enabled);
+    setPending(!!d.pending);
+    setLoaded(true);
+  }).catch(() => setLoaded(true));
+  useEffectP(() => { refresh(); }, []);
+
+  const startSetup = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch('/api/auth/2fa/setup', { method: 'POST' });
+      const d = await r.json();
+      if (d.ok) {
+        setSecret(d.secret);
+        setOtpauth(d.otpauth);
+        setStep('setup');
+      } else {
+        toast.push(d.error || t('common.error'), 'error');
+      }
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const confirmSetup = async () => {
+    if (!/^\d{6}$/.test(code)) { toast.push(t('profile.tfa.code_format') || '6-digit code required', 'error'); return; }
+    setBusy(true);
+    try {
+      const r = await fetch('/api/auth/2fa/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.push(t('profile.tfa.enabled') || 'Two-factor enabled', 'success');
+        setStep('idle'); setCode(''); setSecret(''); setOtpauth('');
+        setUser(u => u ? ({ ...u, twoFactorEnabled: true }) : u);
+        refresh();
+      } else {
+        toast.push(d.error || t('common.error'), 'error');
+      }
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const cancelSetup = () => { setStep('idle'); setCode(''); setSecret(''); setOtpauth(''); };
+
+  const disableTwoFactor = async () => {
+    if (!pw || !/^\d{6}$/.test(code)) {
+      toast.push(t('profile.tfa.disable_req') || 'Current password and 6-digit code required', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch('/api/auth/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: pw, code }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast.push(t('profile.tfa.disabled') || 'Two-factor disabled', 'success');
+        setStep('idle'); setCode(''); setPw('');
+        setUser(u => u ? ({ ...u, twoFactorEnabled: false }) : u);
+        refresh();
+      } else {
+        toast.push(d.error || t('common.error'), 'error');
+      }
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const copyText = (s) => {
+    try { navigator.clipboard.writeText(s); toast.push(t('profile.copied') || 'Copied', 'success'); }
+    catch { toast.push(t('common.error'), 'error'); }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="card" style={{marginTop: 16}}>
+      <div className="card-header">
+        <I4P.IconShield size={14} style={{color: enabled ? '#16a34a' : 'var(--text-muted)'}}/>
+        <div className="card-title">{t('profile.tfa.title') || 'Two-factor authentication'}</div>
+      </div>
+      <div className="card-body col" style={{gap: 12}}>
+        {step === 'idle' && !enabled && (
+          <>
+            <p className="muted" style={{fontSize: 13, margin: 0}}>
+              {t('profile.tfa.intro') || 'Protect your account with a 6-digit time-based code from an authenticator app (Aegis, Authy, Bitwarden, 2FAS, Google Authenticator). You will be asked for it on every login.'}
+            </p>
+            <div className="row" style={{gap: 8}}>
+              <button className="btn btn-primary" disabled={busy} onClick={startSetup}>
+                <I4P.IconShield size={13}/> {t('profile.tfa.enable') || 'Enable 2FA'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'idle' && enabled && (
+          <>
+            <div className="row" style={{gap: 8, alignItems:'center'}}>
+              <span className="badge" style={{background:'color-mix(in srgb, #16a34a 14%, transparent)', color:'#16a34a'}}>{t('profile.tfa.active') || 'Active'}</span>
+              <span className="muted" style={{fontSize: 12.5}}>{t('profile.tfa.active_hint') || 'A code from your authenticator app is required on every login.'}</span>
+            </div>
+            <button className="btn btn-sm" disabled={busy} onClick={() => setStep('disable')} style={{alignSelf:'flex-start'}}>
+              {t('profile.tfa.disable') || 'Disable 2FA'}
+            </button>
+          </>
+        )}
+
+        {step === 'setup' && (
+          <>
+            <p className="muted" style={{fontSize: 13, margin: 0}}>
+              {t('profile.tfa.setup_step1') || 'Step 1: open your authenticator app, choose "Add account" → "Enter setup key", and paste these values:'}
+            </p>
+            <div className="field">
+              <label className="field-label">{t('profile.tfa.account_label') || 'Account / Label'}</label>
+              <div className="row" style={{gap: 6, alignItems:'center'}}>
+                <div className="input mono" style={{flex:1, padding:'7px 10px', background:'var(--bg-3)', fontSize:12, userSelect:'all', minHeight:34, display:'flex', alignItems:'center'}}>
+                  Assetto Server Panel:{user.name}
+                </div>
+                <button type="button" className="icon-btn" onClick={() => copyText(`Assetto Server Panel:${user.name}`)} title={t('profile.copy') || 'Copy'}>
+                  <I4P.IconCopy size={14}/>
+                </button>
+              </div>
+            </div>
+            <div className="field">
+              <label className="field-label">{t('profile.tfa.secret_label') || 'Setup key (base32 secret)'}</label>
+              <div className="row" style={{gap: 6, alignItems:'center'}}>
+                <div className="input mono" style={{flex:1, padding:'7px 10px', background:'var(--bg-3)', fontSize:12, wordBreak:'break-all', userSelect:'all', minHeight:34, display:'flex', alignItems:'center'}}>
+                  {secret.replace(/(.{4})/g, '$1 ').trim()}
+                </div>
+                <button type="button" className="icon-btn" onClick={() => copyText(secret)} title={t('profile.copy') || 'Copy'}>
+                  <I4P.IconCopy size={14}/>
+                </button>
+              </div>
+              <span className="field-hint">{t('profile.tfa.secret_hint') || 'Algorithm SHA-1 · 6 digits · 30 s period (the defaults every app expects).'}</span>
+            </div>
+            <details style={{fontSize: 12}}>
+              <summary className="muted" style={{cursor:'pointer'}}>{t('profile.tfa.uri_summary') || 'Or copy the otpauth:// URI (some apps support paste)'}</summary>
+              <div className="row" style={{gap: 6, alignItems:'center', marginTop: 6}}>
+                <div className="input mono" style={{flex:1, padding:'7px 10px', background:'var(--bg-3)', fontSize:11, wordBreak:'break-all', userSelect:'all'}}>
+                  {otpauth}
+                </div>
+                <button type="button" className="icon-btn" onClick={() => copyText(otpauth)} title={t('profile.copy') || 'Copy'}>
+                  <I4P.IconCopy size={14}/>
+                </button>
+              </div>
+            </details>
+            <p className="muted" style={{fontSize: 13, margin: 0, marginTop: 4}}>
+              {t('profile.tfa.setup_step2') || 'Step 2: once added, your app shows a 6-digit code that rotates every 30 seconds. Enter the current one below to confirm.'}
+            </p>
+            <div className="field">
+              <label className="field-label">{t('profile.tfa.code_label') || 'Current code'}</label>
+              <input className="input mono" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                style={{maxWidth:140, fontSize:16, letterSpacing:'0.18em'}}
+                value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000" autoComplete="one-time-code"/>
+            </div>
+            <div className="row" style={{gap: 6}}>
+              <button className="btn" disabled={busy} onClick={cancelSetup}>{t('common.cancel')}</button>
+              <button className="btn btn-primary" disabled={busy || code.length !== 6} onClick={confirmSetup}>
+                <I4P.IconCheck size={13}/> {t('profile.tfa.confirm') || 'Confirm and enable'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'disable' && (
+          <>
+            <p className="muted" style={{fontSize: 13, margin: 0}}>
+              {t('profile.tfa.disable_intro') || 'Disabling 2FA removes the second factor from your account. Confirm with your current password and a fresh 6-digit code.'}
+            </p>
+            <div className="field">
+              <label className="field-label">{t('profile.current_pw') || 'Current password'}</label>
+              <input className="input" type="password" autoComplete="current-password"
+                value={pw} onChange={e => setPw(e.target.value)}/>
+            </div>
+            <div className="field">
+              <label className="field-label">{t('profile.tfa.code_label') || 'Current code'}</label>
+              <input className="input mono" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                style={{maxWidth:140, fontSize:16, letterSpacing:'0.18em'}}
+                value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000" autoComplete="one-time-code"/>
+            </div>
+            <div className="row" style={{gap: 6}}>
+              <button className="btn" disabled={busy} onClick={() => { setStep('idle'); setCode(''); setPw(''); }}>
+                {t('common.cancel')}
+              </button>
+              <button className="btn btn-danger" disabled={busy || !pw || code.length !== 6} onClick={disableTwoFactor}>
+                {t('profile.tfa.disable_confirm') || 'Disable 2FA'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -452,6 +452,12 @@ try {
     { id: 7, name: 'audit_compound_indices',
       sql: `CREATE INDEX IF NOT EXISTS idx_audit_actor  ON audit_log(actor);
             CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);` },
+    { id: 8, name: 'panel_users_totp_secret',
+      sql: `ALTER TABLE panel_users ADD COLUMN totp_secret TEXT NOT NULL DEFAULT ''` },
+    { id: 9, name: 'panel_users_totp_enabled',
+      sql: `ALTER TABLE panel_users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0` },
+    { id: 10, name: 'panel_users_totp_pending',
+      sql: `ALTER TABLE panel_users ADD COLUMN totp_pending TEXT NOT NULL DEFAULT ''` },
   ];
   const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
   const _applied = new Set(_appliedRows.map(r => r.id));
@@ -568,6 +574,70 @@ function safeHexEqual(a, b) {
   try {
     return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
   } catch { return false; }
+}
+
+// ── TOTP (RFC 6238) ──────────────────────────────────────────────────────────
+// Time-based one-time password generator + verifier, implemented inline so we
+// don't pull in another npm dep. Standard parameters (SHA-1, 30-second step,
+// 6 digits) — every off-the-shelf authenticator app (Aegis, Authy, Bitwarden,
+// 2FAS, Google Authenticator, etc.) reads them out of the otpauth:// URI.
+//
+// The secret is stored as base32 in panel_users.totp_secret. Setup writes the
+// candidate into totp_pending; only after the user confirms by entering a
+// valid code from their app does it move into totp_secret + totp_enabled=1.
+// This prevents a half-setup state where 2FA is "on" but the user never
+// scanned the QR.
+const _BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function _base32Encode(buf) {
+  let bits = '';
+  for (const b of buf) bits += b.toString(2).padStart(8, '0');
+  let out = '';
+  for (let i = 0; i < bits.length; i += 5) {
+    out += _BASE32_ALPHABET[parseInt(bits.slice(i, i + 5).padEnd(5, '0'), 2)];
+  }
+  return out;
+}
+function _base32Decode(str) {
+  const clean = String(str || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = '';
+  for (const c of clean) bits += _BASE32_ALPHABET.indexOf(c).toString(2).padStart(5, '0');
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(bytes);
+}
+function _totpCode(secretBuf, time = Math.floor(Date.now() / 1000), step = 30, digits = 6) {
+  const counter = Math.floor(time / step);
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64BE(BigInt(counter), 0);
+  const hmac = crypto.createHmac('sha1', secretBuf).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0x0f;
+  const bin = ((hmac[off]     & 0x7f) << 24) |
+              ((hmac[off + 1] & 0xff) << 16) |
+              ((hmac[off + 2] & 0xff) <<  8) |
+              ( hmac[off + 3] & 0xff);
+  return String(bin % (10 ** digits)).padStart(digits, '0');
+}
+// Constant-time string compare so the verifier doesn't leak which digit
+// failed via timing. Both sides must be the same length already.
+function _ctEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b)); } catch { return false; }
+}
+function totpVerify(secretB32, code, drift = 1) {
+  if (!secretB32 || !code || !/^\d{6}$/.test(String(code))) return false;
+  const key = _base32Decode(secretB32);
+  if (!key.length) return false;
+  const now = Math.floor(Date.now() / 1000);
+  for (let i = -drift; i <= drift; i++) {
+    if (_ctEqual(_totpCode(key, now + i * 30), String(code))) return true;
+  }
+  return false;
+}
+function totpProvisioningUri({ secret, account, issuer }) {
+  // otpauth://totp/<issuer>:<account>?secret=...&issuer=...&algorithm=SHA1&digits=6&period=30
+  const label = encodeURIComponent(`${issuer}:${account}`);
+  const params = new URLSearchParams({ secret, issuer, algorithm: 'SHA1', digits: '6', period: '30' });
+  return `otpauth://totp/${label}?${params}`;
 }
 
 function seedDefaultUsers() {
@@ -3753,6 +3823,22 @@ async function apiAuthLogin(req, res) {
     if (!verifyPassword(password, user.salt, user.password_hash))
       return json(res, 401, { error: 'Invalid username or password' });
 
+    // Second factor. When 2FA is enabled on this account, password alone is
+    // not enough — the client must also send a 6-digit TOTP code in `totp`.
+    // We respond { needsTotp: true } so the UI can render the second field
+    // instead of treating the absence of `totp` as a generic auth failure.
+    // The TOTP check itself counts against the same rate-limit bucket as a
+    // bad password so a brute-forcer cannot grind through the 1M code space.
+    if (user.totp_enabled === 1 && user.totp_secret) {
+      const submittedCode = String(body.totp || '').replace(/\s/g, '');
+      if (!submittedCode) {
+        return json(res, 200, { ok: false, needsTotp: true });
+      }
+      if (!totpVerify(user.totp_secret, submittedCode)) {
+        return json(res, 401, { error: 'Invalid 2FA code', needsTotp: true });
+      }
+    }
+
     // Lazy upgrade: re-hash legacy pbkdf2 entries with scrypt on successful login
     if (!user.password_hash.startsWith('scrypt$')) {
       try { db.prepare('UPDATE panel_users SET password_hash = ? WHERE username = ?')
@@ -3765,8 +3851,111 @@ async function apiAuthLogin(req, res) {
     const permissions = user.role === 'admin'
       ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
       : getUserRolePermissions();
-    json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1, permissions } });
+    json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1, twoFactorEnabled: user.totp_enabled === 1, permissions } });
   } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// ── 2FA / TOTP endpoints ─────────────────────────────────────────────────────
+// Three-step flow:
+//   1. POST /api/auth/2fa/setup     → server generates a fresh base32 secret,
+//                                     stores it in totp_pending, returns the
+//                                     secret + otpauth:// URI for the client
+//                                     to render as QR + manual-entry key.
+//   2. POST /api/auth/2fa/confirm   → client sends a 6-digit code; if valid
+//                                     against totp_pending, the secret is
+//                                     promoted to totp_secret + totp_enabled=1
+//                                     and the pending slot cleared. Now the
+//                                     account requires 2FA on every login.
+//   3. POST /api/auth/2fa/disable   → requires the current password (proves
+//                                     it's the live user, not a stolen cookie)
+//                                     and a TOTP code (proves the user still
+//                                     has the authenticator). Clears the
+//                                     secret + enabled flag.
+async function apiAuth2faSetup(req, res) {
+  const sess = getSession(req);
+  if (!sess) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 503, { error: 'Database unavailable' });
+  // 20 random bytes → 32-char base32 secret (RFC 4226 minimum is 16 bytes for
+  // SHA-1; 20 matches what most authenticator apps assume).
+  const secret = _base32Encode(crypto.randomBytes(20));
+  try {
+    db.prepare('UPDATE panel_users SET totp_pending = ? WHERE username = ?').run(secret, sess.username);
+  } catch (e) { return json(res, 500, { error: e.message }); }
+  const otpauth = totpProvisioningUri({
+    secret,
+    account: sess.username,
+    issuer:  'Assetto Server Panel',
+  });
+  json(res, 200, { ok: true, secret, otpauth });
+}
+
+async function apiAuth2faConfirm(req, res) {
+  try {
+    const sess = getSession(req);
+    if (!sess) return json(res, 401, { error: 'Unauthorized' });
+    const ip = clientIp(req);
+    if (!checkLoginRateLimit(ip))
+      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
+    const body = await readBody(req);
+    const code = String(body.code || '').replace(/\s/g, '');
+    if (!/^\d{6}$/.test(code)) return json(res, 400, { error: 'code must be 6 digits' });
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
+    const row = db.prepare('SELECT totp_pending FROM panel_users WHERE username = ?').get(sess.username);
+    if (!row?.totp_pending) return json(res, 400, { error: 'No pending 2FA setup. Call /api/auth/2fa/setup first.' });
+    if (!totpVerify(row.totp_pending, code)) return json(res, 401, { error: 'Invalid code. Make sure your authenticator clock is in sync.' });
+    db.prepare(`UPDATE panel_users
+                   SET totp_secret = totp_pending,
+                       totp_pending = '',
+                       totp_enabled = 1
+                 WHERE username = ?`).run(sess.username);
+    _clearLoginAttempt(ip);
+    insertAuditLog(sess.username, 'user.2fa.enable', sess.username);
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiAuth2faDisable(req, res) {
+  try {
+    const sess = getSession(req);
+    if (!sess) return json(res, 401, { error: 'Unauthorized' });
+    const ip = clientIp(req);
+    if (!checkLoginRateLimit(ip))
+      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
+    const body = await readBody(req);
+    const currentPassword = String(body.currentPassword || '');
+    const code = String(body.code || '').replace(/\s/g, '');
+    if (!currentPassword || !code) return json(res, 400, { error: 'currentPassword and code are required' });
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
+    const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(sess.username);
+    if (!user) return json(res, 404, { error: 'User not found' });
+    if (!verifyPassword(currentPassword, user.salt, user.password_hash))
+      return json(res, 401, { error: 'Current password is incorrect' });
+    if (!user.totp_enabled || !user.totp_secret)
+      return json(res, 400, { error: '2FA is not currently enabled' });
+    if (!totpVerify(user.totp_secret, code))
+      return json(res, 401, { error: 'Invalid 2FA code' });
+    db.prepare(`UPDATE panel_users
+                   SET totp_secret = '',
+                       totp_pending = '',
+                       totp_enabled = 0
+                 WHERE username = ?`).run(sess.username);
+    _clearLoginAttempt(ip);
+    insertAuditLog(sess.username, 'user.2fa.disable', sess.username);
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// Status endpoint for the Profile page UI — returns whether 2FA is on for the
+// current session's user, and whether a pending (un-confirmed) setup exists.
+function apiAuth2faStatus(req, res) {
+  const sess = getSession(req);
+  if (!sess) return json(res, 401, { error: 'Unauthorized' });
+  if (!db) return json(res, 200, { enabled: false, pending: false });
+  const row = db.prepare('SELECT totp_enabled, totp_pending FROM panel_users WHERE username = ?').get(sess.username);
+  json(res, 200, {
+    enabled: row?.totp_enabled === 1,
+    pending: !!(row?.totp_pending && row.totp_pending.length > 0),
+  });
 }
 
 function apiAuthLogout(req, res) {
@@ -3787,16 +3976,18 @@ function apiAuthMe(req, res) {
   // request returns a sensible payload instead of crashing the handler with
   // "Cannot read properties of undefined (reading 'get')".
   let mustChange = false;
+  let twoFactorEnabled = false;
   if (db) {
     try {
-      const row = db.prepare('SELECT must_change_password FROM panel_users WHERE username = ?').get(sess.username);
+      const row = db.prepare('SELECT must_change_password, totp_enabled FROM panel_users WHERE username = ?').get(sess.username);
       mustChange = row?.must_change_password === 1;
+      twoFactorEnabled = row?.totp_enabled === 1;
     } catch {}
   }
   const permissions = sess.role === 'admin'
     ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
     : getUserRolePermissions();
-  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: mustChange, permissions });
+  json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: mustChange, twoFactorEnabled, permissions });
 }
 
 async function apiAuthChangePassword(req, res) {
@@ -5129,6 +5320,13 @@ function handler(req, res) {
     if (urlPath === '/api/auth/login'           && req.method === 'POST') return apiAuthLogin(req, res);
     if (urlPath === '/api/auth/logout'          && req.method === 'POST') return apiAuthLogout(req, res);
     if (urlPath === '/api/auth/change-password' && req.method === 'POST') return apiAuthChangePassword(req, res);
+    // Second-factor management. Each endpoint requires a valid session and is
+    // self-gated; they live alongside change-password so they remain reachable
+    // even while the must_change_password flag is set on the user.
+    if (urlPath === '/api/auth/2fa/status'      && req.method === 'GET')  return apiAuth2faStatus(req, res);
+    if (urlPath === '/api/auth/2fa/setup'       && req.method === 'POST') return apiAuth2faSetup(req, res);
+    if (urlPath === '/api/auth/2fa/confirm'     && req.method === 'POST') return apiAuth2faConfirm(req, res);
+    if (urlPath === '/api/auth/2fa/disable'     && req.method === 'POST') return apiAuth2faDisable(req, res);
 
     // All routes below require a valid session
     const sess = checkAnyAuth(req);

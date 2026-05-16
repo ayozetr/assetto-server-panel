@@ -237,6 +237,14 @@ function Login({ onLogin, setupStatus }) {
   const [loading, setLoading] = useState(false);
   const userRef = useRef(null);
   const passRef = useRef(null);
+  // 2FA: when the server replies needsTotp=true the username+password were
+  // valid but the account has TOTP enabled. We hide the password field and
+  // surface a 6-digit code input instead, then re-submit with the totp value
+  // appended to the body. The username and password stay in state so a
+  // re-submit doesn't require the user to type them again.
+  const [needsTotp, setNeedsTotp] = useState(false);
+  const [totp,      setTotp]      = useState('');
+  const totpRef = useRef(null);
   // Setup banner: when /api/setup/status returns ready=false the panel is
   // technically up (login still works) but pretty much every page after
   // login will show errors because the AC paths are wrong. Surface the
@@ -271,19 +279,36 @@ function Login({ onLogin, setupStatus }) {
     setError('');
     if (!user) { setError(t('login.err_user')); setTimeout(() => userRef.current?.focus(), 0); return; }
     if (!pass) { setError(t('login.err_pass')); setTimeout(() => passRef.current?.focus(), 0); return; }
+    if (needsTotp && !/^\d{6}$/.test(totp)) {
+      setError(t('login.err_totp') || '6-digit code required');
+      setTimeout(() => totpRef.current?.focus(), 0);
+      return;
+    }
     setLoading(true);
     try {
+      const body = { username: user, password: pass };
+      if (needsTotp) body.totp = totp;
       const r = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: user, password: pass }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
+      // Three outcomes: success, "second factor required" (advance UI), or
+      // failure. The needsTotp branch returns 200 with ok:false on first
+      // attempt (no code yet) and 401 + needsTotp:true on a bad code.
       if (d.ok) {
         onLogin(d.user);
-      } else {
-        setError(d.error || t('login.err_cred'));
+        return;
       }
+      if (d.needsTotp) {
+        setNeedsTotp(true);
+        setTotp('');
+        if (d.error) setError(d.error);
+        setTimeout(() => totpRef.current?.focus(), 0);
+        return;
+      }
+      setError(d.error || t('login.err_cred'));
     } catch {
       setError(t('login.err_conn'));
     } finally {
@@ -338,6 +363,25 @@ function Login({ onLogin, setupStatus }) {
               </button>
             </div>
           </div>
+          {needsTotp && (
+            <div className="field">
+              <label className="field-label">{t('login.totp') || 'Authenticator code'}</label>
+              <input
+                ref={totpRef}
+                className="input mono"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={totp}
+                onChange={(e) => setTotp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                style={{fontSize: 16, letterSpacing: '0.18em', maxWidth: 160}}
+              />
+              <span className="field-hint">{t('login.totp_hint') || '6 digits from your authenticator app.'}</span>
+            </div>
+          )}
         </div>
 
         {error && <div style={{fontSize: 12, color: 'var(--red)', marginBottom: 12}}>{error}</div>}

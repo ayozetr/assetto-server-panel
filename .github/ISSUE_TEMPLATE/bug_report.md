@@ -47,6 +47,3 @@ Redact session cookies, ADMIN_TOKEN values, real Steam GUIDs, and any password.
 ## Additional context
 
 <!-- Screenshots, network captures, anything else you think helps. Optional. -->
-```
-
----

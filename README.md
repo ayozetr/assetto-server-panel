@@ -26,6 +26,10 @@
 
 A full web interface to manage your Assetto Corsa server without touching the terminal. Accessible from any device on your network, or from anywhere in the world using Cloudflare Tunnel.
 
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Assetto Server Panel dashboard — light and dark themes" width="900"/>
+</p>
+
 ---
 
 ## Features
@@ -44,8 +48,18 @@ Three views: **Records** (best lap per driver+track), **All laps** (every row, p
 ### 🚗 Cars & tracks catalogue
 Browse all installed cars and tracks with images, specs and multi-layout support. Separate **Kunos content** / **Mod content** toggles — the Kunos toggle auto-flips off on first load when mods are present so modded servers don't drown the catalogue in stock content. Spinner-overlay on each thumbnail with fade-in once fully loaded, so heavy mod previews don't paint in visible chunks. **Per-slot skin selection**: the modal's "Add to slot" passes the selected skin to a `slots` array in session config — the same car can occupy multiple grid positions with different liveries (e.g. FK2 blue + FK2 red as two distinct slots), each landing as its own `[CAR_n]` block in `entry_list.ini`. **Admin-only "Delete" button** inside each modal removes the mod car/track folder recursively from `/content/{cars,tracks}` (audited as `car.delete` / `track.delete`); Kunos content is hard-refused server-side and the button is hidden for it, so the bundled DLC catalogue stays intact and continues serving as the asset-fallback source for the rest of the panel.
 
+<p align="center">
+  <img src="docs/screenshots/cars.png" alt="Cars catalogue view" width="800"/>
+  <br/>
+  <img src="docs/screenshots/tracks.png" alt="Tracks catalogue view with layouts" width="800"/>
+</p>
+
 ### 🏁 Session planner
 Per-session (Practice / Qualify / Race) enable toggles — when a session is disabled the panel physically removes its section from `server_cfg.ini` so `LOOP_MODE` only cycles the enabled ones. Independent duration/laps per session, weather and air temperature, time of day (hour 0..23 mapped to `SUN_ANGLE`), race penalties toggle. The `entry_list.ini` is regenerated automatically whenever the car set changes so `acServer` never refuses to boot on a stale `[CAR_n].MODEL` reference.
+
+<p align="center">
+  <img src="docs/screenshots/session.png" alt="Session planner with Practice / Qualify / Race configuration" width="800"/>
+</p>
 
 ### 📦 Mod installer
 Upload mods as `.zip`, `.rar` or `.7z` straight from the browser. The server automatically detects whether it's a car or a track and installs it in the right folder. Works remotely too, with chunked upload support for Cloudflare and other proxies.

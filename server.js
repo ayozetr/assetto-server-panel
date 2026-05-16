@@ -4338,7 +4338,27 @@ const CHUNK_TMP_DIR    = path.join(os.tmpdir(), 'ac-upload-chunks');
 // The frontend setting goes in admin Configuración; this cap is a safety net so
 // a misconfigured value (or hostile DB edit) cannot OOM the panel.
 const UPLOAD_HARD_CAP_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
-const _chunkAssembling = new Set(); // per-uploadId lock to prevent double-assembly
+
+// Atomic per-uploadId lock. Used to serialise every operation that touches the
+// same uploadId — chunk write, readdir count, and assembly all happen inside
+// the same critical section, so two concurrent final-chunk requests can never
+// both pass the "received == totalChunks" check and double-extract. Releasing
+// happens in the finally block of withUploadLock so a thrown exception or
+// process crash mid-flight still drops the lock for the next request.
+const _uploadLocks = new Map(); // uploadId -> Promise (resolves when current op done)
+async function withUploadLock(uploadId, fn) {
+  // Chain onto any in-flight lock for the same uploadId. Multiple waiters all
+  // resolve when the previous holder releases, then the JS scheduler picks one
+  // to actually run next; the others loop and wait again. Cooperative FIFO.
+  while (_uploadLocks.has(uploadId)) {
+    try { await _uploadLocks.get(uploadId); } catch {}
+  }
+  let release;
+  const p = new Promise(r => { release = r; });
+  _uploadLocks.set(uploadId, p);
+  try { return await fn(); }
+  finally { _uploadLocks.delete(uploadId); release(); }
+}
 // Per-user state: at most one active upload at a time. A new uploadId from the
 // same user is rejected until the current one finishes or stales out (no chunks
 // for STALE_MS). Cleared on success/failure of the assembly.
@@ -4425,59 +4445,92 @@ async function apiModUploadChunk(req, res) {
   try { chunkData = Buffer.from(dataB64, 'base64'); }
   catch { return json(res, 400, { error: 'Invalid base64 data' }); }
 
+  // Optional client-supplied sha256 of the raw chunk bytes. When present, verify
+  // — a mismatch means the chunk got corrupted in transit (or somebody is trying
+  // to swap chunk contents mid-upload). When absent, fall back to byte-equality
+  // on duplicates below; the client is encouraged to send the hash for safety.
+  if (body.sha256 != null) {
+    if (typeof body.sha256 !== 'string' || !/^[a-fA-F0-9]{64}$/.test(body.sha256)) {
+      return json(res, 400, { error: 'sha256 must be 64 hex chars' });
+    }
+    const have = crypto.createHash('sha256').update(chunkData).digest('hex');
+    if (have !== body.sha256.toLowerCase()) {
+      return json(res, 400, { error: 'sha256 mismatch — chunk corrupted in transit' });
+    }
+  }
+
   try {
     await fsp.mkdir(uploadDir, { recursive: true });
-    await fsp.writeFile(path.join(uploadDir, `chunk-${chunkIndex}`), chunkData);
 
-    const received = (await fsp.readdir(uploadDir)).filter(f => f.startsWith('chunk-')).length;
-    if (received < totalChunks)
-      return json(res, 200, { ok: true, done: false, received, total: totalChunks });
-
-    // Lock: only the first request that reaches full-chunk-count assembles the file.
-    // The lock must cover the entire processModBuffer call — if released earlier, two
-    // concurrent final-chunk requests can both pass the check and double-extract.
-    if (_chunkAssembling.has(uploadId))
-      return json(res, 409, { error: 'Assembly already in progress for this upload' });
-    _chunkAssembling.add(uploadId);
-
-    // Assemble chunks into a single temp file on disk — never `Buffer.concat` the
-    // whole upload, which would peak at 2× the file size in RAM. Read each chunk,
-    // append it to the output stream, free the buffer. Peak RAM stays at one
-    // chunk (≈5 MB).
-    const assembledPath = path.join(os.tmpdir(), `ac-assembled-${uploadId}.bin`);
-    try {
-      const out = fs.createWriteStream(assembledPath);
-      let totalBytes = 0;
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkPath = path.join(uploadDir, `chunk-${i}`);
-        const buf = await fsp.readFile(chunkPath);
-        totalBytes += buf.length;
-        if (totalBytes > UPLOAD_HARD_CAP_BYTES) {
-          out.destroy();
-          throw Object.assign(new Error(`Upload exceeds hard cap of ${UPLOAD_HARD_CAP_BYTES} bytes`), { status: 413 });
-        }
-        await new Promise((resolve, reject) => {
-          out.write(buf, e => e ? reject(e) : resolve());
-        });
-        await fsp.unlink(chunkPath).catch(() => {});
+    // Everything from here is serialised per uploadId. Without this, two
+    // requests carrying the same final chunk index could both reach the
+    // `received === totalChunks` check between each other's awaits and both
+    // proceed to assembly — extracting the same archive twice (and triggering
+    // mod-install audit rows twice). The lock also covers chunk-duplicate
+    // handling: a retry of the same chunk while assembly is in progress sees
+    // the lock and waits, instead of racing the unlink during assembly.
+    return await withUploadLock(uploadId, async () => {
+      // Refuse duplicate chunks unless they are byte-identical to the existing
+      // copy. O_EXCL on a fresh fd makes the "first write wins" semantics
+      // explicit: a legitimate client retry of a flaky chunk is idempotent;
+      // an attacker (or buggy client) trying to swap chunk content with a
+      // different payload gets 409.
+      const chunkPath = path.join(uploadDir, `chunk-${chunkIndex}`);
+      try {
+        const fh = await fsp.open(chunkPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL);
+        try { await fh.writeFile(chunkData); } finally { await fh.close().catch(() => {}); }
+      } catch (e) {
+        if (e.code === 'EEXIST') {
+          const existing = await fsp.readFile(chunkPath).catch(() => null);
+          if (!existing || !existing.equals(chunkData)) {
+            return json(res, 409, { error: `chunk ${chunkIndex} already received with different contents` });
+          }
+          // Same bytes — accept the duplicate as idempotent.
+        } else { throw e; }
       }
-      await new Promise(r => out.end(r));
-      await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
 
-      // Pass the assembled file to processModBuffer. We still read it into a Buffer
-      // here because the extractors operate on Buffer; refactoring them to streaming
-      // input is a follow-up task. At least we no longer hold N + 1 copies in RAM.
-      const fileBuf = await fsp.readFile(assembledPath);
-      const result = await processModBuffer(fileBuf, filename);
-      invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
-      insertModHistory({ ok: true, filename, uploadedBy, ...result });
-      insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
-      clearUserUpload(uploadedBy);
-      json(res, 200, { ok: true, done: true, ...result });
-    } finally {
-      await fsp.unlink(assembledPath).catch(() => {});
-      _chunkAssembling.delete(uploadId);
-    }
+      const received = (await fsp.readdir(uploadDir)).filter(f => f.startsWith('chunk-')).length;
+      if (received < totalChunks)
+        return json(res, 200, { ok: true, done: false, received, total: totalChunks });
+
+      // Assemble chunks into a single temp file on disk — never `Buffer.concat` the
+      // whole upload, which would peak at 2× the file size in RAM. Read each chunk,
+      // append it to the output stream, free the buffer. Peak RAM stays at one
+      // chunk (≈5 MB).
+      const assembledPath = path.join(os.tmpdir(), `ac-assembled-${uploadId}.bin`);
+      try {
+        const out = fs.createWriteStream(assembledPath);
+        let totalBytes = 0;
+        for (let i = 0; i < totalChunks; i++) {
+          const cPath = path.join(uploadDir, `chunk-${i}`);
+          const buf = await fsp.readFile(cPath);
+          totalBytes += buf.length;
+          if (totalBytes > UPLOAD_HARD_CAP_BYTES) {
+            out.destroy();
+            throw Object.assign(new Error(`Upload exceeds hard cap of ${UPLOAD_HARD_CAP_BYTES} bytes`), { status: 413 });
+          }
+          await new Promise((resolve, reject) => {
+            out.write(buf, e => e ? reject(e) : resolve());
+          });
+          await fsp.unlink(cPath).catch(() => {});
+        }
+        await new Promise(r => out.end(r));
+        await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+
+        // Pass the assembled file to processModBuffer. We still read it into a Buffer
+        // here because the extractors operate on Buffer; refactoring them to streaming
+        // input is a follow-up task. At least we no longer hold N + 1 copies in RAM.
+        const fileBuf = await fsp.readFile(assembledPath);
+        const result = await processModBuffer(fileBuf, filename);
+        invalidateContentCache(result.modType === 'car' ? 'cars' : 'tracks');
+        insertModHistory({ ok: true, filename, uploadedBy, ...result });
+        insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
+        clearUserUpload(uploadedBy);
+        return json(res, 200, { ok: true, done: true, ...result });
+      } finally {
+        await fsp.unlink(assembledPath).catch(() => {});
+      }
+    });
   } catch (e) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
     clearUserUpload(uploadedBy);

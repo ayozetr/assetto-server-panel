@@ -3265,17 +3265,95 @@ function checkRateLimit(kind, ip, limit, windowMs) {
 }
 // Behind Cloudflare / a trusted proxy, every request shares the same socket IP and the
 // rate limiter would either DoS everyone (one bucket) or be useless. Set TRUST_PROXY=1
-// in .env to honour CF-Connecting-IP / X-Forwarded-For instead. Only enable when the
-// panel cannot be reached directly — otherwise a client can spoof the header.
+// in .env to honour CF-Connecting-IP / X-Forwarded-For instead.
+//
+// CRITICAL: only honour those headers when the **socket-level** peer is itself a
+// trusted proxy. Without this check, any client that can reach the panel directly
+// can send `CF-Connecting-IP: 1.2.3.4` to spoof IPs, bypassing the per-IP login
+// lockout and framing other IPs in the audit log.
+//
+// The trusted-proxy set defaults to Cloudflare's published edge ranges
+// (https://www.cloudflare.com/ips/) plus loopback. Override with
+// TRUST_PROXY_FROM=cidr1,cidr2,... when sitting behind a different proxy (nginx,
+// Caddy, Tailscale Funnel, etc.). When TRUST_PROXY=1 but the request did not
+// arrive from a trusted IP, the headers are ignored and the socket IP wins —
+// so a misconfigured `HOST=0.0.0.0` no longer means "anyone can spoof".
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+
+// Cloudflare edge IPs (https://www.cloudflare.com/ips/). Refresh if/when CF
+// publishes new ranges; the panel's own loopback covers direct healthchecks.
+const DEFAULT_PROXY_CIDRS = [
+  // IPv4
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+  '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+  '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+  '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+  // IPv6 (prefix string match; coarse but adequate for /32–/48 CF ranges)
+  '2400:cb00::', '2606:4700::', '2803:f800::', '2405:b500::',
+  '2405:8100::', '2a06:98c0::', '2c0f:f248::',
+  // Loopback
+  '127.0.0.0/8', '::1',
+];
+
+function _parseProxyEntry(entry) {
+  if (!entry) return null;
+  const v4 = entry.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)(?:\/(\d+))?$/);
+  if (v4) {
+    const ip   = ((+v4[1]) << 24 | (+v4[2]) << 16 | (+v4[3]) << 8 | (+v4[4])) >>> 0;
+    const bits = v4[5] !== undefined ? +v4[5] : 32;
+    const mask = bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
+    return { type: 'v4', net: ip & mask, mask };
+  }
+  if (entry.includes(':')) {
+    // Coarse IPv6 prefix: strip trailing `::` or `/N` and match by string prefix.
+    // Works for the common /32, /48 ranges Cloudflare publishes; not a full
+    // CIDR engine. Refine if a future operator needs tighter IPv6 buckets.
+    const prefix = entry.split('/')[0].replace(/::$/, ':').toLowerCase();
+    return { type: 'v6', prefix };
+  }
+  return null;
+}
+
+const _trustedProxyMatchers = (() => {
+  const raw = process.env.TRUST_PROXY_FROM || DEFAULT_PROXY_CIDRS.join(',');
+  return raw.split(',').map(s => s.trim()).filter(Boolean).map(_parseProxyEntry).filter(Boolean);
+})();
+
+function _ipv4ToInt(ip) {
+  const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return null;
+  return (((+m[1]) << 24 | (+m[2]) << 16 | (+m[3]) << 8 | (+m[4])) >>> 0);
+}
+
+function isTrustedProxyIp(rawIp) {
+  if (!rawIp) return false;
+  // Normalise IPv4-mapped IPv6 (::ffff:1.2.3.4) — Node hands this shape out of
+  // dual-stack sockets, and we want to match it against the v4 allowlist.
+  const ip = rawIp.startsWith('::ffff:') ? rawIp.slice(7) : rawIp;
+  const v4 = _ipv4ToInt(ip);
+  if (v4 !== null) {
+    for (const e of _trustedProxyMatchers) {
+      if (e.type === 'v4' && (v4 & e.mask) === e.net) return true;
+    }
+    return false;
+  }
+  const lower = ip.toLowerCase();
+  for (const e of _trustedProxyMatchers) {
+    if (e.type === 'v6' && lower.startsWith(e.prefix)) return true;
+  }
+  return false;
+}
+
 function clientIp(req) {
-  if (TRUST_PROXY) {
+  const socketIp = req.socket?.remoteAddress || '';
+  if (TRUST_PROXY && isTrustedProxyIp(socketIp)) {
     const cf = req.headers['cf-connecting-ip'];
     if (cf) return String(cf).trim();
     const xff = req.headers['x-forwarded-for'];
     if (xff) return String(xff).split(',')[0].trim();
   }
-  return req.socket?.remoteAddress || '';
+  // Untrusted source (or TRUST_PROXY off) — never honour spoofable headers.
+  return socketIp;
 }
 
 // ── Auth API ─────────────────────────────────────────────────────────────────
@@ -4669,7 +4747,11 @@ setInterval(sweepLoginAttempts, 30 * 60 * 1000);
 const server = http.createServer((req, res) => {
   // Honour an upstream X-Request-Id (e.g. from Cloudflare) to keep correlation
   // across the proxy → panel → AC server hops; otherwise mint a fresh one.
-  const reqId = (req.headers['x-request-id'] || '').slice(0, 64) || newRequestId();
+  // Strip anything that isn't [A-Za-z0-9-] — control chars or spaces in this
+  // header land in our log lines (see _logEmit) and downstream parsers, so
+  // letting them through is a log-injection vector.
+  const reqIdRaw = String(req.headers['x-request-id'] || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64);
+  const reqId = reqIdRaw || newRequestId();
   res.setHeader('X-Request-Id', reqId);
   _reqContext.run({ reqId }, () => handler(req, res));
 });

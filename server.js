@@ -1096,11 +1096,27 @@ function parseINI(text) {
 // Patch an INI file in-place: replaces changed values but keeps all comment and
 // blank lines exactly as they were. New keys (not in the original) are inserted
 // immediately after their section header.
+//
+// The sanitization here is deliberately layered:
+//   - sanitizeIniVal     — minimum contract every patchINI value must satisfy
+//                          (strip CR/LF/NUL, otherwise leave the value intact
+//                          because some legitimate fields use INI metachars,
+//                          e.g. `CARS=a;b;c` uses `;` as the list separator).
+//   - sanitizeIniText    — for free-form text (NAME, WELCOME_MESSAGE, COUNTRY,
+//                          CITY). Strips control chars AND the INI metacharacters
+//                          (`[`, `]`, `;`, `#`, `=`) that would inject new keys
+//                          or section headers if the value came from user input.
+//   - sanitizeIniPassword — printable ASCII only, no quote characters.
+//   - _renderIniValue    — render-time guard, called by patchINI for every
+//                          value before it lands in the file. Refuses control
+//                          chars and values that would syntactically start a
+//                          new section or comment. Should be unreachable in
+//                          practice (every callsite already sanitizes upstream),
+//                          but catches the "future contributor forgets to
+//                          sanitize" regression class.
 function sanitizeIniVal(v) {
   return String(v).replace(/[\r\n\0]/g, ' ');
 }
-// Strict text fields (NAME, WELCOME_MESSAGE) — strip control chars and INI metacharacters
-// that could alter parsing (`[`, `]`, `;`, `#`, `=`).
 function sanitizeIniText(v) {
   return String(v)
     .replace(/[\r\n\0]/g, ' ')
@@ -1111,6 +1127,23 @@ function sanitizeIniText(v) {
 // so an admin cannot lock themselves (or others) out via stray glyphs.
 function sanitizeIniPassword(v) {
   return String(v).replace(/[^\x21-\x7E]/g, '').replace(/[\[\];#"'`]/g, '');
+}
+function _renderIniValue(rawValue) {
+  const v = sanitizeIniVal(rawValue);
+  // After sanitizeIniVal these should be impossible; the assertion exists so a
+  // future change that loosens the sanitizer cannot silently inject a newline
+  // (which would forge a fresh `key=value` row downstream).
+  if (/[\r\n\0]/.test(v)) {
+    throw Object.assign(new Error('Refusing to write INI value with control characters'), { status: 400 });
+  }
+  // A value beginning with `;`, `#` or `[` would be interpreted by every INI
+  // parser as a comment or section header — the panel's view of the config
+  // would silently diverge from acServer's. Block at the render layer so a
+  // mistakenly-unsanitised user input cannot poison the file.
+  if (/^[;#\[]/.test(v.trimStart())) {
+    throw Object.assign(new Error('Refusing to write INI value that begins with an INI metacharacter'), { status: 400 });
+  }
+  return v;
 }
 
 // Remove a whole section from the INI text — its header line plus every
@@ -1152,7 +1185,7 @@ function patchINI(raw, obj) {
       const k = line.slice(0, eq).trim();
       if (obj[section] && k in obj[section]) {
         updated.add(`${section}|${k}`);
-        return `${k}=${sanitizeIniVal(obj[section][k])}`;
+        return `${k}=${_renderIniValue(obj[section][k])}`;
       }
     }
     return rawLine;
@@ -1162,7 +1195,7 @@ function patchINI(raw, obj) {
     if (sec === '__default__') continue;
     for (const [k, v] of Object.entries(keys)) {
       if (updated.has(`${sec}|${k}`)) continue;
-      const val = sanitizeIniVal(v);
+      const val = _renderIniValue(v);
       const secIdx = patched.findIndex(l => l.trim() === `[${sec}]`);
       if (secIdx >= 0) {
         patched.splice(secIdx + 1, 0, `${k}=${val}`);

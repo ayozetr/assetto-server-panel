@@ -55,18 +55,70 @@ After confirming, the script processes all cars and tracks and prints a summary 
 
 ## compress_to_webp.py
 
-Converts all PNG and JPG images inside a directory tree to WebP format and removes the originals. Useful if you copied assets manually without using the extractor script.
+General-purpose bulk converter from PNG / JPG / JPEG / BMP / TIFF to WebP. Cross-platform, no external dependencies beyond Pillow. Works both interactively and as a scripted CLI.
 
-> You only need this if you added images some other way. `extract_kunos_assets.py` already converts to WebP during extraction.
+> If you only need to extract the bundled Kunos assets, `extract_kunos_assets.py` already converts to WebP on the fly — you do **not** need to run this script after it. This script is for the general case: shrinking a folder of mod previews, badge images you copied manually, screenshots, etc.
+
+### Interactive mode (default)
 
 ```bash
 python tools/compress_to_webp.py
 ```
 
-The script will ask for:
+The script asks for:
 
-1. **Directory to convert** — defaults to `src/assets/kunos/`.
-2. **WebP quality** — a number from 1 to 100, defaults to 85. Higher means better quality and larger files.
+1. **Folder to scan** — defaults to the current working directory.
+2. **Quality** — 1 to 100, defaults to 82 (ignored when lossless is chosen).
+3. **Lossless mode** — recommended for icons and PNGs with transparency.
+4. **Recursive** — descend into subdirectories (yes by default).
+5. **Overwrite** — replace an existing `.webp` at the destination (no by default).
+6. **Delete originals** — remove the source PNG/JPG after a successful conversion (no by default — opt-in, so a bad run is recoverable).
+7. **Dry run** — show what would happen without writing or deleting anything.
+
+### Non-interactive / scripted mode
+
+Pass everything on the command line and skip every prompt:
+
+```bash
+python tools/compress_to_webp.py --path ./assets --quality 82 --recursive --yes
+python tools/compress_to_webp.py --path ./icons --lossless --overwrite --delete --yes
+python tools/compress_to_webp.py --path ./mods --dry-run --yes      # preview only
+```
+
+Flags:
+
+| Flag             | Effect                                                          |
+| ---------------- | --------------------------------------------------------------- |
+| `--path PATH`    | Directory to scan (required in non-interactive mode).           |
+| `--quality N`    | 1–100, default 82. Ignored when `--lossless`.                   |
+| `--lossless`     | Pixel-perfect WebP. Larger files, recommended for icons.        |
+| `--recursive`    | Descend into subdirectories.                                    |
+| `--no-recursive` | Top-level only.                                                 |
+| `--overwrite`    | Replace existing `.webp` files at the destination.              |
+| `--delete`       | Remove the original file after successful conversion.           |
+| `--dry-run`      | Print actions without writing or deleting anything.             |
+| `-y`, `--yes`    | Skip the final "Proceed?" confirmation (CI / scripts).          |
+
+### Safety defaults
+
+- Originals are **kept** unless you pass `--delete`.
+- Refuses to operate on `/`, `$HOME`, `/etc`, `/usr`, `/var` — point it at a project subdirectory.
+- Skips any image that already has a same-named `.webp` neighbour (unless `--overwrite`).
+- Preserves alpha channels (PNG transparency stays transparent in the WebP output).
+- Cleans up partial output if a conversion crashes mid-write.
+- Exits non-zero if any file failed to convert (useful in scripts).
+
+### Output
+
+Each converted file prints a line with the before/after size and savings:
+
+```
+  [ok]   icons/car-1.png  (84.2 KB → 18.7 KB, -78%)
+  [skip] icons/car-2.png  (destination .webp already exists)
+  [fail] icons/car-3.png  — cannot identify image file
+```
+
+…followed by a summary with the total bytes saved across the run.
 
 ---
 

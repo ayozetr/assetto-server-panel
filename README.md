@@ -133,6 +133,7 @@ in the SQLite DB and log in normally.
 | [API reference](docs/api.md) | All server endpoints |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and how to fix them |
 | [Tools](docs/tools.md) | Scripts for extracting and compressing bundled Kunos assets |
+| [Tested on](docs/tested-on.md) | Exact OS / Node / npm / SQLite / Python versions the panel is known to run on |
 | [Security policy](SECURITY.md) | How to report vulnerabilities and what is in / out of scope |
 | [Roadmap](ROADMAP.md) | Project status, comparison with ACSM / Stracker, prioritized backlog |
 | [Changelog](CHANGELOG.md) | Per-release summary of every notable change since 1.0.0 |
@@ -168,6 +169,23 @@ What the panel does **not** defend against:
 - **Database:** SQLite via `better-sqlite3`
 - **Mod extraction:** `node-stream-zip`, `node-unrar-js`, `node-7z`
 - **Real-time logs:** Server-Sent Events (SSE)
+
+---
+
+## Tested on
+
+The combinations below are the ones the maintainer actually runs day-to-day; the panel is reasonably portable but these are the ones that are known to work. Full version matrix and bundled-dependency lockfile excerpt in [`docs/tested-on.md`](docs/tested-on.md).
+
+| Role         | OS                                  | Kernel              | Node.js   | npm     | SQLite (system) | Python |
+| ------------ | ----------------------------------- | ------------------- | --------- | ------- | --------------- | ------ |
+| Production   | Ubuntu 24.04.4 LTS (Noble Numbat)   | 6.8.0-111-generic   | v20.20.2  | 11.13.0 | 3.45.1          | 3.12.3 |
+| Development  | CachyOS (Arch-based, rolling)       | 7.0.5-2-cachyos     | v20.20.2  | 11.14.1 | 3.53.0          | 3.14.4 |
+
+Bundled npm packages on both hosts (production identical, dev installs the same lockfile):
+
+`7zip-bin@5.2.0` · `better-sqlite3@12.10.0` · `dotenv@16.6.1` · `node-7z@3.0.0` · `node-stream-zip@1.15.0` · `node-unrar-js@2.0.2` · `esbuild@0.28.0`
+
+Other Linux distributions on Node 20 LTS should work without changes — the panel only depends on a POSIX filesystem, a recent SQLite, and the libraries above. Windows/macOS will likely run but are not exercised regularly; please open an issue if you hit something distro-specific.
 
 ---
 

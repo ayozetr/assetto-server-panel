@@ -3355,18 +3355,23 @@ async function apiServerStart(req, res) {
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
+    const actor = checkAnyAuth(req)?.username || 'unknown';
     if (acChild && !acChild.killed) return json(res, 409, { error: 'Server is already running' });
     if (await findACPid())          return json(res, 409, { error: 'Server is already running' });
     const { running } = await getACInfo();
     if (running) return json(res, 409, { error: 'Server is already running' });
 
     const r = await spawnAC();
-    if (!r.ok) return json(res, 500, { error: r.error || 'Failed to start server' });
+    if (!r.ok) {
+      insertAuditLog(actor, 'server.start.fail', '', r.error || 'spawn failed');
+      return json(res, 500, { error: r.error || 'Failed to start server' });
+    }
     const up = await waitForACUp(8000);
     if (!up) {
+      insertAuditLog(actor, 'server.start.fail', '', 'HTTP port did not respond within 8s');
       return json(res, 500, { error: 'acServer started but its HTTP port did not respond within 8s — check ports and logs' });
     }
-    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.start');
+    insertAuditLog(actor, 'server.start');
     json(res, 200, { ok: true });
   });
 }
@@ -3376,10 +3381,14 @@ async function apiServerStop(req, res) {
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
+    const actor = checkAnyAuth(req)?.username || 'unknown';
     const r = await killAC();
-    if (!r.ok) return json(res, 500, { error: r.error || 'Failed to stop server' });
+    if (!r.ok) {
+      insertAuditLog(actor, 'server.stop.fail', '', r.error || 'kill failed');
+      return json(res, 500, { error: r.error || 'Failed to stop server' });
+    }
     await waitForACDown(6000);
-    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.stop');
+    insertAuditLog(actor, 'server.stop');
     json(res, 200, { ok: true });
   });
 }
@@ -3389,17 +3398,25 @@ async function apiServerRestart(req, res) {
   if (!checkRateLimit('server-ctl', clientIp(req), 20, 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many server actions' });
   return withServerActionLock(req, res, async () => {
+    const actor = checkAnyAuth(req)?.username || 'unknown';
     const k = await killAC();
-    if (!k.ok) return json(res, 500, { error: k.error || 'Failed to stop server' });
+    if (!k.ok) {
+      insertAuditLog(actor, 'server.restart.fail', '', `stop: ${k.error || 'kill failed'}`);
+      return json(res, 500, { error: k.error || 'Failed to stop server' });
+    }
     await waitForACDown(6000);
     await sleep(500);
     const s = await spawnAC();
-    if (!s.ok) return json(res, 500, { error: s.error || 'Failed to start server' });
+    if (!s.ok) {
+      insertAuditLog(actor, 'server.restart.fail', '', `spawn: ${s.error || 'spawn failed'}`);
+      return json(res, 500, { error: s.error || 'Failed to start server' });
+    }
     const up = await waitForACUp(10000);
     if (!up) {
+      insertAuditLog(actor, 'server.restart.fail', '', 'HTTP port did not respond within 10s');
       return json(res, 500, { error: 'acServer restarted but its HTTP port did not respond within 10s — check ports and logs' });
     }
-    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'server.restart');
+    insertAuditLog(actor, 'server.restart');
     json(res, 200, { ok: true });
   });
 }
@@ -5095,12 +5112,34 @@ const _sweeperState = {
 
 // Audit log retention: keep entries for AUDIT_RETENTION_DAYS (env, default 365),
 // sweep daily. Without this the table grows unbounded forever.
+//
+// The hash chain (insertAuditLog) is broken by definition when we delete the
+// oldest rows — the next surviving row's prev_hash points at a now-gone row.
+// We can't avoid that without unbounded retention, but we CAN make the gap
+// visible: before deleting, insert an `audit.retention.sweep` row containing
+// the count of rows being removed and the row_hash of the most recent
+// row being kept. Any external verifier that walks the chain from the boundary
+// row forward gets a continuous chain; tampering with the cutoff (e.g. an
+// attacker deleting the most recent row to hide their tracks) makes the
+// boundary row's `detail` disagree with the actual database state.
 const AUDIT_RETENTION_DAYS = Math.max(1, parseInt(process.env.AUDIT_RETENTION_DAYS, 10) || 365);
 function sweepAuditLog() {
   if (!db) return;
   try {
     const cutoff = new Date(Date.now() - AUDIT_RETENTION_DAYS * 86400 * 1000)
       .toISOString().replace('T', ' ').slice(0, 19);
+    // Count what we're about to delete; if zero, skip the boundary row entirely.
+    const countRow = db.prepare('SELECT COUNT(*) AS n FROM audit_log WHERE logged_at < ?').get(cutoff);
+    const toDelete = countRow?.n || 0;
+    if (toDelete > 0) {
+      // Record the boundary BEFORE the delete so the new row's prev_hash chains
+      // off the surviving most-recent row, not the row we're about to remove.
+      // Note the most recent kept row's hash too, so an external verifier can
+      // reconcile: boundary.prev_hash === (most recent kept row).row_hash.
+      const mostRecentKept = db.prepare(`SELECT row_hash FROM audit_log WHERE logged_at >= ? ORDER BY id DESC LIMIT 1`).get(cutoff);
+      insertAuditLog('system', 'audit.retention.sweep', String(toDelete),
+        `${toDelete} rows older than ${cutoff} pruned; tail=${(mostRecentKept?.row_hash || '').slice(0, 16)}`);
+    }
     const r = db.prepare('DELETE FROM audit_log WHERE logged_at < ?').run(cutoff);
     _sweeperState.audit = { lastRunAt: Date.now(), lastRemoved: r.changes };
     if (r.changes > 0) log.info(`audit sweep: removed ${r.changes} entries older than ${AUDIT_RETENTION_DAYS}d`);

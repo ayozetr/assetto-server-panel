@@ -1647,12 +1647,17 @@ const dict = {
   }
 };
 
+// First-visit default is English so a public visitor never lands on a Spanish
+// UI just because the author wrote the source comments in Spanish. The stored
+// value (from a previous session, or applied later by /api/panel/settings)
+// always wins over this default.
 window.AppI18n = {
   lang: localStorage.getItem('ac-lang') || 'en',
   setLang(l) {
     if (dict[l]) {
       this.lang = l;
       localStorage.setItem('ac-lang', l);
+      try { document.documentElement.lang = l; } catch {}
       window.dispatchEvent(new Event('ac-lang-change'));
     }
   },
@@ -1668,3 +1673,9 @@ window.AppI18n = {
     return str;
   }
 };
+
+// Sync the <html lang> attribute on first load so screen readers, browser
+// translation prompts and accessibility tools see the same language the UI is
+// rendering in — index.html ships with lang="en" as the static default, and
+// this overwrites it once a stored preference has been read.
+try { document.documentElement.lang = window.AppI18n.lang; } catch {}

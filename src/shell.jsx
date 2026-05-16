@@ -407,4 +407,30 @@ function ForcePasswordChange({ user, onDone, onLogout }) {
   );
 }
 
-window.AppShell = { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast };
+// Accessible switch. The CSS class .switch already produces the visual track
+// + thumb; this wrapper adds the ARIA contract and keyboard handlers so the
+// control is reachable by tab and triggered by Space/Enter. Use everywhere
+// the panel needs a toggle — replaces bare <div className="switch …" onClick>.
+function Switch({ on, onChange, disabled, ariaLabel, className = '', style }) {
+  const activate = () => { if (!disabled && typeof onChange === 'function') onChange(!on); };
+  return (
+    <div
+      role="switch"
+      aria-checked={!!on}
+      aria-disabled={disabled || undefined}
+      aria-label={ariaLabel}
+      tabIndex={disabled ? -1 : 0}
+      className={`switch ${on ? 'on' : ''} ${className}`.trim()}
+      style={{ ...(disabled ? { opacity: 0.5, cursor: 'not-allowed' } : { cursor: 'pointer' }), ...style }}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          activate();
+        }
+      }}
+    />
+  );
+}
+
+window.AppShell = { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast, Switch };

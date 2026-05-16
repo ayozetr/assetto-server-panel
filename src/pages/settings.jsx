@@ -121,10 +121,12 @@ function UploadLimitCard({ isAdmin }) {
             <span className="field-label">{t('config.chunked_upload')}</span>
             <span className="field-hint">{t('config.chunked_upload_hint')}</span>
           </div>
-          <div
-            className={`switch ${chunkedUpload ? 'on' : ''}`}
+          <window.AppShell.Switch
+            on={chunkedUpload}
+            disabled={!isAdmin || !loaded}
+            ariaLabel={t('config.chunked_upload') || 'Chunked upload'}
             style={{flexShrink:0}}
-            onClick={() => isAdmin && loaded && setChunkedUpload(v => !v)}
+            onChange={v => setChunkedUpload(v)}
           />
         </div>
         <span className="field-hint">{t('config.upload_limit_hint')}</span>
@@ -436,7 +438,7 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.public')}</div>
                 <div className="muted" style={{fontSize: 11.5}}>{t('config.public_sub')}</div>
               </div>
-              <div className={`switch ${config.publicLobby ? 'on' : ''}`} onClick={()=>canEdit && set('publicLobby', !config.publicLobby)}></div>
+              <window.AppShell.Switch on={config.publicLobby} disabled={!canEdit} ariaLabel={t('config.public_lobby') || 'Public lobby'} onChange={v=>set('publicLobby', v)}/>
             </div>
           </div>
         </div>
@@ -494,7 +496,7 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.whitelist')}</div>
                 <div className="muted" style={{fontSize: 11.5}}>{t('config.whitelist_sub')}</div>
               </div>
-              <div className={`switch ${config.whitelist ? 'on' : ''}`} onClick={()=>canManageWhitelist && set('whitelist', !config.whitelist)}></div>
+              <window.AppShell.Switch on={config.whitelist} disabled={!canManageWhitelist} ariaLabel={t('config.whitelist') || 'Whitelist'} onChange={v=>set('whitelist', v)}/>
             </div>
             {config.whitelist && <WhitelistEditor canManage={canManageWhitelist}/>}
           </div>
@@ -542,14 +544,14 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
             <div className="col" style={{gap: 12}}>
               <div className="row-between">
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autoclutch')}</div>
-                <div className={`switch ${config.autoclutch ? 'on' : ''}`} onClick={()=>canEdit && set('autoclutch', !config.autoclutch)}></div>
+                <window.AppShell.Switch on={config.autoclutch} disabled={!canEdit} ariaLabel={t('config.autoclutch') || 'Autoclutch'} onChange={v=>set('autoclutch', v)}/>
               </div>
               <div className="row-between">
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.stability')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.stability_sub')}</div>
                 </div>
-                <div className={`switch ${config.stability ? 'on' : ''}`} onClick={()=>canEdit && set('stability', !config.stability)}></div>
+                <window.AppShell.Switch on={config.stability} disabled={!canEdit} ariaLabel={t('config.stability') || 'Stability'} onChange={v=>set('stability', v)}/>
               </div>
             </div>
           </div>
@@ -569,14 +571,14 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autostart')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.autostart_sub')}</div>
                 </div>
-                <div className={`switch ${config.autoStart ? 'on' : ''}`} onClick={()=>canEdit && set('autoStart', !config.autoStart)}></div>
+                <window.AppShell.Switch on={config.autoStart} disabled={!canEdit} ariaLabel={t('config.auto_start') || 'Auto start'} onChange={v=>set('autoStart', v)}/>
               </div>
               <div className="row-between">
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autorestart')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.autorestart_sub')}</div>
                 </div>
-                <div className={`switch ${config.autoRestart ? 'on' : ''}`} onClick={()=>canEdit && set('autoRestart', !config.autoRestart)}></div>
+                <window.AppShell.Switch on={config.autoRestart} disabled={!canEdit} ariaLabel={t('config.auto_restart') || 'Auto restart'} onChange={v=>set('autoRestart', v)}/>
               </div>
               <div className="field" style={{gridColumn: 'span 2'}}>
                 <label className="field-label">{t('config.lang')}</label>

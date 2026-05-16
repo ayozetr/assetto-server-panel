@@ -188,9 +188,9 @@ function PageProfile({ user, setUser }) {
             <div className="row-between">
               <div>
                 <div style={{fontSize:13,fontWeight:500}}>{t('profile.specials')}</div>
-                <div className="muted" style={{fontSize:11.5}}>!@#$%^&amp;*()_+-=[]{}|</div>
+                <div className="muted" style={{fontSize:11.5}}>{'!@#$%^&*()_+-=[]{}|'}</div>
               </div>
-              <div className={`switch ${genSpecial ? 'on' : ''}`} onClick={()=>setGenSpecial(v=>!v)}></div>
+              <window.AppShell.Switch on={genSpecial} ariaLabel="Include special characters" onChange={v=>setGenSpecial(v)}/>
             </div>
 
             <div className="field">

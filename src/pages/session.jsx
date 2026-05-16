@@ -50,14 +50,29 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
                 const enabled = !!sessionCfg[row.flag];
                 return (
                   <div key={row.key} className="row" style={{gap: 12, alignItems: 'center'}}>
-                    <div className={`switch ${enabled ? 'on' : ''}`} style={{flexShrink: 0}}
-                      onClick={() => canEdit && set(row.flag, !enabled)}/>
+                    {window.AppShell.Switch ? (
+                      <window.AppShell.Switch
+                        on={enabled}
+                        disabled={!canEdit}
+                        ariaLabel={row.label}
+                        style={{flexShrink: 0}}
+                        onChange={v => set(row.flag, v)}
+                      />
+                    ) : (
+                      <div className={`switch ${enabled ? 'on' : ''}`} style={{flexShrink: 0}}
+                        onClick={() => canEdit && set(row.flag, !enabled)}/>
+                    )}
                     <div style={{flex: 1, fontSize: 13, fontWeight: 500, opacity: enabled ? 1 : 0.5}}>{row.label}</div>
                     <input
-                      className="input" type="number" inputMode="numeric" min="1"
+                      className="input" type="number" inputMode="numeric" min="1" max="9999"
                       style={{width: 90, opacity: enabled ? 1 : 0.5}}
                       value={sessionCfg[row.value] ?? 0}
-                      onChange={e => set(row.value, Number(e.target.value))}
+                      onChange={e => {
+                        const n = Number(e.target.value);
+                        // Clamp client-side mirroring the server's clampInt(1..9999). Bare
+                        // Number('') is NaN and would propagate to the body; coalesce to 1.
+                        if (Number.isFinite(n)) set(row.value, Math.max(1, Math.min(9999, Math.round(n))));
+                      }}
                       disabled={!canEdit || !enabled}
                     />
                     <div className="muted" style={{fontSize: 11, width: 36, opacity: enabled ? 1 : 0.5}}>
@@ -71,7 +86,13 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
               )}
               <div className="field" style={{marginTop: 4}}>
                 <label className="field-label">{t('sess.slots')}</label>
-                <input className="input" type="number" inputMode="numeric" min="2" max="64" value={sessionCfg.maxClients} onChange={e => set('maxClients', Number(e.target.value))} disabled={!canEdit} style={{maxWidth: 120}}/>
+                <input className="input" type="number" inputMode="numeric" min="2" max="64"
+                  value={sessionCfg.maxClients}
+                  onChange={e => {
+                    const n = Number(e.target.value);
+                    if (Number.isFinite(n)) set('maxClients', Math.max(2, Math.min(64, Math.round(n))));
+                  }}
+                  disabled={!canEdit} style={{maxWidth: 120}}/>
               </div>
             </div>
           </div>
@@ -111,7 +132,16 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
                 <div className="field">
                   <label className="field-label">{t('sess.penalties')}</label>
                   <div className="row" style={{gap: 10, alignItems:'center', minHeight: 24}}>
-                    <div className={`switch ${sessionCfg.penalties ? 'on' : ''}`} onClick={() => canEdit && set('penalties', !sessionCfg.penalties)}></div>
+                    {window.AppShell.Switch ? (
+                      <window.AppShell.Switch
+                        on={sessionCfg.penalties}
+                        disabled={!canEdit}
+                        ariaLabel={t('sess.row.penalties') || 'Penalties'}
+                        onChange={v => set('penalties', v)}
+                      />
+                    ) : (
+                      <div className={`switch ${sessionCfg.penalties ? 'on' : ''}`} onClick={() => canEdit && set('penalties', !sessionCfg.penalties)}></div>
+                    )}
                     <span className="muted" style={{fontSize: 12}}>{t('sess.penalties.hint')}</span>
                   </div>
                 </div>

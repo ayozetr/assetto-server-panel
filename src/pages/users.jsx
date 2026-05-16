@@ -267,13 +267,11 @@ function RolePermissionsCard() {
                     <div style={{fontSize: 13, fontWeight: 500}}>{t(def.label)}</div>
                     <div className="muted" style={{fontSize: 11.5}}>{t(def.hint)}</div>
                   </div>
-                  <div
-                    className={`switch ${on ? 'on' : ''}`}
+                  <window.AppShell.Switch
+                    on={on}
+                    ariaLabel={t(def.label)}
                     style={{flexShrink: 0}}
-                    onClick={() => toggle(def.key)}
-                    role="switch"
-                    aria-checked={on}
-                    title={on ? t('common.on') || 'on' : t('common.off') || 'off'}
+                    onChange={() => toggle(def.key)}
                   />
                 </div>
               );

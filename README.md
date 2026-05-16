@@ -116,7 +116,8 @@ in the SQLite DB and log in normally.
 |----------|-------------|
 | [AC server setup (SteamCMD)](docs/ac-server-setup.md) | Install and configure an AC dedicated server from scratch |
 | [Installation & configuration](docs/installation.md) | Requirements, setup steps and environment variables |
-| [Production deployment](docs/deployment.md) | Systemd service, Cloudflare Tunnel, firewall |
+| [Docker deployment](docs/docker.md) | Containerised setup with `docker compose up -d`, volumes, networking, reverse-proxy front-end, troubleshooting |
+| [Production deployment](docs/deployment.md) | Systemd service, Cloudflare Tunnel, firewall, log rotation, hardened systemd unit |
 | [Authentication & users](docs/authentication.md) | Session system, roles and user management |
 | [Mod installer](docs/mod-upload.md) | Supported formats, auto-detection, chunked upload |
 | [Database](docs/database.md) | SQLite schema and what gets stored |

@@ -2160,8 +2160,23 @@ async function apiContentDelete(req, res, kind, id) {
     return json(res, 400, { error: 'Invalid path' });
   }
   try {
-    const st = await fsp.stat(target).catch(() => null);
-    if (!st || !st.isDirectory()) return json(res, 404, { error: 'Not found' });
+    // lstat (not stat) so a symlink planted as `content/cars/<id>` does NOT
+    // resolve through to its target before deletion. fsp.rm with
+    // { recursive: true } would otherwise traverse the symlink and wipe
+    // whatever it points at — e.g. a malicious mod extracts a dir-symlink
+    // `cars/evil -> /etc` and a later admin delete becomes `rm -rf /etc`.
+    // Refuse symlinks at the top level; the underlying directory itself is
+    // what we deleted, never a target reachable through a link.
+    const st = await fsp.lstat(target).catch(() => null);
+    if (!st) return json(res, 404, { error: 'Not found' });
+    if (st.isSymbolicLink()) {
+      // Unlink the link itself, not its target. Audit the refusal so an
+      // operator can investigate how a symlink got there in the first place.
+      await fsp.unlink(target).catch(() => {});
+      insertAuditLog(checkAnyAuth(req)?.username || 'unknown', isCar ? 'car.delete.symlink' : 'track.delete.symlink', id, 'symlink unlinked, target preserved');
+      return json(res, 200, { ok: true, symlink: true });
+    }
+    if (!st.isDirectory()) return json(res, 404, { error: 'Not found' });
     await fsp.rm(target, { recursive: true, force: true });
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', isCar ? 'car.delete' : 'track.delete', id);
     json(res, 200, { ok: true });
@@ -3853,18 +3868,32 @@ function isSafeEntry(entryName, destRoot) {
   return resolved.startsWith(destRoot + path.sep) || resolved === destRoot;
 }
 
+// POSIX file-mode constant for a symbolic link. ZIP entries store the unix
+// permission bits in the upper 16 bits of `attr` (the external file
+// attributes field). We use this to flag symlink entries and reject them at
+// the processing layer — see processModBuffer.
+const S_IFLNK = 0o120000;
+const S_IFMT  = 0o170000;
+
 async function extractZip(buffer) {
   if (!StreamZip) throw new Error('node-stream-zip not available');
   // node-stream-zip v1.x only accepts a file path, not a buffer
-  const tmpIn = path.join(os.tmpdir(), `ac-mod-${Date.now()}.zip`);
+  const tmpIn = path.join(os.tmpdir(), `ac-mod-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.zip`);
   await fsp.writeFile(tmpIn, buffer);
   const zip = new StreamZip.async({ file: tmpIn });
   const entries = await zip.entries();
   const list = [];
   for (const [name, entry] of Object.entries(entries)) {
+    // ZIP stores Unix permissions in the high 16 bits of the external attrs.
+    // If the file-type bits say "symlink", flag it so processModBuffer can
+    // refuse the whole archive instead of writing the symlink target text
+    // out as a regular file (or, worse, following an earlier symlink entry).
+    const unixMode = ((entry.attr || 0) >>> 16) & 0xFFFF;
+    const isSymlink = (unixMode & S_IFMT) === S_IFLNK;
     list.push({
       name,
       isDirectory: entry.isDirectory,
+      isSymlink,
       getData: async () => entry.isDirectory ? null : zip.entryData(name),
     });
   }
@@ -3879,8 +3908,9 @@ async function extractZip(buffer) {
 
 async function extract7z(buffer) {
   if (!sevenZ || !sevenBin) throw new Error('node-7z / 7zip-bin not available');
-  const tmpIn  = path.join(os.tmpdir(), `ac-mod-${Date.now()}.7z`);
-  const tmpOut = path.join(os.tmpdir(), `ac-mod-${Date.now()}`);
+  const stamp  = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const tmpIn  = path.join(os.tmpdir(), `ac-mod-${stamp}.7z`);
+  const tmpOut = path.join(os.tmpdir(), `ac-mod-${stamp}`);
   await fsp.writeFile(tmpIn, buffer);
   await fsp.mkdir(tmpOut, { recursive: true });
   await new Promise((resolve, reject) => {
@@ -3888,18 +3918,27 @@ async function extract7z(buffer) {
     stream.on('end', resolve);
     stream.on('error', reject);
   });
-  // Walk tmpOut and collect entries
+  // Walk tmpOut and collect entries. Crucially: use lstat (via withFileTypes)
+  // so a symlink restored by 7za is reported as `isSymbolicLink`, not followed
+  // through to its target. processModBuffer then refuses the whole archive.
+  // Without this, an entry like `data -> /etc` in the .7z would let a later
+  // `physics.bin` entry land at `/etc/physics.bin` once an admin extracts.
   const list = [];
   const walk = async (dir, rel) => {
     const items = await fsp.readdir(dir, { withFileTypes: true });
     for (const item of items) {
       const itemRel = rel ? rel + '/' + item.name : item.name;
+      if (item.isSymbolicLink()) {
+        list.push({ name: itemRel, isDirectory: false, isSymlink: true, getData: async () => null });
+        // Don't recurse through symlinks even if they point at directories.
+        continue;
+      }
       if (item.isDirectory()) {
-        list.push({ name: itemRel + '/', isDirectory: true, getData: async () => null });
+        list.push({ name: itemRel + '/', isDirectory: true, isSymlink: false, getData: async () => null });
         await walk(path.join(dir, item.name), itemRel);
       } else {
         const fullPath = path.join(dir, item.name);
-        list.push({ name: itemRel, isDirectory: false, getData: async () => fsp.readFile(fullPath) });
+        list.push({ name: itemRel, isDirectory: false, isSymlink: false, getData: async () => fsp.readFile(fullPath) });
       }
     }
   };
@@ -3920,11 +3959,17 @@ async function extractRar(buffer) {
   const { files } = extractor.extract();
   const list = [];
   for (const file of files) {
-    const isDir = file.fileHeader.flags.directory;
-    const data  = isDir ? null : Buffer.from(file.extraction);
+    const flags  = file.fileHeader.flags || {};
+    const isDir  = !!flags.directory;
+    // node-unrar-js v2 exposes a `symlink` flag on the header. It's optional —
+    // older RARs without the link bit just produce `undefined` (falsy), which
+    // is the safe default. Anything truthy here gets refused by processModBuffer.
+    const isSymlink = !!flags.symlink;
+    const data   = (isDir || isSymlink) ? null : Buffer.from(file.extraction);
     list.push({
       name:        file.fileHeader.name,
       isDirectory: isDir,
+      isSymlink,
       getData:     async () => data,
     });
   }
@@ -4146,6 +4191,18 @@ async function processModBuffer(buffer, filename) {
     if (entries.length > MAX_ARCHIVE_ENTRIES)
       throw Object.assign(new Error(`Archive has too many entries (${entries.length} > ${MAX_ARCHIVE_ENTRIES})`), { status: 413 });
 
+    // Symlinks have no legitimate role in an AC mod. A malicious archive can
+    // put a symlink-typed entry early (e.g. `data -> /etc`) and a regular-file
+    // entry later (`data/passwd`) so the writeFile lands at /etc/passwd. We
+    // refuse the whole archive on the first symlink entry — extractors flag
+    // them via `isSymlink` (zip from Unix attr, 7z from lstat after extract,
+    // rar from header flags). Don't silently skip: an admin who uploads a
+    // tampered mod must see the rejection.
+    for (const e of entries) {
+      if (e.isSymlink)
+        throw Object.assign(new Error(`Symlink entry rejected: ${e.name}`), { status: 400 });
+    }
+
     const dummyRoot = path.join(os.tmpdir(), 'ac-slip-check');
     for (const e of entries) {
       if (!isSafeEntry(e.name, dummyRoot))
@@ -4227,7 +4284,12 @@ async function processModBuffer(buffer, filename) {
       if (totalBytes > MAX_ARCHIVE_TOTAL_B)
         throw Object.assign(new Error(`Archive expands beyond size cap (${MAX_ARCHIVE_TOTAL_B} bytes)`), { status: 413 });
       await fsp.mkdir(path.dirname(destFile), { recursive: true });
-      await fsp.writeFile(destFile, data);
+      // O_NOFOLLOW on the WRITE call: if `destFile` already exists as a
+      // symlink (e.g. a previous mod left one behind), refuse instead of
+      // writing through to the target. We don't pass O_EXCL because legitimate
+      // mod re-installs should be able to overwrite their own files.
+      const fh = await fsp.open(destFile, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
+      try { await fh.writeFile(data); } finally { await fh.close().catch(() => {}); }
       filesExtracted++;
     }
 

@@ -3,12 +3,21 @@
   <h1>Assetto Server Panel</h1>
   <p>A web-based administration panel for <strong>Assetto Corsa</strong> dedicated servers on Linux</p>
 
-  ![Node.js](https://img.shields.io/badge/Node.js-20.20.2-339933?logo=node.js&logoColor=white)
-  ![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white)
-  ![Build](https://img.shields.io/badge/build-esbuild-FFCF00?logo=esbuild)
-  ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
-  ![License](https://img.shields.io/badge/license-Source--Available%20%2B%20Attribution-orange?logo=opensourceinitiative&logoColor=white)
-  ![Redistribution](https://img.shields.io/badge/redistribution-prohibited-red)
+  <p>
+    <a href="CHANGELOG.md"><img alt="Version"   src="https://img.shields.io/badge/version-1.4.0-blue"></a>
+    <a href="ROADMAP.md"><img   alt="Status"    src="https://img.shields.io/badge/status-production--ready-brightgreen"></a>
+    <a href="ROADMAP.md#status"><img alt="Hardening" src="https://img.shields.io/badge/hardening-96%2F100-success"></a>
+    <img alt="Audit"     src="https://img.shields.io/badge/npm%20audit-clean-success?logo=npm&logoColor=white">
+    <img alt="2FA"       src="https://img.shields.io/badge/2FA-TOTP-blueviolet?logo=keycdn&logoColor=white">
+  </p>
+  <p>
+    <img alt="Node.js"          src="https://img.shields.io/badge/Node.js-20.20.2-339933?logo=node.js&logoColor=white">
+    <img alt="SQLite"           src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white">
+    <img alt="Build"            src="https://img.shields.io/badge/build-esbuild-FFCF00?logo=esbuild">
+    <img alt="Docker"           src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white">
+    <img alt="License"          src="https://img.shields.io/badge/license-Source--Available%20%2B%20Attribution-orange?logo=opensourceinitiative&logoColor=white">
+    <img alt="Redistribution"   src="https://img.shields.io/badge/redistribution-prohibited-red">
+  </p>
 </div>
 
 ---
@@ -125,6 +134,8 @@ in the SQLite DB and log in normally.
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and how to fix them |
 | [Tools](docs/tools.md) | Scripts for extracting and compressing bundled Kunos assets |
 | [Security policy](SECURITY.md) | How to report vulnerabilities and what is in / out of scope |
+| [Roadmap](ROADMAP.md) | Project status, comparison with ACSM / Stracker, prioritized backlog |
+| [Changelog](CHANGELOG.md) | Per-release summary of every notable change since 1.0.0 |
 
 ---
 

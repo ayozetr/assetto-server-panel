@@ -871,6 +871,13 @@ function setSecurityHeaders(req, res) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // The panel is an admin tool, not a public website — keep it out of search
+  // engines so the login URL never surfaces in Google/Bing results when an
+  // operator forgets to gate the panel behind a private network. The meta tag
+  // in index.html covers HTML navigation; this header is what crawlers see on
+  // every other response (assets, JSON, JS bundles) and on the index.html
+  // fetch itself when only the headers are read.
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
   // Lock down browser features the panel never uses
   res.setHeader('Permissions-Policy',
     'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
@@ -5412,6 +5419,17 @@ function checkOrigin(req) {
 function handler(req, res) {
   setSecurityHeaders(req, res);
   const urlPath = req.url.split('?')[0];
+
+  // Belt-and-braces alongside the X-Robots-Tag header and the <meta robots> in
+  // index.html: a polite crawler reads /robots.txt before anything else and a
+  // Disallow: / here stops it cold. Served unauthenticated and cached for a
+  // day so it never causes load. Lives above the /api prefix so the static
+  // fallback never gets a shot at returning a 404 for it.
+  if (urlPath === '/robots.txt' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return respond(res, 200, 'text/plain; charset=utf-8',
+      'User-agent: *\nDisallow: /\n');
+  }
 
   if (urlPath.startsWith('/api/')) {
     if (req.method === 'OPTIONS') {

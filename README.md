@@ -4,7 +4,7 @@
   <p>A web-based administration panel for <strong>Assetto Corsa</strong> dedicated servers on Linux</p>
 
   <p>
-    <a href="CHANGELOG.md"><img alt="Version"   src="https://img.shields.io/badge/version-1.4.0-blue"></a>
+    <a href="CHANGELOG.md"><img alt="Version"   src="https://img.shields.io/badge/version-1.4.1-blue"></a>
     <a href="ROADMAP.md"><img   alt="Status"    src="https://img.shields.io/badge/status-production--ready-brightgreen"></a>
     <a href="ROADMAP.md#status"><img alt="Hardening" src="https://img.shields.io/badge/hardening-96%2F100-success"></a>
     <img alt="Audit"     src="https://img.shields.io/badge/npm%20audit-clean-success?logo=npm&logoColor=white">

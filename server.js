@@ -458,6 +458,16 @@ try {
       sql: `ALTER TABLE panel_users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0` },
     { id: 10, name: 'panel_users_totp_pending',
       sql: `ALTER TABLE panel_users ADD COLUMN totp_pending TEXT NOT NULL DEFAULT ''` },
+    { id: 11, name: 'bans_table',
+      sql: `CREATE TABLE IF NOT EXISTS bans (
+              guid          TEXT PRIMARY KEY,
+              name_snapshot TEXT NOT NULL DEFAULT '',
+              reason        TEXT NOT NULL DEFAULT '',
+              banned_by     TEXT NOT NULL DEFAULT '',
+              banned_at     TEXT NOT NULL DEFAULT (datetime('now')),
+              expires_at    TEXT DEFAULT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_bans_expires_at ON bans(expires_at);` },
   ];
   const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
   const _applied = new Set(_appliedRows.map(r => r.id));
@@ -2689,22 +2699,130 @@ function withFileLock(filePath, fn) {
   return tail;
 }
 
+// Ban a player. The legacy contract (just guid + name) still works — body
+// without `reason` or `durationDays` produces a permanent ban with empty
+// reason, identical to the pre-1.4.0 behaviour. New optional fields:
+//
+//   reason         : free-form text, capped at 240 chars, control chars stripped.
+//   durationDays   : positive integer = TTL in days (sweeper auto-unbans on
+//                    expiry); 0 / null / undefined = permanent.
+//
+// State is duplicated to both `bans` (the rich metadata table) and the AC
+// server's `blacklist.txt` (the source of truth for acServer's in-game gate).
+// They are synced by the file lock + the sweeper. The blacklist.txt line is
+// only the 17-digit GUID — acServer doesn't read reasons; the panel does.
 async function apiPlayerBan(req, res) {
   if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
-    const guid = body.guid;
-    if (!guid) return json(res, 400, { error: 'guid required' });
-    if (!/^\d{17}$/.test(String(guid))) return json(res, 400, { error: 'guid must be 17 digits' });
+    const guid = String(body.guid || '').trim();
+    if (!/^\d{17}$/.test(guid)) return json(res, 400, { error: 'guid must be 17 digits' });
+
+    const reason = String(body.reason || '').replace(/[\r\n\t\0]/g, ' ').trim().slice(0, 240);
+    const nameSnap = String(body.name || '').replace(/[\r\n\t\0]/g, ' ').trim().slice(0, 64);
+    const durationDays = body.durationDays == null ? 0 : parseInt(body.durationDays, 10);
+    if (!Number.isFinite(durationDays) || durationDays < 0 || durationDays > 36500) {
+      return json(res, 400, { error: 'durationDays must be 0 (permanent) or 1..36500' });
+    }
+
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    let expiresAt = null;
+    if (durationDays > 0) {
+      expiresAt = new Date(Date.now() + durationDays * 86400 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+    }
+
+    if (db) {
+      try {
+        db.prepare(`INSERT INTO bans (guid, name_snapshot, reason, banned_by, expires_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(guid) DO UPDATE SET
+                      name_snapshot = excluded.name_snapshot,
+                      reason        = excluded.reason,
+                      banned_by     = excluded.banned_by,
+                      banned_at     = datetime('now'),
+                      expires_at    = excluded.expires_at`)
+          .run(guid, nameSnap, reason, actor, expiresAt);
+      } catch (e) { log.warn('[bans] DB insert failed:', e.message); }
+    }
+
     await withFileLock(AC_BLACKLIST, async () => {
       let existing = '';
       try { existing = await fsp.readFile(AC_BLACKLIST, 'utf8'); } catch {}
       const guids = existing.split('\n').map(s => s.trim()).filter(Boolean);
       if (!guids.includes(guid)) await fsp.appendFile(AC_BLACKLIST, guid + '\n');
     });
+
+    const detail = [
+      nameSnap || null,
+      reason ? `reason="${reason}"` : null,
+      durationDays > 0 ? `duration=${durationDays}d` : 'permanent',
+    ].filter(Boolean).join(' · ');
+    insertAuditLog(actor, 'player.ban', guid, detail);
+    json(res, 200, { ok: true, expiresAt });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// Lift a ban: remove the GUID from blacklist.txt AND drop the bans row.
+// Used both by the manual "Unban" button and by the TTL sweeper below.
+// `actor` is the username of the operator (or 'system' when called by the
+// sweeper); the audit row distinguishes manual vs automatic via the action
+// column (`player.unban` vs `player.unban.expired`).
+async function _unbanInternal(guid, actor, action) {
+  if (!/^\d{17}$/.test(guid)) return false;
+  await withFileLock(AC_BLACKLIST, async () => {
+    let raw = '';
+    try { raw = await fsp.readFile(AC_BLACKLIST, 'utf8'); } catch {}
+    const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    const next = ids.filter(g => g !== guid);
+    if (next.length !== ids.length) {
+      await fsp.writeFile(AC_BLACKLIST, next.join('\n') + (next.length ? '\n' : ''), 'utf8');
+    }
+  });
+  let removed = false;
+  if (db) {
+    try {
+      const r = db.prepare('DELETE FROM bans WHERE guid = ?').run(guid);
+      removed = r.changes > 0;
+    } catch {}
+  }
+  insertAuditLog(actor, action, guid);
+  return removed;
+}
+
+async function apiPlayerUnban(req, res, guid) {
+  if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
+  if (!/^\d{17}$/.test(guid)) return json(res, 400, { error: 'guid must be 17 digits' });
+  try {
     const actor = checkAnyAuth(req)?.username || 'unknown';
-    insertAuditLog(actor, 'player.ban', guid, body.name || '');
+    await _unbanInternal(guid, actor, 'player.unban');
     json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// List active + recently-expired bans. The UI builds its "Bans" view off
+// this; the playerModeration permission gates both ban creation and the
+// list (the same permission either grants both or neither, by design).
+function apiBansList(req, res) {
+  if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 200, []);
+  try {
+    const rows = db.prepare(`
+      SELECT guid, name_snapshot, reason, banned_by, banned_at, expires_at
+      FROM bans
+      ORDER BY (expires_at IS NULL) DESC, banned_at DESC
+    `).all();
+    const now = Date.now();
+    const out = rows.map(r => ({
+      guid:        r.guid,
+      name:        r.name_snapshot || '',
+      reason:      r.reason || '',
+      bannedBy:    r.banned_by || '',
+      bannedAt:    r.banned_at || '',
+      expiresAt:   r.expires_at || null,
+      permanent:   !r.expires_at,
+      expired:     !!r.expires_at && (new Date(r.expires_at + 'Z').getTime() < now),
+    }));
+    json(res, 200, out);
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -5373,6 +5491,9 @@ function handler(req, res) {
     // Player control
     if (urlPath === '/api/players/kick'   && req.method === 'POST') return apiPlayerKick(req, res);
     if (urlPath === '/api/players/ban'    && req.method === 'POST') return apiPlayerBan(req, res);
+    if (urlPath === '/api/bans'           && req.method === 'GET')  return apiBansList(req, res);
+    const unbanMatch = urlPath.match(/^\/api\/players\/(\d{17})\/ban$/);
+    if (unbanMatch && req.method === 'DELETE') return apiPlayerUnban(req, res, unbanMatch[1]);
     const playerNickMatch = urlPath.match(/^\/api\/players\/(\d{17})\/nickname$/);
     if (playerNickMatch && req.method === 'PUT') return apiPlayerNickname(req, res, playerNickMatch[1]);
 
@@ -5614,6 +5735,30 @@ function sweepExpiredSessions() {
 }
 sweepExpiredSessions();
 setInterval(sweepExpiredSessions, 60 * 60 * 1000);
+
+// Lift bans whose TTL has passed. Runs hourly. _unbanInternal removes the
+// GUID from blacklist.txt under the same file lock used by the ban endpoint
+// and drops the bans row; the audit trail keeps a `player.unban.expired`
+// line so an operator can still see who was banned, by whom, and when the
+// ban was cleared. The blacklist.txt + DB stay in sync regardless of which
+// path triggered the unban.
+_sweeperState.bans = { lastRunAt: null, lastRemoved: 0 };
+async function sweepExpiredBans() {
+  if (!db) return;
+  try {
+    const nowIso = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const rows = db.prepare('SELECT guid FROM bans WHERE expires_at IS NOT NULL AND expires_at <= ?').all(nowIso);
+    let removed = 0;
+    for (const r of rows) {
+      await _unbanInternal(r.guid, 'system', 'player.unban.expired');
+      removed++;
+    }
+    _sweeperState.bans = { lastRunAt: Date.now(), lastRemoved: removed };
+    if (removed > 0) log.info(`bans sweep: auto-unbanned ${removed} expired entr${removed === 1 ? 'y' : 'ies'}`);
+  } catch (e) { log.warn('bans sweep failed:', e.message); }
+}
+sweepExpiredBans();
+setInterval(sweepExpiredBans, 60 * 60 * 1000);
 
 // ── Scheduled DB backups ─────────────────────────────────────────────────────
 // VACUUM INTO produces a consistent snapshot of the live DB without locking

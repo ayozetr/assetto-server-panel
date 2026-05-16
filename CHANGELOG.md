@@ -10,6 +10,73 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-05-17
+
+Bans gain context. Previously `POST /api/players/ban` only appended a GUID
+to acServer's flat `blacklist.txt`, so the panel had no idea who was
+banned, why, or whether the ban should ever expire — the only record was
+the audit log row. 1.4.0 introduces a richer ban model with reasons and
+optional TTLs, while keeping `blacklist.txt` (the file acServer actually
+reads) authoritative for the in-game enforcement.
+
+### Added
+
+- **`bans` table** with `guid` PK, `name_snapshot`, `reason`, `banned_by`,
+  `banned_at`, `expires_at` (NULLABLE — NULL = permanent). Indexed on
+  `expires_at` so the sweeper that lifts expired bans is cheap. Migration
+  `011 bans_table` runs idempotently on boot.
+- **Extended `POST /api/players/ban` payload.** Backwards compatible — the
+  legacy body (just `guid` and `name`) still works as a permanent,
+  reason-less ban. Two new optional fields:
+    - `reason`        : free-form text, ≤240 chars, control chars stripped.
+    - `durationDays`  : positive integer = TTL in days (1..36500); 0 or
+                        omitted = permanent.
+  Response now carries `expiresAt` so the caller knows when the ban will
+  lift.
+- **`DELETE /api/players/:guid/ban`** — manual unban. Removes the GUID
+  from `blacklist.txt` (under the existing `withFileLock` so concurrent
+  ban writes don't lose the unban) and drops the `bans` row. Audit row
+  `player.unban`.
+- **`GET /api/bans`** — list of bans the panel knows about, ordered
+  permanent-first then by date. Each entry exposes `permanent` and
+  `expired` booleans so the UI can render badges without parsing dates.
+  Requires the same `playerModeration` permission as banning.
+- **Hourly sweeper** that lifts expired bans automatically. Reuses the
+  same code path the manual unban does (file lock + DB delete) so the
+  state never drifts. Audits the automatic action as
+  `player.unban.expired` to distinguish from manual lifts.
+- **Ban modal in the Players page.** Replaces the previous one-click
+  ConfirmModal with a form that collects the reason and the duration
+  (preset chips: Permanent · 1 day · 7 days · 30 days · Custom). 240-char
+  cap and inline validation mirror the server-side limits.
+- **Active bans section** at the bottom of the Players page. Shows every
+  ban with player name + GUID, reason, who banned, when, when it expires
+  (permanent badge for indefinite bans), and an Unban button. Auto-reloads
+  when the tab regains focus. Hidden for users without
+  `playerModeration` permission.
+- **i18n keys** for the entire ban flow in en/es/it (`pl.ban_*`,
+  `pl.bans_*`, `toast.ban_until`, `common.optional`).
+
+### Backwards compatibility
+
+Existing `blacklist.txt` entries that the panel didn't write itself
+(manually-edited files, imports from another panel, etc.) keep working —
+acServer treats them the same. They simply don't appear in
+`/api/bans` until somebody re-bans the player through the UI, at which
+point the row is recorded with the new metadata. No automatic migration
+of legacy GUID-only entries; that would invent context (reason, banner)
+the panel doesn't have.
+
+### Audit trail
+
+Three actions are now distinguishable in `audit_log`:
+
+| Action                  | When |
+| ----------------------- | ---- |
+| `player.ban`            | A panel user banned a GUID via the UI or API. |
+| `player.unban`          | A panel user manually lifted a ban. |
+| `player.unban.expired`  | The hourly sweeper lifted a ban whose `expires_at` passed. |
+
 ## [1.3.0] — 2026-05-17
 
 Two-factor authentication is now available for panel accounts. The

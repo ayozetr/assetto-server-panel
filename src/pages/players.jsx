@@ -354,6 +354,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
         </table>
       </div>
       {renderPast}
+      {canModerate && <BansSection t={t} toast={toast}/>}
       {modalNode}
       {confirmKick && ConfirmModal && (
         <ConfirmModal
@@ -363,15 +364,212 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
           onConfirm={() => { const p = confirmKick; setConfirmKick(null); onKick(p); }}
         />
       )}
-      {confirmBan && ConfirmModal && (
-        <ConfirmModal
-          title={t('pl.ban')}
-          message={`${t('pl.ban_confirm') || 'Permanently ban'} ${confirmBan.name}?`}
+      {confirmBan && (
+        <BanModal
+          player={confirmBan}
           onCancel={() => setConfirmBan(null)}
-          onConfirm={() => { const p = confirmBan; setConfirmBan(null); onBan(p); }}
+          onSubmit={({ reason, durationDays }) => {
+            const p = confirmBan;
+            setConfirmBan(null);
+            onBan(p, { reason, durationDays });
+          }}
+          t={t}
         />
       )}
     </>
+  );
+}
+
+// Ban modal — gathers an optional reason and a duration (permanent or N days)
+// before forwarding to the parent's onBan. The reason ends up in the bans
+// table and in the audit log; the duration drives the TTL sweeper that lifts
+// the ban automatically on expiry.
+function BanModal({ player, onCancel, onSubmit, t }) {
+  const [reason,   setReason]   = usePlayersState('');
+  const [preset,   setPreset]   = usePlayersState('permanent');
+  const [custom,   setCustom]   = usePlayersState(7);
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
+  usePlayersEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  const submit = (e) => {
+    e?.preventDefault();
+    const durationDays = preset === 'permanent' ? 0
+                       : preset === 'custom'    ? Math.max(1, Math.min(36500, parseInt(custom, 10) || 1))
+                       :                          parseInt(preset, 10);
+    onSubmit({ reason: reason.trim(), durationDays });
+  };
+  return (
+    <div className="modal-backdrop" onClick={onCancel} role="presentation">
+      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t('pl.ban') || 'Ban player'} tabIndex={-1}>
+        <form className="modal-form" onSubmit={submit}>
+          <div className="modal-header">
+            <I2P.IconShield size={15} style={{color:'var(--red)'}}/>
+            <div className="modal-title">{t('pl.ban') || 'Ban player'}</div>
+          </div>
+          <div className="modal-body col" style={{gap: 12}}>
+            <div className="field">
+              <label className="field-label">{t('pl.ban_player') || 'Player'}</label>
+              <div className="input mono" style={{padding:'7px 10px', background:'var(--bg-3)', fontSize:12.5}}>
+                {player.name} <span className="muted" style={{marginLeft:6}}>{player.steam}</span>
+              </div>
+            </div>
+            <div className="field">
+              <label className="field-label">{t('pl.ban_reason') || 'Reason'} <span className="muted" style={{fontWeight:'normal'}}>({t('common.optional') || 'optional'})</span></label>
+              <input className="input"
+                value={reason}
+                onChange={e => setReason(e.target.value.slice(0, 240))}
+                maxLength={240}
+                placeholder={t('pl.ban_reason_placeholder') || 'e.g. ramming, cheating, racial slurs in chat'}
+                autoFocus/>
+              <span className="field-hint">{t('pl.ban_reason_hint') || 'Up to 240 characters. Visible to other admins in the bans list and audit log.'}</span>
+            </div>
+            <div className="field">
+              <label className="field-label">{t('pl.ban_duration') || 'Duration'}</label>
+              <div className="row" style={{gap: 6, flexWrap: 'wrap'}}>
+                {[
+                  ['permanent', t('pl.ban_perm') || 'Permanent'],
+                  ['1',         t('pl.ban_1d')   || '1 day'],
+                  ['7',         t('pl.ban_7d')   || '7 days'],
+                  ['30',        t('pl.ban_30d')  || '30 days'],
+                  ['custom',    t('pl.ban_custom') || 'Custom'],
+                ].map(([k, label]) => (
+                  <button key={k} type="button"
+                    className={`btn btn-sm ${preset === k ? 'btn-primary' : ''}`}
+                    onClick={() => setPreset(k)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {preset === 'custom' && (
+                <div className="row" style={{gap: 6, alignItems: 'center', marginTop: 8}}>
+                  <input className="input" type="number" inputMode="numeric" min="1" max="36500"
+                    style={{maxWidth: 100}}
+                    value={custom}
+                    onChange={e => setCustom(e.target.value)}/>
+                  <span className="muted" style={{fontSize: 12.5}}>{t('pl.ban_days') || 'days'}</span>
+                </div>
+              )}
+              <span className="field-hint">{t('pl.ban_duration_hint') || 'Temporary bans are lifted automatically when they expire; the audit log keeps the record.'}</span>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn" onClick={onCancel}>{t('common.cancel')}</button>
+            <button type="submit" className="btn btn-danger">
+              <I2P.IconShield size={13}/> {t('pl.ban') || 'Ban'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Active bans section ──────────────────────────────────────────────────────
+// Renders /api/bans as a compact table at the bottom of the Players page so
+// admins with playerModeration can see who is currently banned, why, until
+// when, and lift a ban with one click. Auto-refreshes when the page comes
+// back into focus; otherwise stays cached for cheapness.
+function BansSection({ t, toast }) {
+  const [bans, setBans] = usePlayersState([]);
+  const [loaded, setLoaded] = usePlayersState(false);
+  const [busy, setBusy] = usePlayersState({}); // guid → bool while unban request is in flight
+  const load = () => fetch('/api/bans')
+    .then(r => r.json())
+    .then(d => { if (Array.isArray(d)) setBans(d); })
+    .catch(() => {})
+    .finally(() => setLoaded(true));
+  usePlayersEffect(() => { load(); }, []);
+  // Re-poll when the tab becomes visible — the sweeper unbans on a 1h cadence
+  // server-side, so a stale list quickly drifts. Cheap to refresh.
+  usePlayersEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  const unban = async (b) => {
+    if (busy[b.guid]) return;
+    setBusy(s => ({ ...s, [b.guid]: true }));
+    try {
+      const r = await fetch(`/api/players/${encodeURIComponent(b.guid)}/ban`, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.ok) {
+        setBans(prev => prev.filter(x => x.guid !== b.guid));
+        toast.push(`${b.name || b.guid} ${t('pl.bans_unbanned') || 'unbanned'}`, 'success');
+      } else {
+        toast.push(d.error || t('common.error'), 'error');
+      }
+    } catch { toast.push(t('common.net_error'), 'error'); }
+    finally { setBusy(s => { const n = { ...s }; delete n[b.guid]; return n; }); }
+  };
+
+  if (!loaded) return null;
+  if (!bans.length) {
+    return (
+      <div className="card" style={{marginTop: 16}}>
+        <div className="card-header">
+          <I2P.IconShield size={14}/>
+          <div className="card-title">{t('pl.bans_title') || 'Active bans'}</div>
+          <span className="badge" style={{marginLeft: 'auto'}}>0</span>
+        </div>
+        <div className="card-body">
+          <div className="muted" style={{fontSize: 12.5, padding: '8px 4px'}}>
+            {t('pl.bans_empty') || 'No active bans.'}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="card" style={{marginTop: 16}}>
+      <div className="card-header">
+        <I2P.IconShield size={14}/>
+        <div className="card-title">{t('pl.bans_title') || 'Active bans'}</div>
+        <span className="badge" style={{marginLeft: 'auto'}}>{bans.length}</span>
+      </div>
+      <div style={{overflowX: 'auto'}}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('pl.bans_col_player')   || 'Player'}</th>
+              <th>{t('pl.bans_col_reason')   || 'Reason'}</th>
+              <th>{t('pl.bans_col_by')       || 'Banned by'}</th>
+              <th>{t('pl.bans_col_when')     || 'Banned at'}</th>
+              <th>{t('pl.bans_col_expires')  || 'Expires'}</th>
+              <th style={{width: 90}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bans.map(b => (
+              <tr key={b.guid}>
+                <td>
+                  <div className="player-name">{b.name || b.guid}</div>
+                  <div className="mono muted" style={{fontSize: 10.5}}>{b.guid}</div>
+                </td>
+                <td className="muted" style={{fontSize: 12.5, maxWidth: 280}}>
+                  {b.reason || <span style={{fontStyle:'italic', color:'var(--text-faint)'}}>—</span>}
+                </td>
+                <td className="muted" style={{fontSize: 12.5}}>{b.bannedBy || '—'}</td>
+                <td className="muted" style={{fontSize: 12, whiteSpace: 'nowrap'}}>{b.bannedAt || '—'}</td>
+                <td className="muted" style={{fontSize: 12, whiteSpace: 'nowrap'}}>
+                  {b.permanent
+                    ? <span className="badge" style={{background:'color-mix(in srgb, var(--red) 14%, transparent)', color:'var(--red)'}}>{t('pl.ban_perm') || 'Permanent'}</span>
+                    : <span style={b.expired ? {color:'var(--text-faint)'} : {}}>{b.expiresAt}</span>}
+                </td>
+                <td>
+                  <button className="btn btn-sm" disabled={!!busy[b.guid]} onClick={() => unban(b)}>
+                    {busy[b.guid] ? '…' : (t('pl.bans_unban') || 'Unban')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

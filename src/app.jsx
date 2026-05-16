@@ -451,23 +451,35 @@ function AppInner(props) {
       .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
   };
 
-  const handleBan = (p) => {
-    fetch('/api/players/ban', {
+  // Ban a player. Caller passes the player object + an options bag with
+  // `reason` (free-form text) and `durationDays` (0 = permanent). The
+  // Players page renders a modal that collects these; older code paths
+  // that didn't pass options still work because both fields are optional.
+  const handleBan = (p, opts = {}) => {
+    const body = { guid: p.steam, name: p.name };
+    if (opts.reason)       body.reason       = opts.reason;
+    if (opts.durationDays) body.durationDays = opts.durationDays;
+    return fetch('/api/players/ban', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guid: p.steam }),
+      body: JSON.stringify(body),
     })
       .then(r => r.json())
       .then(d => {
         if (d.error) {
           toast.push(`${t('common.error')}: ${d.error}`, 'error');
-        } else {
-          setPlayers(ps => ps.filter(x => x.id !== p.id));
-          setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
-          toast.push(`${p.name} ${t('toast.ban')}`, 'success');
+          throw new Error(d.error);
         }
+        setPlayers(ps => ps.filter(x => x.id !== p.id));
+        setServer(s => ({...s, players: Math.max(0, s.players - 1)}));
+        const suffix = d.expiresAt ? ` (${t('toast.ban_until') || 'until'} ${d.expiresAt})` : '';
+        toast.push(`${p.name} ${t('toast.ban')}${suffix}`, 'success');
+        return d;
       })
-      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
+      .catch(e => {
+        if (!e.message?.startsWith('ban')) toast.push(`${t('common.error')}: ${e.message}`, 'error');
+        throw e;
+      });
   };
 
   const refreshConfig = () =>

@@ -419,19 +419,63 @@ try {
       reset_at INTEGER NOT NULL
     );
   `);
-  // Schema migrations (safe to run on every start)
-  try { db.exec(`ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE audit_log ADD COLUMN prev_hash     TEXT    NOT NULL DEFAULT ''`); } catch {}
-  try { db.exec(`ALTER TABLE audit_log ADD COLUMN row_hash      TEXT    NOT NULL DEFAULT ''`); } catch {}
-  try { db.exec(`ALTER TABLE audit_log ADD COLUMN chain_version INTEGER NOT NULL DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE players   ADD COLUMN nickname      TEXT    NOT NULL DEFAULT ''`); } catch {}
-  // Lap-dedup index for cross-source ingestion. The UDP plugin and the
-  // result-file importer both write into `laps`; this unique index keys a
-  // lap by content (driver+time+car+track) so neither source can create
-  // a duplicate row regardless of the millisecond it captured the event.
-  // The original UNIQUE(...) constraint on the table is wider so it stays
-  // harmless; this index is the one we rely on at runtime.
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS laps_dedup_runtime ON laps(driver_guid, ms, car, track, track_config)`); } catch (e) { console.error('  laps_dedup_runtime migration:', e.message); }
+  // ── Schema migrations ─────────────────────────────────────────────────────
+  // Numbered, idempotent, recorded in schema_migrations so we know which ones
+  // have run on a given DB. Each migration is a {id, sql} pair; run order is
+  // ascending by id. Adding a new one means appending to the array — never
+  // rewriting an older entry, otherwise existing DBs would skip your change.
+  //
+  // The migrations table itself uses INSERT OR IGNORE so re-running a freshly
+  // initialised DB is a no-op. Failing migrations log loudly and skip the
+  // record-insert so the next boot retries; an environment-specific failure
+  // (CREATE UNIQUE INDEX against duplicate rows, for instance) doesn't poison
+  // the chain — fix the data, restart, the migration runs again.
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    id      INTEGER PRIMARY KEY,
+    name    TEXT    NOT NULL,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  const MIGRATIONS = [
+    { id: 1, name: 'add_must_change_password',
+      sql: `ALTER TABLE panel_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0` },
+    { id: 2, name: 'audit_chain_prev_hash',
+      sql: `ALTER TABLE audit_log ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ''` },
+    { id: 3, name: 'audit_chain_row_hash',
+      sql: `ALTER TABLE audit_log ADD COLUMN row_hash TEXT NOT NULL DEFAULT ''` },
+    { id: 4, name: 'audit_chain_version',
+      sql: `ALTER TABLE audit_log ADD COLUMN chain_version INTEGER NOT NULL DEFAULT 0` },
+    { id: 5, name: 'players_nickname',
+      sql: `ALTER TABLE players ADD COLUMN nickname TEXT NOT NULL DEFAULT ''` },
+    { id: 6, name: 'laps_dedup_runtime_index',
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS laps_dedup_runtime
+              ON laps(driver_guid, ms, car, track, track_config)` },
+    { id: 7, name: 'audit_compound_indices',
+      sql: `CREATE INDEX IF NOT EXISTS idx_audit_actor  ON audit_log(actor);
+            CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);` },
+  ];
+  const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
+  const _applied = new Set(_appliedRows.map(r => r.id));
+  const _recordMigration = db.prepare('INSERT OR IGNORE INTO schema_migrations (id, name) VALUES (?, ?)');
+  for (const m of MIGRATIONS) {
+    if (_applied.has(m.id)) continue;
+    try {
+      db.exec(m.sql);
+      _recordMigration.run(m.id, m.name);
+      console.log(`  migration ${String(m.id).padStart(3, '0')}: ${m.name} ✓`);
+    } catch (e) {
+      // ALTER TABLE on an existing column throws "duplicate column" — that's
+      // exactly the upgrade-in-place case where the column was added by the
+      // pre-migrations-runner ALTER+catch code. Record the migration as
+      // applied so we don't retry next boot, but log it for visibility.
+      const msg = String(e && e.message || e);
+      if (/duplicate column|already exists/i.test(msg)) {
+        _recordMigration.run(m.id, m.name);
+        console.log(`  migration ${String(m.id).padStart(3, '0')}: ${m.name} (already present, recorded)`);
+      } else {
+        console.error(`  migration ${String(m.id).padStart(3, '0')} ${m.name} FAILED:`, msg);
+      }
+    }
+  }
 
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();

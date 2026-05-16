@@ -89,6 +89,16 @@ npm run build
 
 Open `http://<server-ip>:3000` in your browser.
 
+> ### ⚠️ Before exposing the panel beyond `localhost`
+>
+> The default `HOST=0.0.0.0` listens on **every** network interface. Combine that with the wrong network config and the panel becomes reachable from places you didn't intend. Pick one of:
+>
+> 1. **Cloudflare Tunnel (recommended).** Set `HOST=127.0.0.1` and `TRUST_PROXY=1` in `.env`. The tunnel terminates TLS and forwards traffic to localhost; no firewall ports are opened. See [docs/deployment.md](docs/deployment.md#cloudflare-tunnel-remote-access-without-port-forwarding).
+> 2. **LAN-only access.** Leave `HOST=0.0.0.0` but **block port 3000 from the internet** at the router / firewall. Do **not** set `TRUST_PROXY=1` — without a real proxy in front it lets any LAN client spoof their IP in `CF-Connecting-IP`. (Mitigated by an IP allowlist in 1.5+ but still operator error worth avoiding.)
+> 3. **Reverse proxy (nginx / Caddy / Traefik).** Same shape as Cloudflare Tunnel: `HOST=127.0.0.1` + `TRUST_PROXY=1` + `TRUST_PROXY_FROM=<proxy IP CIDRs>` in `.env`.
+>
+> If the panel is publicly reachable you **must** change the default `Admin` password (the first login forces it, but a port scanner can still see the login screen). Consider also adding Cloudflare Access / Tailscale / a VPN as a second factor.
+
 **Default credentials:** `Admin` / `Admin1234!`. The first login forces a password change in a blocking modal — the rest of the panel is unreachable (server-side enforced) until the password is changed. If you ever lock yourself out, run:
 
 ```sql

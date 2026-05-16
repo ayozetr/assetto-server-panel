@@ -5283,6 +5283,19 @@ server.listen(PORT, HOST, () => {
   console.log(`    Local    →  http://localhost:${PORT}`);
   console.log(`    Network  →  http://${ip}:${PORT}`);
   console.log(`  ${line}\n`);
+
+  // Boot-time misconfiguration warning. TRUST_PROXY=1 plus HOST=0.0.0.0 used to
+  // let any LAN client spoof CF-Connecting-IP and frame the audit log / bypass
+  // the login lockout. clientIp now ignores the headers when the socket peer
+  // isn't in the trusted-proxy allowlist (see _trustedProxyMatchers), so the
+  // worst case is "spoof attempts get ignored" rather than "spoof attempts
+  // succeed" — but the combination is still operator error worth surfacing.
+  if (TRUST_PROXY && (HOST === '0.0.0.0' || HOST === '::')) {
+    console.warn(`  ⚠️  TRUST_PROXY=1 with HOST=${HOST} — the panel is reachable directly from any LAN client.`);
+    console.warn(`     Forwarded-IP headers will only be honoured from the Cloudflare ranges (or your`);
+    console.warn(`     TRUST_PROXY_FROM override). Set HOST=127.0.0.1 in .env when behind Cloudflare`);
+    console.warn(`     Tunnel / a local reverse proxy to remove direct LAN exposure entirely.\n`);
+  }
 });
 
 server.on('error', err => {

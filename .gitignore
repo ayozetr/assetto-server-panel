@@ -22,6 +22,7 @@ logs/
 *.rar
 *.7z
 *.sh
+!tools/*.sh    # scripts in tools/ are part of the project and must ship
 
 # Python
 bot.py
@@ -43,6 +44,7 @@ Thumbs.db
 CLAUDE.md
 TASKS.md
 ASSESSMENT.md
+.claude/
 
 # Local dev fixture (server_cfg.ini copy + scratch DB + logs)
 local-cfg/

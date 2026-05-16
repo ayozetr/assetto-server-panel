@@ -122,6 +122,63 @@ sudo firewall-cmd --reload
 ```bash
 cd assetto-dashboard
 git pull
-npm install          # in case dependencies changed
+npm ci               # reproducible install, refuses to drift from package-lock.json
 sudo systemctl restart assetto-dashboard
 ```
+
+> **`npm ci` vs `npm install`** — `npm install` rewrites `package-lock.json` whenever the lockfile and `package.json` disagree. If the panel host is ever compromised and `package.json` is amended with a malicious `postinstall`, `npm install` happily runs it on the next deploy. `npm ci` refuses any drift and aborts. Production deploys should use `npm ci`; switch back to `npm install` only when you intentionally edit `package.json` locally and want the lockfile to follow.
+
+### Routine maintenance
+
+```bash
+# Once a month, check for outdated or vulnerable deps
+npm outdated
+npm audit --audit-level=high
+```
+
+`npm audit fix --dry-run` shows the proposed changes before they are applied. Don't run `npm audit fix` blindly — review the diff first; some "fixes" downgrade major versions.
+
+---
+
+## Log rotation
+
+`AC_LOG_FILE` (default `<panel>/logs/ac_server.log`) grows as long as acServer runs. A panel that's been up for months can fill the disk and take everything down with it. The "Clear logs" admin button in the UI truncates the file on demand, but on a busy server you want automatic rotation too.
+
+Create `/etc/logrotate.d/assetto-dashboard`:
+
+```
+/home/<your-user>/assetto-dashboard/logs/ac_server.log {
+  weekly
+  rotate 4
+  compress
+  delaycompress
+  missingok
+  notifempty
+  copytruncate
+}
+```
+
+> `copytruncate` is the load-bearing line. The panel keeps the log fd open while it writes; a normal `rename + create` rotate would leave the panel writing into a deleted inode that never frees disk space. `copytruncate` copies the current contents to the rotated file, then truncates the original in place — no fd disturbance, no panel restart needed.
+
+Test with `sudo logrotate -d /etc/logrotate.d/assetto-dashboard` (dry-run) before relying on the cron.
+
+---
+
+## Hardening the systemd unit
+
+The minimal unit above is enough for a home lab. For tighter sandboxing add the following to the `[Service]` block:
+
+```ini
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/path/to/assetto-dashboard /srv/assetto /home/<your-user>/ac_server
+PrivateTmp=true
+LimitNOFILE=4096
+MemoryMax=512M
+```
+
+- `ProtectSystem=strict` makes the whole filesystem read-only except for the explicit `ReadWritePaths`.
+- `PrivateTmp=true` gives the panel its own `/tmp` namespace — chunked-upload temp dirs live there, so this is purely an isolation win.
+- `LimitNOFILE=4096` — the panel keeps several open file descriptors (SSE clients, UDP socket, DB, log fd). Default `1024` is fine but tight; bumping prevents surprise EMFILE under load.
+- `MemoryMax=512M` is a safety belt: a runaway mod extraction or memory leak triggers OOM kill instead of swap-thrashing the box.

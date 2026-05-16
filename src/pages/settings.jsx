@@ -359,6 +359,18 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
     finally { setSaving(false); }
   };
 
+  // Cancel must actually undo the user's edits, not just hide the "unsaved"
+  // pill. Re-fetch /api/config and overwrite local state so the form snaps
+  // back to whatever the server currently has on disk.
+  const cancel = async () => {
+    try {
+      const r = await fetch('/api/config');
+      const d = await r.json();
+      if (d && !d.error) setConfig(c => ({ ...c, ...d }));
+    } catch {} // network failure → keep local state as is, just clear the dirty flag
+    setDirty(false);
+  };
+
   return (
     <>
       <div className="page-header">
@@ -593,7 +605,7 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
       {canEdit && (
         <div className="row" style={{marginTop: 20, justifyContent: 'flex-end', gap: 8, position:'sticky', bottom: 16, background:'var(--bg-2)', padding:'10px 0'}}>
           {dirty && !saving && <span className="badge badge-amber">{t('config.unsaved')}</span>}
-          <button className="btn" onClick={()=>setDirty(false)} disabled={saving}>{t('common.cancel')}</button>
+          <button className="btn" onClick={cancel} disabled={saving}>{t('common.cancel')}</button>
           <button className="btn" onClick={()=>save({ restart: false })} disabled={!dirty || saving}>
             {saving
               ? <><I4.IconRefresh size={13} style={{animation:'spin 1s linear infinite'}}/> {t('common.saving')}</>

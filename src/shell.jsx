@@ -133,9 +133,9 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
         </a>
 
         <div className="sidebar-footer" style={{marginTop: 0}}>
-          <div className="user-avatar">{user.name.slice(0,1).toUpperCase()}</div>
+          <div className="user-avatar">{(user.name || '?').slice(0,1).toUpperCase()}</div>
           <div className="user-info">
-            <div className="user-name">{user.name}</div>
+            <div className="user-name">{user.name || '—'}</div>
             <div className="user-role">{user.role === 'admin' ? t('sidebar.role.admin') : t('sidebar.role.user')}</div>
           </div>
           <button className="icon-btn" onClick={() => navigate('profile')} title={t('nav.profile')}>

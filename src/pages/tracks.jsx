@@ -47,6 +47,8 @@ function LoadingImg({ src, alt, style, fallback = null }) {
 
 // ── Track modal (multi-layout tracks) ─────────────────────────────────────────
 function TrackModal({ track, sessionCfg, setSessionCfg, onClose, onDelete, isAdmin, t }) {
+  const ConfirmModal = window.AppPagesSettings && window.AppPagesSettings.ConfirmModal;
+  const [confirmDelete, setConfirmDelete] = useStateT(false);
   const isSelected    = sessionCfg.trackId === track.id;
   const hasLayouts    = track.layouts.length > 1;
   const [activeLayout, setActiveLayout] = useStateT(
@@ -171,10 +173,7 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose, onDelete, isAdm
               <button
                 className="btn btn-sm btn-danger"
                 title={t('tracks.delete.btn')}
-                onClick={() => {
-                  if (!window.confirm(t('tracks.delete.confirm', { name: track.name }))) return;
-                  onDelete().then(() => onClose()).catch(() => {});
-                }}
+                onClick={() => setConfirmDelete(true)}
               >
                 <I3T.IconTrash size={12}/> {t('common.delete')}
               </button>
@@ -193,6 +192,14 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose, onDelete, isAdm
         </div>
 
       </div>
+      {confirmDelete && ConfirmModal && (
+        <ConfirmModal
+          title={t('tracks.delete.btn')}
+          message={t('tracks.delete.confirm', { name: track.name })}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => { setConfirmDelete(false); onDelete().then(() => onClose()).catch(() => {}); }}
+        />
+      )}
     </div>
   );
 }
@@ -217,7 +224,7 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal, t }) {
 
   const [imgFailed, setImgFailed] = useStateT(false);
   const [imgLoaded, setImgLoaded] = useStateT(false);
-  const trackInitial = track.name.slice(0,2).toUpperCase();
+  const trackInitial = (track.name || '??').slice(0,2).toUpperCase();
 
   return (
     <div className={`track-card ${selected ? 'selected' : ''}`} onClick={handleClick}>

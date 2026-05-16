@@ -311,6 +311,18 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
   const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
   const paginated  = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Lookup table for the per-track best lap. Without this, the records-view
+  // delta column did records.find(...) per row per render — O(rows × records)
+  // each render, ~500k iterations for 50 rows × 10k records.
+  const bestPerTrack = uMt(() => {
+    const m = new Map();
+    for (const r of records) {
+      const prev = m.get(r.track);
+      if (!prev || r.ms < prev.ms) m.set(r.track, r);
+    }
+    return m;
+  }, [records]);
+
   // Every-lap view (no dedupe). Sorted fastest-first so the leaderboard read
   // matches the records view; pagination 10 per page since the table can be
   // hundreds of rows on a busy server.
@@ -325,19 +337,33 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
     s.includes(p) ? s.filter(x => x !== p) : (s.length >= 4 ? s : [...s, p])
   );
 
+  // Proper RFC 4180 CSV escape — driver names with commas (`Lopez, José`),
+  // quotes, or newlines used to corrupt the export and shift every later
+  // column one cell to the right. Wrap any value that contains a `,`, `"`,
+  // CR, or LF in double quotes and double-up internal quotes.
+  const csvCell = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
   const exportCSV = () => {
     const header = [
       t('times.col.driver'), t('times.col.track'), t('times.col.car'),
       t('times.col.time'), 'S1', 'S2', 'S3', t('times.col.valid'), t('times.col.date')
-    ].join(',');
+    ].map(csvCell).join(',');
     const rows = records.map(r =>
       [r.player, trackName(r.track), carName(r.car), fmtMs(r.ms),
-       fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? t('common.yes') : t('common.no'), r.date].join(',')
+       fmtMs(r.s1), fmtMs(r.s2), fmtMs(r.s3), r.valid ? t('common.yes') : t('common.no'), r.date]
+        .map(csvCell).join(',')
     );
+    const blob = new Blob([[header, ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([[header, ...rows].join('\n')], { type: 'text/csv' }));
+    a.href = url;
     a.download = `tiempos-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
+    // Free the blob URL — browsers can hold them until the tab closes
+    // otherwise, leaking memory for every export.
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   return (
@@ -448,7 +474,11 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
                 <tbody>
                   {paginated.map((r, i) => {
                     const globalIndex = (page - 1) * PAGE_SIZE + i;
-                    const trackBest = records.find(x => x.track === r.track);
+                    // bestPerTrack is built from the same records set so the
+                    // lookup always finds a row; the fallback to r itself just
+                    // belt-and-braces against a future refactor that decouples
+                    // the two collections (delta would then be 0, not NaN).
+                    const trackBest = bestPerTrack.get(r.track) || r;
                     const delta = r.ms - trackBest.ms;
                     return (
                       <tr key={r.id}>

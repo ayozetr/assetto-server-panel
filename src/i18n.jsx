@@ -253,7 +253,9 @@ const dict = {
     'pl.col.car': 'Car',
     'pl.col.ping': 'Ping',
     'pl.kick': 'Kick',
+    'pl.kick_confirm': 'Kick',
     'pl.ban': 'Ban (Blacklist)',
+    'pl.ban_confirm': 'Permanently ban',
     'pl.wl': 'Whitelist',
     'pl.wl_tip': 'Add to whitelist',
     'pl.wl_added': 'added to whitelist',
@@ -449,6 +451,7 @@ const dict = {
     'mods.limit_hint': 'Configurable in Settings',
     'mods.history_title': 'Session History',
     'mods.history_clear': 'Clear',
+    'mods.history_clear_confirm': 'Clear all mod upload history? This cannot be undone.',
 
     // Config (upload)
     'config.upload_title': 'Mod Upload',
@@ -746,7 +749,9 @@ const dict = {
     'pl.col.car': 'Coche',
     'pl.col.ping': 'Ping',
     'pl.kick': 'Expulsar',
+    'pl.kick_confirm': 'Expulsar a',
     'pl.ban': 'Ban (Blacklist)',
+    'pl.ban_confirm': 'Banear permanentemente a',
     'pl.wl': 'Whitelist',
     'pl.wl_tip': 'Añadir a whitelist',
     'pl.wl_added': 'añadido a la whitelist',
@@ -942,6 +947,7 @@ const dict = {
     'mods.limit_hint': 'Configurable en Ajustes',
     'mods.history_title': 'Historial de Sesión',
     'mods.history_clear': 'Limpiar',
+    'mods.history_clear_confirm': '¿Borrar todo el historial de subidas? Esto no se puede deshacer.',
 
     // Config (upload)
     'config.upload_title': 'Subida de Mods',
@@ -1239,7 +1245,9 @@ const dict = {
     'pl.col.car': 'Auto',
     'pl.col.ping': 'Ping',
     'pl.kick': 'Espelli',
+    'pl.kick_confirm': 'Espelli',
     'pl.ban': 'Ban (Blacklist)',
+    'pl.ban_confirm': 'Ban permanente',
     'pl.wl': 'Whitelist',
     'pl.wl_tip': 'Aggiungi alla whitelist',
     'pl.wl_added': 'aggiunto alla whitelist',
@@ -1412,6 +1420,7 @@ const dict = {
     'mods.limit_hint': 'Configurabile in Impostazioni',
     'mods.history_title': 'Cronologia Sessione',
     'mods.history_clear': 'Pulisci',
+    'mods.history_clear_confirm': 'Cancellare tutta la cronologia caricamenti? Operazione irreversibile.',
 
     // Config (upload)
     'config.upload_title': 'Caricamento Mod',

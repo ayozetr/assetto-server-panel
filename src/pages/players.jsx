@@ -59,9 +59,17 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
   const showLiveActions = canModerate || canWhitelist;
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
+  const ConfirmModal = window.AppPagesSettings && window.AppPagesSettings.ConfirmModal;
   const [players, setPlayers] = usePlayersState(initialPlayers);
   const [historySearch, setHistorySearch] = usePlayersState('');
   const [whitelisting, setWhitelisting] = usePlayersState({}); // guid → boolean
+  // Both kick and ban are destructive (ban especially — it writes a
+  // permanent line to blacklist.txt). Stash the pending player on a
+  // "pending confirmation" state and surface a ConfirmModal before
+  // forwarding to the parent's onKick/onBan. Previously clicking either
+  // button fired the action immediately with no chance to back out.
+  const [confirmKick, setConfirmKick] = usePlayersState(null);
+  const [confirmBan,  setConfirmBan]  = usePlayersState(null);
   const [editingNick, setEditingNick] = usePlayersState(null); // past-player row
 
   // Look up nicknames by GUID so the live online table can render the same
@@ -179,7 +187,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                 <td>
                   <div className="row" style={{gap: 10}}>
                     <div className="user-avatar" style={{width: 26, height: 26, fontSize: 11, background: 'var(--bg-3)', color: 'var(--text-muted)'}}>
-                      {(p.nickname || p.name).slice(0,1).toUpperCase()}
+                      {((p.nickname || p.name) || '?').slice(0,1).toUpperCase()}
                     </div>
                     <div>
                       <div className="row" style={{gap: 5, alignItems:'center'}}>
@@ -323,10 +331,10 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                       )}
                       {canModerate && (
                         <>
-                          <button className="btn btn-sm" onClick={() => onKick(p)}>
+                          <button className="btn btn-sm" onClick={() => setConfirmKick(p)}>
                             <I2P.IconKick size={12}/> {t('pl.kick')}
                           </button>
-                          <button className="btn btn-sm btn-danger" onClick={() => onBan(p)}>
+                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmBan(p)}>
                             {t('pl.ban')}
                           </button>
                         </>
@@ -341,6 +349,22 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
       </div>
       {renderPast}
       {modalNode}
+      {confirmKick && ConfirmModal && (
+        <ConfirmModal
+          title={t('pl.kick')}
+          message={`${t('pl.kick_confirm') || 'Kick'} ${confirmKick.name}?`}
+          onCancel={() => setConfirmKick(null)}
+          onConfirm={() => { const p = confirmKick; setConfirmKick(null); onKick(p); }}
+        />
+      )}
+      {confirmBan && ConfirmModal && (
+        <ConfirmModal
+          title={t('pl.ban')}
+          message={`${t('pl.ban_confirm') || 'Permanently ban'} ${confirmBan.name}?`}
+          onCancel={() => setConfirmBan(null)}
+          onConfirm={() => { const p = confirmBan; setConfirmBan(null); onBan(p); }}
+        />
+      )}
     </>
   );
 }

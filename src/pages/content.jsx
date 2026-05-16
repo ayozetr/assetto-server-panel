@@ -46,6 +46,8 @@ function LoadingImg({ src, alt, style, fallback = null }) {
 
 // ── Car modal ─────────────────────────────────────────────────────────────────
 function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, onDelete, isAdmin, t }) {
+  const ConfirmModal = window.AppPagesSettings && window.AppPagesSettings.ConfirmModal;
+  const [confirmDelete, setConfirmDelete] = useStateB(false);
   // Preselect the skin the admin previously chose for this car (if any) so
   // reopening the modal doesn't lose context.
   const initialIdx = useMemoB(() => {
@@ -184,10 +186,7 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, onDelete,
               <button
                 className="btn btn-sm btn-danger"
                 title={t('cars.delete.btn')}
-                onClick={() => {
-                  if (!window.confirm(t('cars.delete.confirm', { name: car.name }))) return;
-                  onDelete().then(() => onClose()).catch(() => {});
-                }}
+                onClick={() => setConfirmDelete(true)}
               >
                 <I3.IconTrash size={12}/> {t('common.delete')}
               </button>
@@ -218,6 +217,14 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, onDelete,
         </div>
 
       </div>
+      {confirmDelete && ConfirmModal && (
+        <ConfirmModal
+          title={t('cars.delete.btn')}
+          message={t('cars.delete.confirm', { name: car.name })}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => { setConfirmDelete(false); onDelete().then(() => onClose()).catch(() => {}); }}
+        />
+      )}
     </div>
   );
 }

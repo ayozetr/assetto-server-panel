@@ -86,6 +86,8 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
   const [history,       setHistory]       = uStE([]);
   const [uploadMaxMb,   setUploadMaxMb]   = uStE(500);
   const [chunkedUpload, setChunkedUpload] = uStE(false);
+  const [confirmClear,  setConfirmClear]  = uStE(false);
+  const ConfirmModal = window.AppPagesSettings && window.AppPagesSettings.ConfirmModal;
   const inputRef = uRfE(null);
   // Tracks whether the component is still mounted. Uploads run as XHR or fetch
   // outside React's lifecycle; if the user navigates away mid-upload the
@@ -475,10 +477,7 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
               <div className="card-header">
                 <I5.IconHistory size={14} style={{color: 'var(--red)'}}/>
                 <div className="card-title">{t('mods.history_title')}</div>
-                <button className="btn btn-sm right" onClick={() => {
-                  fetch('/api/mods/history', { method: 'DELETE' }).catch(() => {});
-                  setHistory([]);
-                }}>
+                <button className="btn btn-sm right" onClick={() => setConfirmClear(true)}>
                   <I5.IconX size={11}/> {t('mods.history_clear')}
                 </button>
               </div>
@@ -492,6 +491,18 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
         </div>
       </div>
 
+      {confirmClear && ConfirmModal && (
+        <ConfirmModal
+          title={t('mods.history_clear')}
+          message={t('mods.history_clear_confirm') || 'Clear all upload history?'}
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={() => {
+            setConfirmClear(false);
+            fetch('/api/mods/history', { method: 'DELETE' }).catch(() => {});
+            if (mountedRef.current) setHistory([]);
+          }}
+        />
+      )}
     </>
   );
 }

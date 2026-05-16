@@ -148,9 +148,9 @@ function PageUsers({ users, setUsers, isAdmin }) {
                 <td>
                   <div className="row" style={{gap: 10}}>
                     <div className="user-avatar" style={{width: 28, height: 28, fontSize: 11}}>
-                      {u.name.slice(0,1).toUpperCase()}
+                      {(u.name || '?').slice(0,1).toUpperCase()}
                     </div>
-                    <div className="player-name">{u.name}</div>
+                    <div className="player-name">{u.name || '—'}</div>
                   </div>
                 </td>
                 <td>

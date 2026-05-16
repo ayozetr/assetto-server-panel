@@ -87,9 +87,19 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
   const [uploadMaxMb,   setUploadMaxMb]   = uStE(500);
   const [chunkedUpload, setChunkedUpload] = uStE(false);
   const inputRef = uRfE(null);
+  // Tracks whether the component is still mounted. Uploads run as XHR or fetch
+  // outside React's lifecycle; if the user navigates away mid-upload the
+  // completion handlers would otherwise call setState on an unmounted
+  // component, triggering React warnings and (in StrictMode) double-effects.
+  // Every setX inside the upload pipeline is gated through `mountedRef.current`.
+  const mountedRef = uRfE(true);
+  uEtE(() => () => { mountedRef.current = false; }, []);
 
   const fetchHistory = () =>
-    fetch('/api/mods/history').then(r => r.json()).then(d => { if (Array.isArray(d)) setHistory(d); }).catch(() => {});
+    fetch('/api/mods/history')
+      .then(r => r.json())
+      .then(d => { if (mountedRef.current && Array.isArray(d)) setHistory(d); })
+      .catch(() => {});
 
   // Load settings + history from backend
   uEtE(() => {
@@ -130,6 +140,7 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
   };
 
   const handleUploadResult = (d, filename) => {
+    if (!mountedRef.current) return;
     if (d.ok) {
       setResult({ ok: true, ...d });
       toast.push(d.modType === 'car' ? t('mods.success_car') : t('mods.success_track'), 'success');
@@ -150,13 +161,14 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/mods/upload');
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 90));
+      if (mountedRef.current && e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 90));
     };
     xhr.onload = () => {
       try { handleUploadResult(JSON.parse(xhr.responseText), file.name); }
-      catch { handleUploadResult({ ok: false, error: 'Error al procesar respuesta' }, file.name); }
+      catch { handleUploadResult({ ok: false, error: t('common.net_error') }, file.name); }
     };
     xhr.onerror = () => {
+      if (!mountedRef.current) return;
       setResult({ ok: false, error: t('common.net_error') });
       toast.push(t('common.net_error'), 'error');
       setUploading(false); setProgress(0);
@@ -177,6 +189,10 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
     const filename    = file.name;
     try {
       for (let i = 0; i < totalChunks; i++) {
+        // Bail out if the page unmounted between chunks — keeps the loop from
+        // continuing to hit /api/mods/upload/chunk after the user navigated
+        // away. The orphaned partial upload will be swept by cleanupOldChunks.
+        if (!mountedRef.current) return;
         const chunk  = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
         const data   = await toBase64(chunk);
         // Send as JSON — same format as login, guaranteed to pass through Cloudflare
@@ -187,11 +203,13 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
         });
         if (!resp.ok && resp.status !== 200) throw new Error(`HTTP ${resp.status}`);
         const d = await resp.json();
+        if (!mountedRef.current) return;
         setProgress(Math.round(((i + 1) / totalChunks) * 95));
         if (!d.ok) { handleUploadResult(d, filename); return; }
         if (d.done) { handleUploadResult(d, filename); return; }
       }
     } catch (e) {
+      if (!mountedRef.current) return;
       setResult({ ok: false, error: e.message });
       toast.push(e.message, 'error');
       setUploading(false); setProgress(0);

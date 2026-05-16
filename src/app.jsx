@@ -55,8 +55,20 @@ function App() {
   const { Login, ForcePasswordChange, ToastProvider } = window.AppShell;
 
   const [theme, setTheme] = uS(() => localStorage.getItem('ac-theme') || 'light');
+  // localStorage stores only the bare minimum — { name } — so a future XSS
+  // (or a malicious browser extension) cannot read the user's role or
+  // permission set out of the page. The authoritative role and permissions
+  // arrive from /api/auth/me on every mount; the cookie is HttpOnly and
+  // never touches JS-readable storage. Until /api/auth/me responds we treat
+  // the user as logged-in-with-no-permissions so the UI doesn't flash an
+  // admin layout to a non-admin browser session.
   const [user,  setUser]  = uS(() => {
-    try { return JSON.parse(localStorage.getItem('ac-user')); } catch { return null; }
+    try {
+      const raw = JSON.parse(localStorage.getItem('ac-user'));
+      if (!raw || typeof raw !== 'object' || !raw.name) return null;
+      // Strip anything that should only live in memory from /api/auth/me.
+      return { name: String(raw.name) };
+    } catch { return null; }
   });
   const [page, setPage] = uS('dashboard');
   const [langNonce, setLangNonce] = uS(0);
@@ -145,36 +157,53 @@ function App() {
     localStorage.setItem('ac-theme', theme);
   }, [theme]);
   uE(() => {
-    if (user) localStorage.setItem('ac-user', JSON.stringify(user));
+    // Only the display name is persisted. Role + permissions live in memory
+    // only; a stale localStorage cannot grant capabilities the server has
+    // since revoked, because every gated UI check reads from the live state
+    // refreshed from /api/auth/me on mount.
+    if (user) localStorage.setItem('ac-user', JSON.stringify({ name: user.name }));
     else localStorage.removeItem('ac-user');
   }, [user]);
 
 
-  // Validate server-side session on mount; force re-login if cookie is stale
-  uE(() => {
-    if (user) {
-      fetch('/api/auth/me')
-        .then(r => r.json())
-        .then(d => {
-          if (!d.username) setUser(null);
-          // Mirror the server flag in both directions — true → true (forces modal),
-          // false → false (clears stale local state). Without this, a user who cleared
-          // the flag on a different browser keeps seeing the forced-change modal here.
-          // Also overlay the latest permission set so a granular toggle change in
-          // Usuarios (or a role flip) takes effect without re-login.
-          else setUser(u => ({ ...u, mustChangePassword: !!d.mustChangePassword, permissions: d.permissions || u?.permissions || {} }));
-        })
-        .catch(() => {});
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load all data from backend — runs whenever user logs in (user goes from null → truthy)
+  // Validate server-side session on mount; force re-login if cookie is stale.
+  // Also bring role+permissions in from the server — they live in memory only,
+  // never in localStorage (see the App() opening comment), so this fetch is
+  // load-bearing for showing admin-only UI on first render.
   uE(() => {
     if (!user) return;
-
-    fetch('/api/config')
+    const ctrl = new AbortController();
+    fetch('/api/auth/me', { signal: ctrl.signal })
       .then(r => r.json())
       .then(d => {
+        if (ctrl.signal.aborted) return;
+        if (!d.username) setUser(null);
+        else setUser(u => ({
+          ...u,
+          name: d.username,
+          role: d.role,
+          mustChangePassword: !!d.mustChangePassword,
+          permissions: d.permissions || {},
+        }));
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load all data from backend — runs whenever user logs in (user goes from null → truthy).
+  // Every fetch is wired to a single AbortController so a logout (or a tab
+  // close) mid-flight tears them all down — no setState-after-unmount warnings
+  // and no flash of stale data into a Login screen if the response races.
+  uE(() => {
+    if (!user) return;
+    const ctrl = new AbortController();
+    const sig = ctrl.signal;
+    const safe = (p) => p.catch((e) => { if (e?.name === 'AbortError') return; });
+
+    safe(fetch('/api/config', { signal: sig })
+      .then(r => r.json())
+      .then(d => {
+        if (sig.aborted) return;
         if (d.error) return;
         setConfig(c => ({ ...c, ...d }));
         setSessionCfg(s => {
@@ -189,10 +218,6 @@ function App() {
             ...(d.practiceTime ? { practiceTime: d.practiceTime } : {}),
             ...(d.qualifyTime  ? { qualifyTime:  d.qualifyTime  } : {}),
             ...(d.raceLaps     ? { raceLaps:     d.raceLaps     } : {}),
-            // Per-session enable flags MUST be applied even when false (the
-            // default state has all three on; without this an F5 after the
-            // admin disabled Qualify/Race wipes their selection back to "all
-            // enabled" because the section is gone from the INI).
             ...(typeof d.practiceEnabled === 'boolean' ? { practiceEnabled: d.practiceEnabled } : {}),
             ...(typeof d.qualifyEnabled  === 'boolean' ? { qualifyEnabled:  d.qualifyEnabled  } : {}),
             ...(typeof d.raceEnabled     === 'boolean' ? { raceEnabled:     d.raceEnabled     } : {}),
@@ -203,46 +228,41 @@ function App() {
           };
         });
         if (d.maxClients) setServer(s => ({ ...s, slots: d.maxClients }));
-      })
-      .catch(() => {});
+      }));
 
-    fetch('/api/results')
+    safe(fetch('/api/results', { signal: sig })
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setLapTimes(d); })
-      .catch(() => {})
-      .finally(() => setDataLoaded(d => ({...d, lapTimes: true})));
+      .then(d => { if (!sig.aborted && Array.isArray(d)) setLapTimes(d); })
+      .finally(() => { if (!sig.aborted) setDataLoaded(d => ({...d, lapTimes: true})); }));
 
-    fetch('/api/cars')
+    safe(fetch('/api/cars', { signal: sig })
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d) && d.length) setCars(d); })
-      .catch(() => {})
-      .finally(() => setDataLoaded(d => ({...d, cars: true})));
+      .then(d => { if (!sig.aborted && Array.isArray(d) && d.length) setCars(d); })
+      .finally(() => { if (!sig.aborted) setDataLoaded(d => ({...d, cars: true})); }));
 
-    fetch('/api/tracks')
+    safe(fetch('/api/tracks', { signal: sig })
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d) && d.length) setTracks(d); })
-      .catch(() => {})
-      .finally(() => setDataLoaded(d => ({...d, tracks: true})));
+      .then(d => { if (!sig.aborted && Array.isArray(d) && d.length) setTracks(d); })
+      .finally(() => { if (!sig.aborted) setDataLoaded(d => ({...d, tracks: true})); }));
 
-    fetch('/api/players/history')
+    safe(fetch('/api/players/history', { signal: sig })
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setPastPlayers(d); })
-      .catch(() => {});
+      .then(d => { if (!sig.aborted && Array.isArray(d)) setPastPlayers(d); }));
 
     // Admin-only endpoint. Skipping it for non-admins prevents the 401
     // response from tripping the global "session expired" interceptor and
     // logging the user out a fraction of a second after they log in.
     if (user.role === 'admin') {
-      fetch('/api/panel/users')
+      safe(fetch('/api/panel/users', { signal: sig })
         .then(r => r.json())
-        .then(d => { if (Array.isArray(d)) setUsers(d); })
-        .catch(() => {});
+        .then(d => { if (!sig.aborted && Array.isArray(d)) setUsers(d); }));
     }
 
-    fetch('/api/panel/settings')
+    safe(fetch('/api/panel/settings', { signal: sig })
       .then(r => r.json())
-      .then(d => { if (d.lang && window.AppI18n) window.AppI18n.setLang(d.lang); })
-      .catch(() => {});
+      .then(d => { if (!sig.aborted && d.lang && window.AppI18n) window.AppI18n.setLang(d.lang); }));
+
+    return () => ctrl.abort();
   }, [!!user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll /api/metrics every 4s — only while authenticated

@@ -1,149 +1,559 @@
 Assetto Server Panel — License
 Copyright (c) 2026 Ayoze Torres Rodríguez ("ayozetr")
 
-This software is offered under a source-available, noncommercial license.
-By copying, modifying, deploying, or otherwise using the Software ("the
-Panel"), you accept the terms below. If you do not accept the terms, you
-must not use the Panel.
+All rights reserved except those expressly granted below.
+
+This License is a binding agreement between you (the "User", "Licensee", or
+"you") and the copyright holder (the "Licensor", "ayozetr", or "the author")
+governing the use of the software known as "Assetto Server Panel" (the
+"Software"). By downloading, installing, executing, modifying, or otherwise
+using the Software, you accept the terms of this License in their entirety.
+If you do not agree, you must not use the Software and you must delete any
+copies in your possession.
+
+This License is intentionally permissive about WHERE and BY WHOM the Software
+may be operated, and intentionally restrictive about REDISTRIBUTION and
+REMOVAL OF ATTRIBUTION. Read both sections carefully.
 
 
-1. NONCOMMERCIAL GRANT
+───────────────────────────────────────────────────────────────────────────────
+0. DEFINITIONS
+───────────────────────────────────────────────────────────────────────────────
 
-The author grants you a worldwide, royalty-free, non-exclusive,
-non-transferable license to:
+"Software" means the Assetto Server Panel source code, compiled output,
+documentation, configuration files, images, and any other files in this
+repository, including any Modified Version.
 
-  (a) run the Panel on your own systems for any Noncommercial purpose;
-  (b) copy and redistribute the Panel, in source or compiled form, for any
-      Noncommercial purpose;
-  (c) modify the Panel and distribute Modified Versions, provided you keep
-      this license and the copyright notice intact, clearly mark substantive
-      changes, and apply this same license to your distribution.
+"Modified Version" means any derivative work of the Software produced by
+editing, patching, translating, refactoring, reformatting, recompiling,
+or otherwise altering the Software in any way.
 
+"Operate" or "Run" means installing, executing, deploying, hosting, or
+otherwise making the Software functional on any computing system, whether
+personal, private, corporate, public, advertised, or commercial in nature.
 
-2. WHAT IS NONCOMMERCIAL
+"Distribute" or "Redistribution" means making the Software (in source or
+compiled form, in whole or in part, with or without modification) available
+to any third party by any means, including but not limited to: publishing
+to a public repository, posting on a website, packaging for a package
+manager, uploading to a file-sharing service, sending by email or messaging
+service, copying onto physical media for transfer, or making available
+through a service that allows third parties to download or copy the
+Software.
 
-"Noncommercial" means the Panel is not used for, or in support of,
-commercial advantage or monetary compensation, directly or indirectly. The
-following uses are Noncommercial:
+"Attribution Marks" means every credit, copyright notice, author name,
+project name, repository URL, badge, watermark, icon, signature, or other
+identifier referring to the author or to this project that appears in the
+Software, including but not limited to:
 
-  - Personal hobby use on a private machine.
-  - Use by individuals for private leagues, friend groups, or amateur
-    clubs that do not charge participation fees beyond shared hosting
-    costs.
-  - Educational and research use.
+  (a) the literal text "Developed by ayozetr" and any translated form
+      of it (e.g. "Desarrollado por ayozetr", "Sviluppato da ayozetr")
+      rendered in the panel's user interface;
+  (b) the project name "Assetto Server Panel" wherever it appears in the
+      user interface or in user-visible metadata;
+  (c) the link to https://github.com/ayozetr or to the official
+      repository wherever it appears;
+  (d) the copyright notice at the top of this License file;
+  (e) any "About", "Credits", "Powered by", or equivalent screen, dialog,
+      tooltip, or footer that references the author or the project;
+  (f) the contents of the LICENSE file itself.
 
-The following uses are NOT Noncommercial and require a separate, written
-commercial license from the author:
+"Third-Party Components" means software libraries, executables, assets,
+data, or services produced by parties other than the author and that the
+Software depends on, references, calls into, embeds, or otherwise uses.
 
-  - Operating game servers publicly advertised through commercial
-    directories (the Kunos public-server list, Content Manager featured
-    lobbies, comparable third-party listings) where the operation is part
-    of a paid product, paid event, paid league entry, or any context where
-    money flows in connection with the server.
-  - Use by a for-profit organization in the course of its business,
-    whether or not the organization charges its end-users.
-  - Bundling, embedding, hosting, or redistributing the Panel as part of
-    a paid service, a SaaS offering, or any product sold or licensed for
-    revenue.
-  - Use whose primary intent is to generate revenue (subscriptions,
-    advertising, sponsorships, paid access, donations actively solicited
-    as a funding model).
-
-To request a commercial license, contact:  ayozetr@proton.me
-
-
-3. ATTRIBUTION
-
-Every copy and every Modified Version you distribute must keep:
-
-  (a) this license text in a file named LICENSE at the repository root;
-  (b) the original copyright notice;
-  (c) a clearly visible reference to the upstream repository when
-      reasonably possible.
-
-The "Powered by ayozetr" credit rendered in the panel's sidebar footer
-may be removed only by users operating under Noncommercial terms; any
-other use must keep the credit unless the commercial license expressly
-authorizes its removal.
+"Affiliated Brands" has the meaning given in Section 5.
 
 
-4. NO PATENT GRANT
+───────────────────────────────────────────────────────────────────────────────
+1. GRANT OF USE
+───────────────────────────────────────────────────────────────────────────────
 
-This license does not grant any rights in patents. Any patent that would
-otherwise be infringed by use of the Panel must be licensed separately
-from its holder.
+Subject to your continued compliance with every term of this License, the
+author grants you a worldwide, royalty-free, non-exclusive, non-transferable,
+non-sublicensable, revocable license to:
+
+  (a) download a copy of the Software from the official repository at
+      https://github.com/ayozetr/assetto-dashboard ;
+  (b) Operate the Software on any computing system you control, for any
+      lawful purpose, including without limitation:
+
+        - personal hobby use on a private machine,
+        - private leagues, friend groups, or amateur clubs,
+        - educational and research use,
+        - public game servers, including servers advertised on the Kunos
+          public-server list, on Content Manager / acstuff lobbies, or on
+          comparable third-party listings,
+        - servers operated by for-profit organizations,
+        - servers operated as part of paid events, paid leagues, paid
+          tournaments, or any other context where money flows in
+          connection with the server's operation;
+
+  (c) make local modifications to the Software for the sole purpose of
+      operating it on systems you control (a "Local Modification"), provided
+      that Local Modifications are NOT Distributed and that the
+      Attribution Marks remain intact in any user-facing surface of the
+      Software (see Section 2).
+
+This grant explicitly extends to commercial use of the operated server,
+including charging participation fees, accepting donations, displaying
+advertising, or offering paid services through the server, so long as the
+operator is the User running the Software under this License and not a
+third party receiving the Software from the User.
+
+This grant does NOT include any right to Distribute the Software (see
+Section 3), to remove or alter the Attribution Marks (see Section 2), or to
+sublicense any of the rights granted herein.
 
 
-5. DISCLAIMER OF WARRANTY
+───────────────────────────────────────────────────────────────────────────────
+2. ATTRIBUTION MARKS — IRREVOCABLE OBLIGATION
+───────────────────────────────────────────────────────────────────────────────
 
-THE PANEL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND ABSENCE OF
-SECURITY DEFECTS.
+You MUST keep every Attribution Mark intact, visible, and unaltered in every
+copy of the Software you Operate. This obligation applies regardless of how
+you obtained the Software, regardless of how you Operate it, and regardless
+of whether your use would otherwise qualify as private, public, commercial,
+or noncommercial.
+
+Specifically, you may NOT:
+
+  (a) remove the "Developed by ayozetr" text (or its translated equivalents)
+      from the panel's user interface or hide it from view (whether by CSS,
+      JavaScript, theme override, browser extension targeted at users of
+      the operated server, build-time replacement, runtime patching, DOM
+      manipulation, or any other technical means);
+  (b) replace "ayozetr" with another name, alias, organization, logo, or
+      identifier;
+  (c) change the link target of the credit element to point anywhere other
+      than the author's official repository or profile;
+  (d) remove, alter, obscure, or relocate the project name "Assetto Server
+      Panel" so that the Software is presented to its users under a
+      different name, brand, or product identity;
+  (e) remove or alter the copyright notice at the top of this License file
+      or in any source file that bears one;
+  (f) ship the Software without this LICENSE file present alongside it;
+  (g) imply, suggest, or state that the author endorses, sponsors,
+      certifies, or is otherwise affiliated with you, your community, your
+      organization, your servers, your products, or your services.
+
+A re-skin, custom theme, white-label deployment, or "powered by"-style
+wrapper that visually hides or replaces the Attribution Marks is a
+material breach of this License and terminates your rights under Section
+10 automatically.
+
+If you reasonably believe that compliance with this Section is technically
+impossible in a given context, contact the author at the address in
+Section 14 BEFORE deploying.
+
+
+───────────────────────────────────────────────────────────────────────────────
+3. NO REDISTRIBUTION
+───────────────────────────────────────────────────────────────────────────────
+
+You may NOT Distribute the Software, in whole or in part, in source or
+compiled form, with or without modification, by any means, to any third
+party, for any reason. Specifically and without limitation, you may not:
+
+  (a) publish the Software (or any Modified Version) to a public or
+      private code repository other than the author's official repository;
+  (b) upload the Software (or any Modified Version) to a package registry
+      (npm, PyPI, Docker Hub, etc.) as your own package;
+  (c) bundle, embed, link, or include the Software (or any Modified
+      Version) inside another product that is itself Distributed, whether
+      that product is free or paid, open or closed, ad-supported or
+      donation-supported;
+  (d) host the Software (or any Modified Version) on a download site,
+      file-sharing service, or web page from which third parties may
+      retrieve it;
+  (e) hand the Software (or any Modified Version) to another individual
+      or organization by email, messaging, removable media, or any other
+      transfer mechanism;
+  (f) operate a service whose primary purpose is to provide third parties
+      with copies of the Software (or any Modified Version);
+  (g) post substantial excerpts of the Software's source code in public
+      forums, social media, video tutorials, blogs, or training datasets
+      in a manner that allows reconstruction of the Software (small
+      illustrative snippets for the purpose of bug reports, technical
+      discussion, or fair-use commentary are permitted, provided that any
+      such snippet is clearly attributed to this project and is not
+      represented as the snippet author's own work);
+  (h) train, fine-tune, distill, or otherwise build a machine-learning
+      model on the Software (or its outputs) in a manner that makes the
+      model, or the model's outputs, available to third parties as a
+      means of reproducing the Software or substantial portions of it.
+
+If you want others to use the Software, direct them to the official
+repository at https://github.com/ayozetr/assetto-dashboard so they can
+download their own copy under their own acceptance of this License.
+
+The author may, at the author's sole discretion, grant a written
+redistribution license for specific use cases. Contact the author at the
+address in Section 14 if you have such a need.
+
+
+───────────────────────────────────────────────────────────────────────────────
+4. LOCAL MODIFICATIONS
+───────────────────────────────────────────────────────────────────────────────
+
+You MAY make Local Modifications to the Software for the purpose of
+Operating it on systems you control. Local Modifications include:
+
+  - patching bugs you encounter,
+  - adjusting configuration values not exposed by .env or the panel UI,
+  - adding integrations with third-party services you use,
+  - translating the user interface into additional languages,
+  - styling adjustments that do NOT violate Section 2,
+  - performance tuning specific to your environment.
+
+If you want a change to land upstream, you have exactly three permitted
+channels:
+
+  (a) **open an issue** on the official repository describing the bug,
+      the request, or the proposal in detail;
+  (b) **open a pull request** against the official repository carrying
+      your change. By opening a pull request you grant the author an
+      irrevocable, royalty-free, worldwide license to incorporate your
+      contribution into the Software under this same License (or any
+      future License the author chooses for the Software). The author
+      may accept, modify, or decline the contribution at the author's
+      sole discretion;
+  (c) **contact the author directly** at the address in Section 14.
+
+You MUST NOT publish a fork of the Software, whether on GitHub,
+GitLab, Codeberg, Gitea, Bitbucket, SourceHut, a self-hosted Git
+service, or any other code-hosting platform. Forking — in the sense
+of creating a publicly visible copy of the repository under your own
+account or organization, even one whose only purpose is to host a
+proposed change — is Redistribution under Section 3 and is prohibited.
+Use a private fork (GitHub allows this, and other platforms have
+equivalents) or a local clone, push your branch there, and submit
+your pull request from the private location.
+
+You may use Local Modifications internally within an organization you
+control, provided that such internal use does not constitute
+Redistribution under Section 3 (i.e. the Software remains within the
+legal control of a single User and is not handed to legally distinct
+third parties).
+
+You may NOT use Local Modifications as a vehicle to evade Section 2 or
+Section 3. A modification whose purpose is to remove an Attribution Mark
+or to enable Redistribution is itself a breach of this License.
+
+
+───────────────────────────────────────────────────────────────────────────────
+5. NO ENDORSEMENT, NO AFFILIATION, NO TRADEMARK GRANT
+───────────────────────────────────────────────────────────────────────────────
+
+The author and the project name "Assetto Server Panel" are NOT affiliated
+with, endorsed by, certified by, sponsored by, partnered with, or in any
+official relationship to any of the parties listed below (collectively,
+the "Affiliated Brands"), nor to any of their subsidiaries, parents,
+affiliates, successors, assigns, or rights holders. The list is limited
+to entities that the Software actually interacts with, depends on, or
+whose assets ship bundled with the Software; it is not a general
+disclaimer against every possible third party.
+
+(a) Game, runtime, and distribution platform:
+
+  - Kunos Simulazioni S.r.l., developer of "Assetto Corsa" and of the
+    Assetto Corsa Dedicated Server (also distributed as "acServer"),
+    the official server binary with which the Software communicates.
+    The Software is an administrative interface that talks to the
+    Assetto Corsa Dedicated Server over its documented HTTP and UDP
+    plugin interfaces; the Software is not made by, on behalf of, or
+    in cooperation with Kunos Simulazioni, and is not part of the
+    Assetto Corsa product.
+  - 505 Games S.p.A., publisher of "Assetto Corsa".
+  - Valve Corporation, operator of the Steam platform on which
+    "Assetto Corsa" is distributed and through whose lobby system
+    public servers operated by Users of the Software may be discovered
+    by players.
+
+(b) Community projects and tools the Software may interoperate with:
+
+  - The community projects and websites commonly known as "Content
+    Manager", "acstuff", and "acstuff.club", which are produced by
+    third-party authors and operated independently from this project.
+    The Software produces server-configuration files (server_cfg.ini,
+    entry_list.ini) that Content Manager and the acstuff lobby read in
+    their documented format; that interoperability does not constitute
+    an affiliation.
+
+(c) Notification and integration services the Software may call out to:
+
+  - Discord Inc., whose webhook endpoints the Software may POST to
+    when an operator configures a record-notification webhook.
+  - Cloudflare, Inc., whose tunneling and reverse-proxy services the
+    Software's documentation recommends as a way to expose the panel
+    to the internet without opening firewall ports, and whose
+    "CF-Connecting-IP" header the Software honours when an operator
+    sets TRUST_PROXY=1 in the environment.
+
+(d) Open-source runtimes and libraries the Software depends on:
+
+  - The OpenJS Foundation (Node.js runtime).
+  - Meta Platforms Inc., maintainers of React (loaded at runtime from
+    the unpkg CDN with Subresource Integrity hashes pinned in
+    index.html).
+  - The maintainers of each Third-Party Component listed in Section 6.
+
+(e) Manufacturers and rights holders whose imagery may appear in the
+Software's bundled "Kunos catalogue" assets (src/assets/kunos):
+
+  The Software ships a copy of the Kunos catalogue thumbnails and UI
+  JSON metadata that correspond to vehicles included with the base
+  Assetto Corsa game and its Kunos-produced DLC packs. Those assets
+  retain their original copyrights and trademarks, which belong to the
+  vehicle manufacturers and to Kunos Simulazioni. The Software's only
+  role is to surface those thumbnails in the panel's UI as visual
+  references for an operator configuring a session. No endorsement,
+  partnership, or commercial relationship between the author and any
+  of the following manufacturers is implied or exists:
+
+    Abarth · Alfa Romeo · Audi · BMW · Chevrolet · Ferrari · Ford ·
+    Glickenhaus · KTM · Lamborghini · Lotus · Maserati · Mazda ·
+    McLaren · Mercedes-Benz · Nissan · Pagani · Pininfarina ·
+    Porsche · Praga · RUF · Shelby · Tatuus · Toyota.
+
+  This list reflects the manufacturers represented in the bundled
+  Kunos catalogue as of the publication date of this License. The
+  same disclaimer extends to any racetrack, sponsor, livery, badge,
+  championship, or other branded element appearing alongside those
+  vehicles in the bundled assets.
+
+All trademarks, service marks, trade names, product names, logos, and
+brand designs that appear in the Software or in its documentation are
+the property of their respective owners. Nothing in this License grants
+you any right, title, or interest in any such trademark or other
+intellectual property of any third party. The author claims no rights
+in any such mark and uses them only to the extent necessary to refer
+to the corresponding goods or services nominatively (i.e. by name).
+
+No statement in the Software, its documentation, or its user interface
+may be construed as an endorsement, certification, partnership, or
+official relationship between the author and any Affiliated Brand. If
+any such impression arises from the use of bundled assets (such as
+Kunos badges or livery previews that ship in src/assets/kunos for the
+purpose of providing a richer panel UI), that impression is
+unintentional, is disclaimed by this Section, and does not constitute
+or imply any agreement with the rights holder of those assets.
+
+You agree that you, as the User Operating the Software, are solely
+responsible for ensuring that any third-party content you upload,
+configure, or otherwise handle via the Software (mod cars, mod tracks,
+custom skins, replays, user-uploaded media, server names referring to
+real-world brands, etc.) is licensed appropriately for the use you
+make of it. The author makes no representation about the licensing
+status of third-party mod content and accepts no responsibility for
+your use of it.
+
+
+───────────────────────────────────────────────────────────────────────────────
+6. THIRD-PARTY COMPONENTS
+───────────────────────────────────────────────────────────────────────────────
+
+The Software depends on Third-Party Components that are licensed under
+their own respective terms. Such components include without limitation
+Node.js, React, better-sqlite3, node-stream-zip, node-unrar-js, node-7z,
+7zip-bin, dotenv, esbuild, and any further library, executable, asset,
+or service the Software references or invokes at runtime.
+
+Nothing in this License grants you any right in any Third-Party
+Component. You are responsible for complying with the licenses of every
+Third-Party Component that you receive, use, or distribute alongside the
+Software. The author makes no warranty about Third-Party Components and
+accepts no liability for issues arising from them.
+
+The Assetto Corsa dedicated server binary ("acServer") is a product of
+Kunos Simulazioni S.r.l. and is governed by the End User License Agreement
+and other terms imposed by Kunos. The Software interacts with acServer
+through documented HTTP and UDP interfaces; this License does not extend
+to acServer, does not grant you any right in acServer, and does not
+relieve you of any obligation you may owe to Kunos for your use of
+acServer.
+
+
+───────────────────────────────────────────────────────────────────────────────
+7. NO WARRANTY
+───────────────────────────────────────────────────────────────────────────────
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY
+OF ANY KIND, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+NON-INFRINGEMENT, ACCURACY, COMPLETENESS, TITLE, QUIET ENJOYMENT, AND
+ABSENCE OF SECURITY DEFECTS OR ERRORS.
 
 At the time of each tagged release, the author makes a good-faith effort
 to ensure that no security vulnerabilities are knowingly present in the
 published code. The author makes NO ONGOING WARRANTY about:
 
   - vulnerabilities discovered after a release is published;
-  - the security of any specific deployment, network, or operating
-    system on which the Panel is installed;
-  - the suitability of the Panel for any particular environment or
-    workload.
+  - the security of any specific deployment, network, operating
+    system, container runtime, cloud provider, reverse proxy, or
+    tunneling service on or behind which the Software is installed;
+  - the suitability of the Software for any particular environment,
+    workload, regulatory regime, or compliance standard;
+  - the continued availability of the official repository, the
+    npm registry, any package, any Third-Party Component, or any
+    online service the Software may interact with;
+  - the absence of bugs, data loss, downtime, or other operational
+    failures.
 
-Users are solely responsible for keeping their installations up to date,
-for the security of the systems on which the Panel runs, and for the
-data the Panel handles on their behalf.
+You are solely responsible for keeping your installations up to date,
+for the security of the systems on which the Software runs, for the
+data the Software handles on your behalf, for backups, for monitoring,
+and for any regulatory compliance obligations applicable to your use.
 
 
-6. LIMITATION OF LIABILITY
+───────────────────────────────────────────────────────────────────────────────
+8. LIMITATION OF LIABILITY
+───────────────────────────────────────────────────────────────────────────────
 
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL THE
-AUTHOR BE LIABLE TO YOU FOR ANY DAMAGES — INCLUDING WITHOUT LIMITATION
-DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR EXEMPLARY
-DAMAGES, LOSS OF DATA, LOSS OF REVENUE, BUSINESS INTERRUPTION, OR
-DAMAGE TO REPUTATION — ARISING FROM OR RELATED TO YOUR USE OF, OR
-INABILITY TO USE, THE PANEL, EVEN IF THE AUTHOR HAS BEEN ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGES, AND REGARDLESS OF THE LEGAL THEORY ON WHICH
-THE CLAIM IS BASED.
+AUTHOR BE LIABLE TO YOU OR TO ANY THIRD PARTY FOR ANY DAMAGES — INCLUDING
+WITHOUT LIMITATION DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL,
+EXEMPLARY, PUNITIVE, OR AGGRAVATED DAMAGES, LOSS OF DATA, LOSS OF
+REVENUE, LOSS OF PROFITS, LOSS OF GOODWILL, BUSINESS INTERRUPTION,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES, OR DAMAGE TO REPUTATION —
+ARISING FROM OR RELATED TO YOUR USE OF, INABILITY TO USE, OR RELIANCE
+ON THE SOFTWARE, EVEN IF THE AUTHOR HAS BEEN ADVISED OF THE POSSIBILITY
+OF SUCH DAMAGES, AND REGARDLESS OF THE LEGAL THEORY ON WHICH THE CLAIM
+IS BASED (CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, OR OTHERWISE).
+
+If, notwithstanding the foregoing, the author is found liable to you,
+the author's total cumulative liability for any and all claims arising
+from this License or from your use of the Software shall not exceed
+the total amount you have paid the author for the Software in the
+twelve months preceding the event giving rise to liability, which, for
+clarity, is in most cases zero euros (€0).
+
+Some jurisdictions do not allow the exclusion of certain warranties or
+the limitation of certain damages. In such jurisdictions the author's
+liability shall be limited to the smallest extent permitted by
+applicable law.
 
 
-7. THIRD-PARTY COMPONENTS
+───────────────────────────────────────────────────────────────────────────────
+9. NO PATENT GRANT
+───────────────────────────────────────────────────────────────────────────────
 
-The Panel depends on third-party libraries (React, Babel, better-sqlite3,
-node-stream-zip, node-unrar-js, node-7z, 7zip-bin, dotenv, esbuild) and
-calls into the Assetto Corsa dedicated server. These components are
-governed by their own licenses; this license does not grant any rights
-to them. The author makes no warranty about the third-party components
-and is not liable for issues originating in them.
-
-
-8. TERMINATION
-
-This license terminates automatically if you fail to comply with any of
-its terms. Upon termination you must cease all use of the Panel and
-destroy or remove all copies. Clauses 5 (Disclaimer of Warranty), 6
-(Limitation of Liability), and 7 (Third-Party Components) survive
-termination.
+This License does not grant you any rights in patents, whether owned
+by the author or by any third party. If your use of the Software would
+infringe any patent, you must obtain a separate patent license from the
+patent holder. If you bring a patent infringement action against the
+author or against another User of the Software alleging that the
+Software infringes a patent, your rights under this License terminate
+automatically as of the date you file the action.
 
 
-9. NO ENDORSEMENT
+───────────────────────────────────────────────────────────────────────────────
+10. TERMINATION
+───────────────────────────────────────────────────────────────────────────────
 
-The author and the name "ayozetr" are not affiliated with or endorsed
-by Kunos Simulazioni, Assetto Corsa, or any related rights holder.
+This License terminates automatically and immediately, without notice
+and without action by the author, if you breach any term of it. In
+particular, removal or alteration of any Attribution Mark (Section 2),
+Distribution of the Software (Section 3), filing of a patent action
+(Section 9), or attempting to sublicense any of the granted rights are
+each material breaches that terminate this License the moment they
+occur.
+
+Upon termination you must (a) cease all use of the Software
+immediately, (b) destroy or permanently remove every copy of the
+Software in your possession or control, including Local Modifications,
+Modified Versions, container images, build artefacts, and backups
+containing the Software, and (c) provide written confirmation of
+deletion to the author within thirty (30) days of termination upon the
+author's request.
+
+The author may reinstate your rights under this License at the author's
+sole discretion and only if you have cured the breach to the author's
+reasonable satisfaction.
+
+Sections 5 (No Endorsement, No Affiliation, No Trademark Grant), 6
+(Third-Party Components), 7 (No Warranty), 8 (Limitation of Liability),
+9 (No Patent Grant), 11 (Severability), 12 (Entire Agreement), and 13
+(Governing Law and Jurisdiction) survive termination indefinitely.
 
 
-10. GOVERNING LAW
+───────────────────────────────────────────────────────────────────────────────
+11. SEVERABILITY
+───────────────────────────────────────────────────────────────────────────────
 
-This license is governed by the laws of Spain, without regard to its
-conflict-of-laws provisions. Any dispute arising under or in connection
-with this license is subject to the exclusive jurisdiction of the
-competent courts of Spain.
+If any provision of this License is held invalid, illegal, or
+unenforceable by a court of competent jurisdiction, that provision
+shall be modified to the minimum extent necessary to make it valid,
+legal, and enforceable; or, if such modification is not possible, the
+provision shall be severed from this License. The remaining provisions
+shall continue in full force and effect, and the parties' intent under
+this License shall be preserved to the greatest extent possible.
+
+The waiver of any breach of this License does not waive any subsequent
+breach, whether of the same provision or otherwise. The failure of the
+author to enforce any right under this License does not waive that
+right.
 
 
-CONTACT
+───────────────────────────────────────────────────────────────────────────────
+12. ENTIRE AGREEMENT; ASSIGNMENT; AMENDMENT
+───────────────────────────────────────────────────────────────────────────────
 
-Commercial licensing requests, security disclosures, and any other
-questions regarding this license:
+This License constitutes the entire agreement between you and the
+author regarding the Software and supersedes any prior agreement,
+understanding, or communication, whether oral or written, on the
+subject. No representation, warranty, or undertaking outside this
+License binds the author.
+
+You may not assign, sublicense, transfer, or delegate this License or
+any of the rights or obligations under it, in whole or in part,
+without the prior written consent of the author. Any attempted
+assignment without such consent is void. The author may assign this
+License or any rights under it freely.
+
+The author may modify this License for future releases of the
+Software at any time. Such modifications apply only to the version of
+the Software they accompany; your rights with respect to a specific
+version are governed by the version of the License distributed with
+that version. Continuing to use a newer version after a modification
+to the License indicates your acceptance of the modified terms.
+
+
+───────────────────────────────────────────────────────────────────────────────
+13. GOVERNING LAW AND JURISDICTION
+───────────────────────────────────────────────────────────────────────────────
+
+This License is governed by the laws of the Kingdom of Spain, without
+regard to its conflict-of-laws provisions and without regard to the
+United Nations Convention on Contracts for the International Sale of
+Goods, which is expressly excluded.
+
+Any dispute, controversy, or claim arising out of or relating to this
+License, including its formation, validity, performance, breach, or
+termination, shall be submitted to the exclusive jurisdiction of the
+competent courts of Santa Cruz de Tenerife, Canary Islands, Spain.
+You waive any objection to personal jurisdiction or venue in those
+courts.
+
+You agree that nothing in this License creates any agency, partnership,
+joint venture, employment, or fiduciary relationship between you and
+the author.
+
+
+───────────────────────────────────────────────────────────────────────────────
+14. CONTACT
+───────────────────────────────────────────────────────────────────────────────
+
+Questions about this License, requests for a redistribution license,
+trademark inquiries, security disclosures (see SECURITY.md for the
+preferred channel), and any other communication regarding the Software:
 
   ayozetr@proton.me
+
+The author may, but is not obligated to, respond to any communication.
+Acknowledgement of receipt is not a waiver of any right under this
+License and does not constitute consent to any action requested.
+
+
+───────────────────────────────────────────────────────────────────────────────
+END OF LICENSE

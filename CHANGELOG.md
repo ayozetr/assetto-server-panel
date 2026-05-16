@@ -10,6 +10,111 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-05-16
+
+Operator-driven release: portability + supply-chain hardening + a major
+LICENSE rewrite to the new "use-anywhere, no-redistribution, irremovable
+attribution" model. No breaking API or data-format changes; the LICENSE
+shift is a relaxation of operator constraints (any use, including public
++ commercial servers, is now permitted) coupled with a tightening of
+redistribution and attribution requirements.
+
+### License
+
+- **Use grant broadened to "anywhere lawful, including commercial".**
+  Public game servers (Kunos lobby, Content Manager / acstuff
+  listings), paid leagues, sponsorships, for-profit organizations — all
+  now permitted without a separate written agreement, provided the
+  Attribution Marks remain intact and the Software itself is not
+  Distributed.
+- **Redistribution prohibited.** No republishing the source, no
+  uploading to package registries, no bundling into another product
+  for distribution, no hand-offs to third parties. Point users at the
+  official repository so they accept their own copy of the LICENSE.
+- **Attribution Marks are irremovable.** The "Developed by ayozetr"
+  credit, the project name "Assetto Server Panel", the link to the
+  official repository, and every copyright/about/credits reference
+  must stay intact in every operated copy, including commercial
+  deployments. Re-skins, white-label deployments, and themes that
+  hide or replace the marks are explicit breaches.
+- **Affiliation disclaimer expanded.** Kunos Simulazioni, Valve, 505
+  Games, the Content Manager / acstuff community, AssettoServer / CSP /
+  Pure, Discord / Slack / Telegram, Cloudflare, every major car and
+  track brand whose imagery may appear via bundled Kunos previews —
+  the LICENSE now enumerates each as not affiliated, not endorsed, not
+  sponsored, not partnered. All trademarks remain the property of
+  their respective owners.
+- **Disclaimers strengthened.** No warranty, limitation of liability,
+  no patent grant, automatic termination on breach, severability, and
+  governing law (Spain — courts of Santa Cruz de Tenerife) all
+  reformulated against current best practice. [`<this release>`]
+
+### Portability
+
+- **Dockerfile + docker-compose.yml.** Multi-stage build with
+  non-root user, cap_drop ALL, healthcheck wired to /api/health,
+  bind-mounts of the host's AC_CFG_DIR + AC_CONTENT_DIR, persistent
+  named volumes for the DB and logs. `docker compose up -d` is now
+  the smallest-possible install path. [`d331599`]
+- **AC path auto-detect.** Server walks the conventional install
+  layouts (~/ac_server, /srv/assetto, /opt/ac_server, /srv/acserver)
+  and falls back to subdirs of the detected root for every AC_* env
+  var that isn't explicitly set. Operators with a typical install
+  layout only need the four core paths. [`d331599`]
+- **`/api/setup/status` + Login banner.** Public endpoint exposes the
+  ✓/✗ state of each AC path. The login screen reads it before any
+  authentication and renders an actionable banner pointing operators
+  at the specific path that's missing. [`d331599`]
+- **`npm run setup` first-run wizard.** Detects an existing acServer
+  install, suggests defaults from the detected layout, asks six
+  questions, writes a minimal .env. Refuses to overwrite an existing
+  .env unless --force. [`d331599`]
+- **Scheduled DB backups.** Opt-in via BACKUP_INTERVAL_HOURS /
+  BACKUP_KEEP / BACKUP_DIR. VACUUM INTO snapshots with rotation,
+  surfaced via /api/admin/stats + Prometheus exporter. [`d331599`]
+- **Boot config summary.** Server prints a one-shot AC paths block
+  on startup with ✓/✗ next to each path, plus the panel version on
+  the banner. Operator can verify auto-detection without grepping the
+  source. [`d331599`]
+- **`.env.example` rewritten** with HOST=127.0.0.1 as the safe
+  default, a clear "minimum required" vs "optional" split, and every
+  derivable path commented out. New TRUST_PROXY_FROM knob for
+  operators behind proxies other than Cloudflare. [`d331599`]
+
+### Database
+
+- **Numbered migrations runner.** `schema_migrations` table records
+  every applied change; the old ALTER+catch-and-pray block is
+  replaced with a real list of `{id, name, sql}` migrations.
+  Pre-existing DBs auto-record the migrations they already have
+  thanks to the `duplicate column / already exists` catch — no
+  upgrade-in-place breakage. Two new migrations (compound audit_log
+  indices on actor and action) ship as part of this release.
+  [`2357a3b`]
+
+### Tests + supply chain
+
+- **`npm test` smoke runner.** First test runner the project has
+  ever shipped. Boots a real panel against a throwaway DB and fake
+  AC paths in /tmp, hits the most regression-prone surfaces (auth,
+  must_change_password gate, CSRF, rate limit, INI render guard) via
+  real HTTP. 12 assertions in ~400 ms. [`8f297c3`]
+- **`npm run audit:deps` supply-chain scanner.** Walks the lockfile
+  against a hand-curated list of known-compromised package versions
+  from past incidents (chalk/debug Sep 2025, Shai-Hulud Jul 2025,
+  rxnt-* May 2024), runs `npm audit --audit-level=moderate`, and
+  re-fetches each top-level dep's integrity hash from
+  registry.npmjs.org for a parity check. The scanner confirmed the
+  current tree is clean (debug@4.4.3 verified as the post-incident
+  patched release). [`cbd9b5c`]
+- **SECURITY.md + docs/deployment.md supply-chain sections.**
+  Documents the npm ci policy, the safe-update procedure (diff
+  lockfile → audit:deps → npm ci → optional --ignore-scripts →
+  npm test → restart + watch journal), and why postinstall scripts
+  are not used in this project. [`cbd9b5c`]
+- **better-sqlite3 bumped** 12.9.0 → 12.10.0 (semver minor, audit
+  clean). [`1605efc`]
+
 ## [1.1.0] — 2026-05-16
 
 This release closes the entire CRITICAL backlog and ~30 HIGH-severity findings

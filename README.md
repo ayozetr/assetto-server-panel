@@ -6,7 +6,7 @@
   ![Node.js](https://img.shields.io/badge/Node.js-20.20.2-339933?logo=node.js&logoColor=white)
   ![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white)
   ![Build](https://img.shields.io/badge/build-esbuild-FFCF00?logo=esbuild)
-  ![License](https://img.shields.io/badge/license-Noncommercial-orange)
+  ![License](https://img.shields.io/badge/license-Source--Available-orange)
 </div>
 
 ---
@@ -159,18 +159,20 @@ What the panel does **not** defend against:
 
 ## License
 
-Source-available, **noncommercial**. The full text is in [`LICENSE`](LICENSE).
+Source-available. The full text — which is what binds you, not this summary — is in [`LICENSE`](LICENSE). Read it before deploying.
 
-Short version:
+Short version (informative, not legally operative — only the LICENSE file is):
 
-- **Free for personal, hobby, friend-group, private-league, and educational use.**
-- **Commercial use is prohibited without a separate written agreement.**
-  Commercial means: running the panel on game servers advertised through commercial directories (the Kunos public-server list, Content Manager featured lobbies, etc.) where money flows in connection with the server; for-profit business use; bundling into a paid product or SaaS; revenue-driven deployments (subscriptions, ads, paid access).
-- **You may modify and redistribute** for noncommercial purposes, keeping this license, the copyright notice, and a reference to the upstream repository intact.
-- The Panel is provided **AS IS**, without warranty. The author makes a good-faith effort that each tagged release is free of *known* vulnerabilities at the time of publication, but assumes no liability for vulnerabilities discovered later or for any damages arising from use of the Panel. See `LICENSE` sections 5 and 6 for the full disclaimer.
+- **Free to download and run anywhere, for anything lawful.** Personal hobby use, private leagues, friend groups, amateur clubs, educational and research use are all fine. So is operating the panel for **public servers**, including servers advertised on the Kunos public-server list / Content Manager lobbies, **including commercial use** (paid leagues, sponsorships, ads, donations, for-profit organizations). You don't need a separate agreement to charge for participation or run a paid event on top of a server the panel manages.
 
-For a commercial license, security disclosure, or any other licensing question, contact: **`ayozetr@proton.me`**
+- **No redistribution.** You may not republish the source code, fork it to a public repository as your own, upload it to a package registry, bundle it into another product, host it as a service for third parties to download, or otherwise hand copies to other people. If someone wants to use the panel, point them at the official repository — they can clone it themselves under their own acceptance of the LICENSE.
 
-The author and the project are **not affiliated with or endorsed by Kunos Simulazioni** or any related rights holder.
+- **Attribution Marks are irremovable.** The "Developed by ayozetr" credit in the sidebar, the project name "Assetto Server Panel", the link to the official repository, the copyright notice, and every other identifier referring to the author or the project **must stay intact** in every copy you operate. This applies even to commercial deployments. A re-skin, white-label, or theme that hides the marks is a breach and terminates your rights automatically.
 
-For responsible disclosure of security issues, see [`SECURITY.md`](SECURITY.md).
+- **Local modifications are allowed.** Patch bugs, translate, add integrations, restyle (without touching the Attribution Marks) — keep them for yourself. You may submit them upstream via pull request; you may not publish them as your own fork.
+
+- **No affiliation with anyone.** Not Kunos Simulazioni, not Valve, not 505 Games, not the Content Manager / acstuff projects, not any car / track manufacturer whose brand appears in bundled assets. The LICENSE has a long disclaimer section spelling this out.
+
+- **No warranty, no liability.** "AS IS". Each tagged release is published with good-faith effort against known vulnerabilities at the time of publication, but the author makes no ongoing warranty and accepts no liability for damages, data loss, or downtime. See LICENSE sections 7 and 8.
+
+For licensing questions, redistribution requests, or anything else: **`ayozetr@proton.me`**. For security disclosure see [`SECURITY.md`](SECURITY.md).

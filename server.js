@@ -409,6 +409,16 @@ function hashPasswordPbkdf2(password, salt) {
 function hashPassword(password, salt) {
   return hashPasswordScrypt(password, salt);
 }
+
+// Pre-computed dummy hash used by apiAuthLogin when the username is unknown.
+// Without this the login path returns ~immediately for non-existent users but
+// spends ~50ms in scryptSync for real users — a measurable timing oracle that
+// lets an attacker enumerate valid usernames. By running verifyPassword against
+// this dummy in the not-found branch, both paths perform exactly one scrypt.
+// Computed once at module load with a fixed salt — never used to authenticate.
+const _DUMMY_LOGIN_SALT = 'a'.repeat(64);
+const _DUMMY_LOGIN_HASH = hashPasswordScrypt('not-a-real-password-do-not-use', _DUMMY_LOGIN_SALT);
+
 function verifyPassword(password, salt, stored) {
   if (typeof stored !== 'string' || !stored) return false;
   try {
@@ -838,6 +848,20 @@ function getDiscordWebhook() {
   } catch { return ''; }
 }
 
+// Discord webhook hosts — the only acceptable destinations for postDiscordMessage
+// and apiDiscordWebhookTest. Defense in depth on top of isValidDiscordWebhook's
+// regex: the regex validates the string shape, but `new URL(...)` could in
+// principle yield a hostname that differs (IDN normalisation, unicode tricks,
+// future regex relaxation). Comparing parsed.hostname against this Set is the
+// authoritative gate — anything else and we refuse to make the HTTPS request,
+// closing the SSRF window for good.
+const DISCORD_WEBHOOK_HOSTS = new Set([
+  'discord.com',
+  'discordapp.com',
+  'canary.discord.com',
+  'ptb.discord.com',
+]);
+
 // Fire-and-forget POST to the Discord webhook. Times out after 5s so a Discord
 // outage cannot stall the UDP handler. Errors are logged at warn level only —
 // missing a notification is never worth crashing the server for.
@@ -846,6 +870,10 @@ function postDiscordMessage(content) {
   if (!url) return;
   let parsed;
   try { parsed = new URL(url); } catch { return; }
+  if (!DISCORD_WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase())) {
+    log.warn(`[discord] refusing webhook with non-Discord hostname: ${parsed.hostname}`);
+    return;
+  }
   const payload = JSON.stringify({ content });
   const req = https.request({
     method: 'POST',
@@ -1245,23 +1273,43 @@ function getCPU() {
   });
 }
 
-let cachedPublicIp = null;
+// Public IP discovery. Hits api.ipify.org once and caches with a TTL so a
+// transient bad response (DNS hijack, MITM, or ipify simply going wrong for a
+// second) does not get pinned in memory forever. Validates that the body looks
+// like an IPv4/IPv6 address before accepting — otherwise a malicious upstream
+// could return arbitrary HTML and we'd surface it to every /api/metrics caller.
+// Override entirely with PUBLIC_IP=1.2.3.4 in .env when behind NAT/CGNAT.
+let _publicIpCache = { value: null, fetchedAt: 0 };
+const PUBLIC_IP_TTL_MS = 60 * 60 * 1000; // 1h — long enough to spare ipify, short enough to recover from a bad result
+function _looksLikeIp(s) {
+  if (typeof s !== 'string' || !s) return false;
+  if (s.length > 45) return false; // longest valid IPv6 textual form
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(s) || /^[0-9a-fA-F:]+$/.test(s);
+}
 async function getPublicIp() {
   if (process.env.PUBLIC_IP) return process.env.PUBLIC_IP;
-  if (cachedPublicIp) return cachedPublicIp;
+  const now = Date.now();
+  if (_publicIpCache.value && now - _publicIpCache.fetchedAt < PUBLIC_IP_TTL_MS) {
+    return _publicIpCache.value;
+  }
   try {
     const res = await new Promise((resolve, reject) => {
       const req = require('https').get('https://api.ipify.org', r => {
         if (r.statusCode !== 200) { r.destroy(); return resolve(null); }
         let d = '';
-        r.on('data', chunk => d += chunk);
+        // Cap at 64 bytes — a real IP is at most 45 chars; anything bigger is
+        // garbage and we don't want to buffer megabytes from a hostile upstream.
+        r.on('data', chunk => { if (d.length < 64) d += chunk.toString().slice(0, 64 - d.length); });
         r.on('end', () => resolve(d.trim()));
       });
       req.on('error', reject);
       req.setTimeout(2000, () => { req.destroy(); resolve(null); });
     });
-    if (res) cachedPublicIp = res;
-    return res || getNetworkIP();
+    if (_looksLikeIp(res)) {
+      _publicIpCache = { value: res, fetchedAt: now };
+      return res;
+    }
+    return getNetworkIP();
   } catch {
     return getNetworkIP();
   }
@@ -3418,7 +3466,14 @@ async function apiAuthLogin(req, res) {
     if (!db) return json(res, 503, { error: 'Database unavailable' });
 
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
-    if (!user) return json(res, 401, { error: 'Invalid username or password' });
+    if (!user) {
+      // Run verifyPassword against the dummy hash so the no-user branch costs
+      // the same wall-clock time as the bad-password branch. Without this, an
+      // attacker can enumerate valid usernames by measuring response time —
+      // ~50ms for real users (scrypt) vs <1ms for unknowns.
+      verifyPassword(password, _DUMMY_LOGIN_SALT, _DUMMY_LOGIN_HASH);
+      return json(res, 401, { error: 'Invalid username or password' });
+    }
 
     if (!verifyPassword(password, user.salt, user.password_hash))
       return json(res, 401, { error: 'Invalid username or password' });
@@ -3498,6 +3553,16 @@ async function apiAuthChangePassword(req, res) {
     db.prepare('UPDATE panel_users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE username = ?')
       .run(hashPassword(newPassword, newSalt), newSalt, username);
 
+    // Purge every existing session for this user — including the one that just
+    // changed the password — and mint a fresh one for the active request. If
+    // the request that reached this endpoint was actually an attacker on a
+    // stolen cookie, the legitimate user's password change now invalidates
+    // every device that had cached state, not just future ones. Then refresh
+    // the response cookie so the legitimate browser stays logged in.
+    try { db.prepare('DELETE FROM sessions WHERE username = ?').run(username); } catch {}
+    const newToken = createSession(username, user.role);
+    res.setHeader('Set-Cookie', sessionCookieHeader(newToken, requestIsHttps(req)));
+
     _clearLoginAttempt(ip);
     insertAuditLog(username, 'user.update', username, 'self password change');
     json(res, 200, { ok: true });
@@ -3562,6 +3627,14 @@ async function apiPanelUserUpdate(req, res, username) {
         if (adminCount <= 1) return json(res, 400, { error: 'Cannot demote the last admin' });
       }
       db.prepare('UPDATE panel_users SET role = ? WHERE username = ?').run(body.role, username);
+      // Sessions cache the role at login time (see createSession), so a live
+      // session for this user would keep the old role until it expires. Wipe
+      // every session so the new role takes effect on the next request — both
+      // demotions (admin → user must lose admin instantly) and promotions
+      // (user → admin should reload permissions) need the bounce.
+      if (body.role !== user.role) {
+        try { db.prepare('DELETE FROM sessions WHERE username = ?').run(username); } catch {}
+      }
       changes.push(`role=${body.role}`);
     }
     if (body.password) {
@@ -3703,7 +3776,18 @@ async function apiDiscordWebhookTest(req, res) {
 
     let parsed;
     try { parsed = new URL(url); } catch { return json(res, 400, { error: 'Invalid Discord webhook URL' }); }
+    // Authoritative SSRF gate — even if isValidDiscordWebhook's regex were to
+    // accept a unicode-trick URL (or a future regex relaxation lets something
+    // through), the resolved hostname must literally be on the Discord list.
+    if (!DISCORD_WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase())) {
+      return json(res, 400, { error: 'Invalid Discord webhook URL' });
+    }
 
+    // Cap how much of Discord's response body we buffer. The previous code
+    // sliced each chunk to 512 bytes but appended to `buf` without limit, so a
+    // pathological server returning many tiny chunks could grow `buf`
+    // unbounded. Limit `buf` total length at 1 KB — plenty for an error message.
+    const BUF_CAP = 1024;
     await new Promise((resolve) => {
       const r = https.request({
         method: 'POST',
@@ -3717,7 +3801,9 @@ async function apiDiscordWebhookTest(req, res) {
         timeout: 5000,
       }, (resp) => {
         let buf = '';
-        resp.on('data', (c) => { buf += c.toString().slice(0, 512); });
+        resp.on('data', (c) => {
+          if (buf.length < BUF_CAP) buf += c.toString().slice(0, BUF_CAP - buf.length);
+        });
         resp.on('end', () => {
           if (resp.statusCode < 400) {
             json(res, 200, { ok: true });
@@ -4860,9 +4946,10 @@ setInterval(cleanupOldChunks, 60 * 60 * 1000); // sweep abandoned chunk dirs eve
 // Sweeper status counters surfaced via /api/admin/stats so ops can see whether
 // the background tasks are firing in prod without grepping logs.
 const _sweeperState = {
-  audit:  { lastRunAt: null, lastRemoved: 0 },
-  login:  { lastRunAt: null, lastRemoved: 0 },
-  chunks: { lastRunAt: null, lastRemoved: 0 },
+  audit:    { lastRunAt: null, lastRemoved: 0 },
+  login:    { lastRunAt: null, lastRemoved: 0 },
+  chunks:   { lastRunAt: null, lastRemoved: 0 },
+  sessions: { lastRunAt: null, lastRemoved: 0 },
 };
 
 // Audit log retention: keep entries for AUDIT_RETENTION_DAYS (env, default 365),
@@ -4891,6 +4978,21 @@ function sweepLoginAttempts() {
 }
 sweepLoginAttempts();
 setInterval(sweepLoginAttempts, 30 * 60 * 1000);
+
+// Drop expired sessions every hour. createSession opportunistically clears
+// expired rows when minting a new token, but if the panel has zero logins
+// for weeks the table grows unbounded. getSession already filters by
+// `expires_at > ?` at read time, so this is for table hygiene rather than
+// correctness — keeps /api/admin/stats honest and the rows count tiny.
+function sweepExpiredSessions() {
+  if (!db) return;
+  try {
+    const r = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+    _sweeperState.sessions = { lastRunAt: Date.now(), lastRemoved: r.changes };
+  } catch {}
+}
+sweepExpiredSessions();
+setInterval(sweepExpiredSessions, 60 * 60 * 1000);
 
 const server = http.createServer((req, res) => {
   // Honour an upstream X-Request-Id (e.g. from Cloudflare) to keep correlation

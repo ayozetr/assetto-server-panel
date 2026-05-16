@@ -6,19 +6,24 @@
   "license": "SEE LICENSE IN LICENSE",
   "author": "Ayoze Torres Rodríguez <ayozetr@proton.me>",
   "homepage": "https://github.com/ayozetr/assetto-dashboard",
-  "repository": { "type": "git", "url": "https://github.com/ayozetr/assetto-dashboard.git" },
-  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayozetr/assetto-dashboard.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "setup":    "node tools/setup.js",
-    "build":    "node build.js",
+    "setup": "node tools/setup.js",
+    "build": "node build.js",
     "prestart": "node build.js",
-    "start":    "node server.js",
-    "dev":      "node server.js",
-    "test":     "node tools/test-smoke.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node tools/test-smoke.js"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^12.10.0",
     "dotenv": "^16.4.5",
     "node-7z": "^3.0.0",
     "node-stream-zip": "^1.15.0",

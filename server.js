@@ -629,11 +629,24 @@ async function importAllResults() {
 }
 
 const _pendingImports = new Set();
+// Defensive shape check on watcher-supplied filenames. Linux's fs.watch
+// normally hands us a leaf basename, but exotic filesystems (FUSE, NFS,
+// SMB mounts) can return arbitrary strings — including ones containing
+// `..` or path separators. importResultFile does path.join(AC_RESULTS,
+// filename), and a `..` would escape the directory. This check refuses
+// anything that isn't a plain basename ending in `.json`.
+function _isSafeResultFilename(name) {
+  if (typeof name !== 'string' || !name) return false;
+  if (name.length > 128) return false;
+  if (name.includes('/') || name.includes('\\') || name.includes('\0')) return false;
+  if (name === '.' || name === '..' || name.includes('..')) return false;
+  return /^[A-Za-z0-9_\-.]+\.json$/.test(name);
+}
 function startResultsWatcher() {
   if (!db) return;
   try {
     fs.watch(AC_RESULTS, (eventType, filename) => {
-      if (!filename || !filename.endsWith('.json')) return;
+      if (!_isSafeResultFilename(filename)) return;
       if (_pendingImports.has(filename)) return;
       _pendingImports.add(filename);
       setTimeout(async () => {
@@ -1695,17 +1708,27 @@ async function apiConfigUpdate(req, res) {
     if (body.restart === true && !checkPermission(req, 'serverControl')) {
       restartError = 'restart skipped — serverControl permission required';
     } else if (body.restart === true) {
-      const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
-      if (wasRunning) {
-        const k = await killAC();
-        if (!k.ok) restartError = k.error || 'Failed to stop server';
-        else {
-          await waitForACDown(6000);
-          await sleep(500);
-          const sp = await spawnAC();
-          if (!sp.ok) restartError = sp.error || 'Failed to start server';
-          else { await waitForACUp(10000); restarted = true; }
-        }
+      // Take the same lock /api/server/{start,stop,restart} use — otherwise a
+      // /api/config save with restart=true could race a manual restart and end
+      // up with two acServer processes.
+      const release = _acquireServerLock();
+      if (!release) {
+        restartError = 'Another server action is in progress; restart skipped';
+      } else {
+        try {
+          const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
+          if (wasRunning) {
+            const k = await killAC();
+            if (!k.ok) restartError = k.error || 'Failed to stop server';
+            else {
+              await waitForACDown(6000);
+              await sleep(500);
+              const sp = await spawnAC();
+              if (!sp.ok) restartError = sp.error || 'Failed to start server';
+              else { await waitForACUp(10000); restarted = true; }
+            }
+          }
+        } finally { release(); }
       }
     }
     json(res, 200, { ok: true, restarted, restartError, applied, rejected });
@@ -2388,16 +2411,38 @@ async function apiPlayerKick(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Process-wide mutex chain used by every endpoint that mutates a flat-file
+// list (blacklist.txt, whitelist.txt). Without this, two concurrent ban
+// requests can both pass the "is it already in the file?" check before
+// either appends, or a whitelist replace can clobber an append that landed
+// between read and write. The chain is keyed by path so blacklist and
+// whitelist don't block each other.
+//
+// The Map stores a "safe tail" — a promise that always resolves — so a
+// single fn() throwing doesn't poison the chain and reject every later
+// waiter. The returned promise from withFileLock still rejects with fn's
+// real error, so callers see failures normally.
+const _fileLocks = new Map();
+function withFileLock(filePath, fn) {
+  const prev = _fileLocks.get(filePath) || Promise.resolve();
+  const tail = prev.then(() => fn());
+  _fileLocks.set(filePath, tail.then(() => {}, () => {}));
+  return tail;
+}
+
 async function apiPlayerBan(req, res) {
   if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
   try {
     const body = await readBody(req);
     const guid = body.guid;
     if (!guid) return json(res, 400, { error: 'guid required' });
-    let existing = '';
-    try { existing = fs.readFileSync(AC_BLACKLIST, 'utf8'); } catch {}
-    const guids = existing.split('\n').map(s => s.trim()).filter(Boolean);
-    if (!guids.includes(guid)) fs.appendFileSync(AC_BLACKLIST, guid + '\n');
+    if (!/^\d{17}$/.test(String(guid))) return json(res, 400, { error: 'guid must be 17 digits' });
+    await withFileLock(AC_BLACKLIST, async () => {
+      let existing = '';
+      try { existing = await fsp.readFile(AC_BLACKLIST, 'utf8'); } catch {}
+      const guids = existing.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!guids.includes(guid)) await fsp.appendFile(AC_BLACKLIST, guid + '\n');
+    });
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'player.ban', guid, body.name || '');
     json(res, 200, { ok: true });
@@ -2448,7 +2493,12 @@ async function apiWhitelistPut(req, res) {
     const body = await readBody(req);
     if (!Array.isArray(body.ids)) return json(res, 400, { error: 'ids array required' });
     const clean = body.ids.map(s => String(s).trim()).filter(s => /^\d{17}$/.test(s));
-    await fsp.writeFile(AC_WHITELIST, clean.join('\n') + (clean.length ? '\n' : ''), 'utf8');
+    const before = clean.length;
+    await withFileLock(AC_WHITELIST, async () => {
+      await fsp.writeFile(AC_WHITELIST, clean.join('\n') + (clean.length ? '\n' : ''), 'utf8');
+    });
+    const actor = checkAnyAuth(req)?.username || 'unknown';
+    insertAuditLog(actor, 'whitelist.replace', '', `${before} ids`);
     json(res, 200, { ok: true, saved: clean.length });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -2461,17 +2511,19 @@ async function apiWhitelistAdd(req, res) {
     const body = await readBody(req);
     const guid = String(body.guid || '').trim();
     if (!/^\d{17}$/.test(guid)) return json(res, 400, { error: 'guid must be 17 digits' });
-    let raw = '';
-    try { raw = await fsp.readFile(AC_WHITELIST, 'utf8'); } catch {}
-    const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
-    if (ids.includes(guid)) {
-      return json(res, 200, { ok: true, alreadyPresent: true, total: ids.length });
-    }
-    ids.push(guid);
-    await fsp.writeFile(AC_WHITELIST, ids.join('\n') + '\n', 'utf8');
+    const result = await withFileLock(AC_WHITELIST, async () => {
+      let raw = '';
+      try { raw = await fsp.readFile(AC_WHITELIST, 'utf8'); } catch {}
+      const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
+      if (ids.includes(guid)) return { alreadyPresent: true, total: ids.length };
+      ids.push(guid);
+      await fsp.writeFile(AC_WHITELIST, ids.join('\n') + '\n', 'utf8');
+      return { alreadyPresent: false, total: ids.length };
+    });
+    if (result.alreadyPresent) return json(res, 200, { ok: true, alreadyPresent: true, total: result.total });
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'whitelist.add', guid, body.name || '');
-    json(res, 200, { ok: true, total: ids.length });
+    json(res, 200, { ok: true, total: result.total });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -2675,10 +2727,18 @@ async function apiSessionApply(req, res) {
       await writeEntryList(cleanSlots, intOr(s['MAX_CLIENTS'], cleanSlots.length));
     }
 
-    // Auto-restart if server is running and the caller asks for it
+    // Auto-restart if server is running and the caller asks for it. Acquire
+    // the same global lock /api/server/{start,stop,restart} use so two
+    // session-apply requests (or a session-apply + manual restart) cannot
+    // race through killAC + spawnAC and end up with duplicate acServer
+    // processes.
     let restarted = false, restartError = null;
     const wantRestart = body.restart !== false; // default ON
     if (wantRestart) {
+      const release = _acquireServerLock();
+      if (!release) {
+        restartError = 'Another server action is in progress; restart skipped';
+      } else try {
       const wasRunning = (acChild && !acChild.killed) || !!(await findACPid()) || (await getACInfo()).running;
       if (wasRunning) {
         const k = await killAC();
@@ -2691,6 +2751,7 @@ async function apiSessionApply(req, res) {
           else { await waitForACUp(10000); restarted = true; }
         }
       }
+      } finally { release(); }
     }
     const actor = checkAnyAuth(req)?.username || 'unknown';
     const detail = [body.trackId, body.layout, ...(body.cars || [])].filter(Boolean).join(', ');
@@ -3234,14 +3295,22 @@ async function killAC() {
   return { ok: true };
 }
 
-// Serializes server.start / .stop / .restart so rapid clicks cannot spawn
-// duplicate processes or null-set acChild while a spawn is mid-flight.
+// Serializes every code path that mutates acChild — start, stop, restart, AND
+// the auto-restart that piggybacks on /api/config and /api/session/apply.
+// Without a *global* lock spanning all four, two requests racing through
+// killAC + spawnAC could end up with duplicate acServer processes, or with
+// acChild pointing at the first while the second runs orphan.
 let _serverActionInFlight = false;
-async function withServerActionLock(req, res, fn) {
-  if (_serverActionInFlight) return json(res, 409, { error: 'Another server action is in progress' });
+function _acquireServerLock() {
+  if (_serverActionInFlight) return null;
   _serverActionInFlight = true;
+  return () => { _serverActionInFlight = false; };
+}
+async function withServerActionLock(req, res, fn) {
+  const release = _acquireServerLock();
+  if (!release) return json(res, 409, { error: 'Another server action is in progress' });
   try { return await fn(); }
-  finally { _serverActionInFlight = false; }
+  finally { release(); }
 }
 
 async function apiServerStart(req, res) {

@@ -86,6 +86,12 @@ const _DEFAULT_AC_ROOTS = [
   '/srv/acserver',
 ].filter(Boolean);
 const _detectedAcRoot = _firstExistingPath(_DEFAULT_AC_ROOTS);
+// When neither the env var nor any auto-detect candidate exists, the panel
+// still needs *some* string for the AC_* constants so error messages mention
+// a real-looking path. Default to ~/ac_server (the documented convention) so
+// the user sees a path they recognise from .env.example, not a system path
+// they never chose.
+const _FALLBACK_AC_ROOT = process.env.HOME ? path.join(process.env.HOME, 'ac_server') : '/opt/ac_server';
 function _ac(envName, ...relParts) {
   if (process.env[envName]) return process.env[envName];
   if (!_detectedAcRoot) return null;
@@ -103,17 +109,17 @@ const AC_BIN_RAW   = process.env.AC_SERVER_BIN || _ac('AC_SERVER_BIN', 'acServer
 const AC_BIN_DIR_RAW = process.env.AC_SERVER_DIR
   || (AC_BIN_RAW ? path.dirname(AC_BIN_RAW) : null)
   || _detectedAcRoot
-  || '/srv/assetto';
+  || _FALLBACK_AC_ROOT;
 const AC_BIN          = AC_BIN_RAW || path.join(AC_BIN_DIR_RAW, 'acServer');
 const AC_BIN_DIR      = AC_BIN_DIR_RAW;
 
 const AC_LOG_FILE  = process.env.AC_SERVER_LOG     || path.join(__dirname, 'logs', 'ac_server.log');
 const AC_RESULTS   = process.env.AC_SERVER_RESULTS || path.join(AC_BIN_DIR, 'results');
 const _AC_CFG_DIR_RESOLVED = process.env.AC_CFG_DIR
-  || (_detectedAcRoot ? path.join(_detectedAcRoot, 'cfg') : '/srv/assetto/cfg');
+  || path.join(_detectedAcRoot || _FALLBACK_AC_ROOT, 'cfg');
 const AC_CFG_FILE  = path.join(_AC_CFG_DIR_RESOLVED, 'server_cfg.ini');
 const _AC_CONTENT_DIR_RESOLVED = process.env.AC_CONTENT_DIR
-  || (_detectedAcRoot ? path.join(_detectedAcRoot, 'content') : '/srv/assetto/content');
+  || path.join(_detectedAcRoot || _FALLBACK_AC_ROOT, 'content');
 const AC_CARS_DIR  = path.join(_AC_CONTENT_DIR_RESOLVED, 'cars');
 const AC_TRACKS_DIR= path.join(_AC_CONTENT_DIR_RESOLVED, 'tracks');
 const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
@@ -2861,7 +2867,7 @@ async function apiPlayerNickname(req, res, guid) {
 // to an unintended location via env var injection (e.g. AC_WHITELIST_FILE=/etc/passwd).
 const AC_WHITELIST = path.resolve(
   process.env.AC_WHITELIST_FILE
-  || path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'whitelist.txt')
+  || path.join(_AC_CFG_DIR_RESOLVED, 'whitelist.txt')
 );
 
 function apiWhitelistGet(res) {

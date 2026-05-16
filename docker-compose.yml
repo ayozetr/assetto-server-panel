@@ -50,8 +50,8 @@ services:
       # AC server data — adjust to your host paths. These are the same dirs
       # AC_CFG_DIR / AC_CONTENT_DIR point at in .env, but mounted by Docker
       # so the in-container path matches.
-      - ${AC_CFG_DIR:-/srv/assetto/cfg}:/srv/assetto/cfg:rw
-      - ${AC_CONTENT_DIR:-/srv/assetto/content}:/srv/assetto/content:rw
+      - ${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}:${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}:rw
+      - ${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}:${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}:rw
 
       # Panel state. Survives container recreation.
       - panel-data:/data

@@ -12,8 +12,8 @@
 # Run (standalone):
 #   docker run -d --name assetto-panel \
 #     -p 3000:3000 \
-#     -v /srv/assetto/cfg:/srv/assetto/cfg \
-#     -v /srv/assetto/content:/srv/assetto/content \
+#     -v /home/YOUR_USER/ac_server/cfg:/home/YOUR_USER/ac_server/cfg \
+#     -v /home/YOUR_USER/ac_server/content:/home/YOUR_USER/ac_server/content \
 #     -v assetto-panel-db:/data \
 #     -e DB_PATH=/data/assetto.db \
 #     -e HOST=0.0.0.0 \

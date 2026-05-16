@@ -86,8 +86,8 @@ The `.dockerignore` mirrors `.gitignore` so the build context stays small (`node
 | `PORT` | `3000` | The port inside the container. Map to a different host port in `docker-compose.yml` if `3000` is taken on the host. |
 | `DB_PATH` | `/data/assetto.db` | Set by the compose file so the DB lives on the `panel-data` named volume. |
 | `AC_SERVER_LOG` | `/app/logs/ac_server.log` | Inside the `panel-logs` named volume. |
-| `AC_CFG_DIR` | `${AC_CFG_DIR:-/srv/assetto/cfg}` | Host path bind-mounted at the same location inside the container. |
-| `AC_CONTENT_DIR` | `${AC_CONTENT_DIR:-/srv/assetto/content}` | Same. |
+| `AC_CFG_DIR` | `${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}` | Host path bind-mounted at the same location inside the container. |
+| `AC_CONTENT_DIR` | `${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}` | Same. |
 | `AC_SERVER_BIN` / `AC_SERVER_DIR` | `${...}` | The panel needs to be able to `spawn()` `acServer` if you use the start/stop buttons. If `acServer` lives on the host and you don't want the container to launch it, set these to a valid-looking path inside the container and operate `acServer` independently. |
 | `AC_HTTP_PORT` | `8081` | The panel polls `127.0.0.1:${AC_HTTP_PORT}/INFO` to detect `acServer` — that's loopback **inside the container**, which means `acServer` must also live in the same container *or* you must use `network_mode: host`. See [Running acServer alongside](#running-acserver-alongside-the-panel). |
 | `TRUST_PROXY` | unset | Set to `1` when you put a reverse proxy / Cloudflare Tunnel in front. Also set `TRUST_PROXY_FROM` to the CIDR ranges of your proxy if it isn't Cloudflare. |
@@ -101,16 +101,16 @@ The compose file declares two **named volumes** and two **bind mounts**:
 
 ```yaml
 volumes:
-  - ${AC_CFG_DIR:-/srv/assetto/cfg}:/srv/assetto/cfg:rw      # bind
-  - ${AC_CONTENT_DIR:-/srv/assetto/content}:/srv/assetto/content:rw   # bind
+  - ${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}:${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}:rw      # bind
+  - ${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}:${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}:rw   # bind
   - panel-data:/data          # named volume
   - panel-logs:/app/logs      # named volume
 ```
 
 | Mount | Type | Purpose |
 |---|---|---|
-| `${AC_CFG_DIR}` → `/srv/assetto/cfg` | bind | `server_cfg.ini`, `entry_list.ini`, `whitelist.txt`, the rotating `.bak` backups the panel writes when you save. Bind-mount so edits made via the panel UI land in the **real** files `acServer` reads. |
-| `${AC_CONTENT_DIR}` → `/srv/assetto/content` | bind | `cars/` + `tracks/` directories. The mod upload pipeline extracts new mods directly into these on the host. |
+| `${AC_CFG_DIR}` (host) → same path inside container | bind | `server_cfg.ini`, `entry_list.ini`, `whitelist.txt`, the rotating `.bak` backups the panel writes when you save. Bind-mount so edits made via the panel UI land in the **real** files `acServer` reads. The in-container path mirrors the host path so log lines + audit entries reference the same string in both worlds. |
+| `${AC_CONTENT_DIR}` (host) → same path inside container | bind | `cars/` + `tracks/` directories. The mod upload pipeline extracts new mods directly into these on the host. |
 | `panel-data` → `/data` | named volume | The SQLite DB (`assetto.db`) + WAL files. Named volume so `docker compose down` does NOT wipe player history, audit log, or sessions. `docker volume rm assetto-server-panel_panel-data` is the only way to delete the DB. |
 | `panel-logs` → `/app/logs` | named volume | `ac_server.log` mirror written by `appendLog`. |
 
@@ -361,7 +361,7 @@ And open `http://localhost:3030` instead. The in-container port stays `3000`.
 
 ### "Operation not permitted" trying to mount `${AC_CFG_DIR}`
 
-Selinux. Either add `:z` to the mount (`${AC_CFG_DIR}:/srv/assetto/cfg:rw,z`) to relabel the host dir, or temporarily set the container's SELinux label to `disabled` for testing:
+Selinux. Either add `:z` to the mount (`${AC_CFG_DIR}:${AC_CFG_DIR}:rw,z`) to relabel the host dir, or temporarily set the container's SELinux label to `disabled` for testing:
 
 ```yaml
 security_opt:
@@ -416,8 +416,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
-      - ${AC_CFG_DIR:-/srv/assetto/cfg}:/srv/assetto/cfg:rw
-      - ${AC_CONTENT_DIR:-/srv/assetto/content}:/srv/assetto/content:rw
+      - ${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}:${AC_CFG_DIR:-/home/YOUR_USER/ac_server/cfg}:rw
+      - ${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}:${AC_CONTENT_DIR:-/home/YOUR_USER/ac_server/content}:rw
       - panel-data:/data
       - panel-logs:/app/logs
     cap_drop: [ALL]

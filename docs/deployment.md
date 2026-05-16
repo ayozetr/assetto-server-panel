@@ -227,7 +227,7 @@ The minimal unit above is enough for a home lab. For tighter sandboxing add the 
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/path/to/assetto-server-panel /srv/assetto /home/<your-user>/ac_server
+ReadWritePaths=/path/to/assetto-server-panel /home/<your-user>/ac_server
 PrivateTmp=true
 LimitNOFILE=4096
 MemoryMax=512M

@@ -134,7 +134,7 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
       toast.push(t('mods.err_format'), 'error'); return;
     }
     if (f.size > uploadMaxMb * 1024 * 1024) {
-      toast.push(t('mods.err_size') + ` (máx. ${uploadMaxMb} MB)`, 'error'); return;
+      toast.push(t('mods.err_size_max', { mb: uploadMaxMb }), 'error'); return;
     }
     setFile(f);
     setResult(null);

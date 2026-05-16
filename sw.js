@@ -7,7 +7,7 @@
 //   - same-origin static    : stale-while-revalidate
 
 // Bump on every behaviour change so old caches are dropped at activate-time.
-const CACHE_NAME  = 'ac-panel-v35';
+const CACHE_NAME  = 'ac-panel-v36';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -45,17 +45,24 @@ const PRECACHE = [
 // Cloudflare) does not abort the whole install and leave clients on the old SW.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      Promise.allSettled(
-        PRECACHE.map((url) =>
-          fetch(url, { cache: 'reload' })
-            .then((res) => { if (res.ok) return cache.put(url, res); })
-            .catch(() => {})
+    caches.open(CACHE_NAME)
+      .then((cache) =>
+        Promise.allSettled(
+          PRECACHE.map((url) =>
+            fetch(url, { cache: 'reload' })
+              .then((res) => { if (res.ok) return cache.put(url, res); })
+              .catch(() => {})
+          )
         )
       )
-    )
+      // skipWaiting AFTER the precache finishes so the activate hook (which
+      // fires next) finds the new cache fully populated. Previously
+      // skipWaiting() ran synchronously alongside event.waitUntil, so a fast
+      // activate could race and start serving from a half-filled cache —
+      // visible as a 'blank screen on F5 after deploy' if one of the precache
+      // entries was still in flight when the new SW took over.
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 // ── Activate: remove old caches ───────────────────────────────────────────────

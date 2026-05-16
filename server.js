@@ -3,6 +3,7 @@ require('dotenv').config();
 const http          = require('http');
 const https         = require('https');
 const fs            = require('fs');
+const zlib          = require('zlib');
 const { AsyncLocalStorage } = require('async_hooks');
 const fsp           = fs.promises;
 const path          = require('path');
@@ -678,6 +679,10 @@ function getNetworkIP() {
 }
 
 function setSecurityHeaders(req, res) {
+  // Stash the request on the response so downstream helpers (respond, json)
+  // can negotiate Content-Encoding without every call site threading req
+  // through manually. Set once per request inside the handler.
+  res._acReq = req;
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -706,13 +711,55 @@ function setSecurityHeaders(req, res) {
   }
 }
 
+// Content types worth compressing. Already-compressed formats (webp, png,
+// jpeg, woff2, …) come from MIME elsewhere and skip this path; for JSON, HTML,
+// CSS, JS the saving over the wire is typically 4–8x and the CPU cost of
+// gzip/brotli at default levels is negligible compared to the bytes saved.
+const _COMPRESSIBLE_MIME = /^(?:application\/(?:json|javascript|manifest\+json)|text\/(?:plain|html|css|csv|event-stream))(?:\b|;)/i;
+const _COMPRESS_MIN_BYTES = 1024; // skip compression for tiny payloads where the headers cost more than they save
+
+function _negotiateEncoding(req, mime, bodyLen) {
+  if (!_COMPRESSIBLE_MIME.test(mime)) return null;
+  if (bodyLen < _COMPRESS_MIN_BYTES) return null;
+  const ae = (req?.headers?.['accept-encoding'] || '').toLowerCase();
+  if (!ae) return null;
+  // Prefer brotli (smaller) when offered, otherwise gzip. Identity ('') is
+  // always acceptable as a fallback.
+  if (ae.includes('br')) return 'br';
+  if (ae.includes('gzip')) return 'gzip';
+  return null;
+}
+
+function _compress(body, encoding) {
+  const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  if (encoding === 'br') return zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } });
+  if (encoding === 'gzip') return zlib.gzipSync(buf, { level: 6 });
+  return buf;
+}
+
+// `req` for Accept-Encoding negotiation is pulled from res._acReq (stashed by
+// setSecurityHeaders) so existing call sites don't have to thread it through.
+// Older callers (or paths that bypass setSecurityHeaders) still work — they
+// just don't benefit from compression.
 function respond(res, status, mime, body, extraHeaders) {
-  res.writeHead(status, {
+  const headers = {
     'Content-Type':  mime,
     'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Vary':          'Accept-Encoding',
     ...extraHeaders,
-  });
-  res.end(body);
+  };
+  let payload = body;
+  const req = res._acReq;
+  if (req && body && !headers['Content-Encoding']) {
+    const bodyLen = Buffer.isBuffer(body) ? body.length : Buffer.byteLength(body);
+    const enc = _negotiateEncoding(req, mime, bodyLen);
+    if (enc) {
+      payload = _compress(body, enc);
+      headers['Content-Encoding'] = enc;
+    }
+  }
+  res.writeHead(status, headers);
+  res.end(payload);
 }
 
 function respondImage(res, data, mime = 'image/png') {

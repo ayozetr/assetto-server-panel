@@ -74,10 +74,10 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
       const body = stripPrefix(l.msg).trim();
       let m;
       if ((m = body.match(/^JOIN\s+(.+?)\s+\([^)]+\)\s+car_id=\d+\s+model=(\S+)/))) {
-        return { ...l, kind: 'join',  text: `${m[1]} se ha unido (${formatCarId(m[2])})` };
+        return { ...l, kind: 'join',  text: t('activity.join', { name: m[1], car: formatCarId(m[2]) }) };
       }
       if ((m = body.match(/^LEAVE\s+(.+?)\s+car_id=/))) {
-        return { ...l, kind: 'leave', text: `${m[1]} ha salido` };
+        return { ...l, kind: 'leave', text: t('activity.leave', { name: m[1] }) };
       }
       if ((m = body.match(/^LAP\s+(.+?)\s+([\d.]+)s\s+cuts=(\d+)/))) {
         const secs  = parseFloat(m[2]);
@@ -85,19 +85,20 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         const rest  = (secs - mins * 60).toFixed(3).padStart(6, '0');
         const time  = `${mins}:${rest}`;
         const cuts  = parseInt(m[3], 10);
-        return { ...l, kind: 'lap', text: `Vuelta ${m[1]} — ${time}${cuts ? ` (cortes: ${cuts})` : ''}` };
+        const base = t('activity.lap', { name: m[1], time });
+        return { ...l, kind: 'lap', text: cuts ? `${base} ${t('activity.lap_cuts', { cuts })}` : base };
       }
       if ((m = body.match(/^(?:NEW_SESSION|SESSION_INFO)\s+(.+?)\s+\(([^)]+)\)\s+track=(\S+)/))) {
-        return { ...l, kind: 'session', text: `Sesión ${m[1]} en ${formatTrackPath(m[3])}` };
+        return { ...l, kind: 'session', text: t('activity.session', { type: m[1], track: formatTrackPath(m[3]) }) };
       }
       if (/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i.test(body)) {
         const who = body.match(/^COLLISION BETWEEN:\s*(.+?)\s*\[\]/i)[1];
-        return { ...l, kind: 'warn', text: `Colisión: ${who}` };
+        return { ...l, kind: 'warn', text: t('activity.collision', { who }) };
       }
       if ((m = body.match(/^Clean exit, driver disconnected:\s*(.+?)\s*\[\]?\s*$/i))) {
-        return { ...l, kind: 'leave', text: `${m[1]} ha salido` };
+        return { ...l, kind: 'leave', text: t('activity.leave', { name: m[1] }) };
       }
-      if (/^Dynamic track\b/i.test(body))   return { ...l, kind: 'session', text: 'Pista dinámica actualizada' };
+      if (/^Dynamic track\b/i.test(body))   return { ...l, kind: 'session', text: t('activity.dynamic_track') };
       if (/^Sending welcome message\b/i.test(body)) return null;
       if (l.lvl === 'error') return { ...l, kind: 'error', text: body };
       if (l.lvl === 'warn')  return { ...l, kind: 'warn',  text: body };
@@ -222,7 +223,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     </div>
                     <div className="row" style={{marginTop: 8, gap: 6}}>
                       <span className="badge badge-red">{primaryMode.label}</span>
-                      <span className="badge">{carsCount} {t('dash.cars') || 'slots'}</span>
+                      <span className="badge">{carsCount} {t('dash.cars')}</span>
                       {primaryMode.value && <span className="badge">{primaryMode.value}</span>}
                     </div>
                   </div>

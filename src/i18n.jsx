@@ -230,6 +230,13 @@ const dict = {
     'dash.session': 'Active Session',
     'dash.laps': 'Laps',
     'dash.cars': 'slots',
+    'activity.join':          '{name} joined ({car})',
+    'activity.leave':         '{name} left',
+    'activity.lap':           'Lap {name} — {time}',
+    'activity.lap_cuts':      '(cuts: {cuts})',
+    'activity.session':       'Session {type} on {track}',
+    'activity.collision':     'Collision: {who}',
+    'activity.dynamic_track': 'Dynamic track updated',
     'dash.time': 'Time',
     'dash.activity': 'Recent Activity',
     'dash.weather': 'Weather',
@@ -436,6 +443,7 @@ const dict = {
     'mods.error_title': 'Upload failed',
     'mods.err_format': 'Unsupported format. Use .zip, .rar or .7z',
     'mods.err_size': 'File is too large',
+    'mods.err_size_max': 'File is too large (max {mb} MB)',
     'mods.type_car': 'Car',
     'mods.type_track': 'Track',
     'mods.files': 'files',
@@ -726,6 +734,13 @@ const dict = {
     'dash.session': 'Sesión Activa',
     'dash.laps': 'Vueltas',
     'dash.cars': 'slots',
+    'activity.join':          '{name} se ha unido ({car})',
+    'activity.leave':         '{name} ha salido',
+    'activity.lap':           'Vuelta {name} — {time}',
+    'activity.lap_cuts':      '(cortes: {cuts})',
+    'activity.session':       'Sesión {type} en {track}',
+    'activity.collision':     'Colisión: {who}',
+    'activity.dynamic_track': 'Pista dinámica actualizada',
     'dash.time': 'Tiempo',
     'dash.activity': 'Actividad Reciente',
     'dash.weather': 'Clima',
@@ -932,6 +947,7 @@ const dict = {
     'mods.error_title': 'Error en la subida',
     'mods.err_format': 'Formato no soportado. Usa .zip, .rar o .7z',
     'mods.err_size': 'El archivo es demasiado grande',
+    'mods.err_size_max': 'El archivo es demasiado grande (máx. {mb} MB)',
     'mods.type_car': 'Coche',
     'mods.type_track': 'Circuito',
     'mods.files': 'archivos',
@@ -1222,6 +1238,13 @@ const dict = {
     'dash.session': 'Sessione Attiva',
     'dash.laps': 'Giri',
     'dash.cars': 'slot',
+    'activity.join':          '{name} si è unito ({car})',
+    'activity.leave':         '{name} è uscito',
+    'activity.lap':           'Giro {name} — {time}',
+    'activity.lap_cuts':      '(tagli: {cuts})',
+    'activity.session':       'Sessione {type} su {track}',
+    'activity.collision':     'Collisione: {who}',
+    'activity.dynamic_track': 'Pista dinamica aggiornata',
     'dash.time': 'Tempo',
     'dash.activity': 'Attività Recente',
     'dash.weather': 'Meteo',
@@ -1405,6 +1428,7 @@ const dict = {
     'mods.error_title': 'Errore caricamento',
     'mods.err_format': 'Formato non supportato. Usa .zip, .rar o .7z',
     'mods.err_size': 'Il file è troppo grande',
+    'mods.err_size_max': 'Il file è troppo grande (max {mb} MB)',
     'mods.type_car': 'Auto',
     'mods.type_track': 'Tracciato',
     'mods.files': 'file',
@@ -1479,7 +1503,11 @@ window.AppI18n = {
   t(key, params = {}) {
     let str = dict[this.lang]?.[key] || key;
     for (const [k, v] of Object.entries(params)) {
-      str = str.replace(`{${k}}`, v);
+      // replaceAll (vs replace) so a translator can use the same placeholder
+      // twice in a sentence ("…{name}… {name}…") without silently keeping the
+      // second occurrence as a literal. Cast v to a string so numeric values
+      // (mb, count, …) render correctly without coercion side-effects.
+      str = str.split(`{${k}}`).join(String(v));
     }
     return str;
   }

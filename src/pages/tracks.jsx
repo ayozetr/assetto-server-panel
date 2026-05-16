@@ -75,9 +75,10 @@ function TrackModal({ track, sessionCfg, setSessionCfg, onClose, onDelete, isAdm
 
   const isActiveSelected = isSelected && sessionCfg.layout === activeLayout;
 
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{maxWidth: 720, width: '95vw'}}>
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()} role="presentation">
+      <div ref={trapRef} className="modal" style={{maxWidth: 720, width: '95vw'}} role="dialog" aria-modal="true" aria-label={track.name} tabIndex={-1}>
 
         <div className="modal-header">
           <div style={{flex:1, minWidth:0}}>

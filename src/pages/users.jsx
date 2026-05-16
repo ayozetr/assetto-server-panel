@@ -17,9 +17,15 @@ function UserModal({ user, onClose, onSave }) {
     setPwError('');
     onSave(form);
   };
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={user.id ? t('users.modal.title_edit') : t('users.modal.title_new')} tabIndex={-1}>
         <div className="modal-header">
           <I4U.IconUser size={15}/>
           <div className="modal-title">{user.id ? t('users.modal.title_edit') : t('users.modal.title_new')}</div>

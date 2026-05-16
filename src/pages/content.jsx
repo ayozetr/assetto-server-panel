@@ -71,9 +71,10 @@ function CarModal({ car, count, currentSkin, onAdd, onRemove, onClose, onDelete,
     ? `/api/content/cars/${encodeURIComponent(car.id)}/skins/${encodeURIComponent(car.skins[skinIdx])}/preview`
     : `/api/content/cars/${encodeURIComponent(car.id)}/thumb`;
 
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{maxWidth: 740, width: '95vw'}}>
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()} role="presentation">
+      <div ref={trapRef} className="modal" style={{maxWidth: 740, width: '95vw'}} role="dialog" aria-modal="true" aria-label={car.name} tabIndex={-1}>
 
         {/* Header */}
         <div className="modal-header">

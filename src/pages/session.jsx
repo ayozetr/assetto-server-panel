@@ -234,29 +234,48 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
       </div>
 
       {confirmApply && (
-        <div className="modal-backdrop" onClick={()=>setConfirmApply(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-header">
-              <I3S.IconFlag size={15} style={{color:'var(--red)'}}/>
-              <div className="modal-title">{t('sess.modal.title')}</div>
-            </div>
-            <div className="modal-body">
-              <p style={{margin:0, fontSize:13, color:'var(--text-muted)'}}>
-                {t('sess.modal.msg').split('<br>').map((line, i, arr) => (
-                  <React.Fragment key={i}>{line}{i < arr.length - 1 && <br/>}</React.Fragment>
-                ))}
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={()=>setConfirmApply(false)}>{t('common.cancel')}</button>
-              <button className="btn btn-primary" onClick={()=>{ onApply(); setConfirmApply(false); }}>
-                <I3S.IconCheck size={13}/> {t('sess.modal.confirm')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmApplyModal
+          t={t}
+          onCancel={() => setConfirmApply(false)}
+          onConfirm={() => { onApply(); setConfirmApply(false); }}
+        />
       )}
     </>
+  );
+}
+
+// Apply-session confirmation. Extracted from the inline modal so we can host
+// the focus-trap + Esc effect cleanly. Closures (`onApply`, `setConfirmApply`)
+// are passed via callbacks so PageSession stays the single owner of state.
+function ConfirmApplyModal({ t, onCancel, onConfirm }) {
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  return (
+    <div className="modal-backdrop" onClick={onCancel} role="presentation">
+      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t('sess.modal.title')} tabIndex={-1}>
+        <div className="modal-header">
+          <I3S.IconFlag size={15} style={{color:'var(--red)'}}/>
+          <div className="modal-title">{t('sess.modal.title')}</div>
+        </div>
+        <div className="modal-body">
+          <p style={{margin:0, fontSize:13, color:'var(--text-muted)'}}>
+            {t('sess.modal.msg').split('<br>').map((line, i, arr) => (
+              <React.Fragment key={i}>{line}{i < arr.length - 1 && <br/>}</React.Fragment>
+            ))}
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={onConfirm}>
+            <I3S.IconCheck size={13}/> {t('sess.modal.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

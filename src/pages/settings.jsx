@@ -33,9 +33,13 @@ function ConfirmModal({ title, message, onCancel, onConfirm }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onCancel]);
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
+  // role="dialog" + aria-modal belong on the dialog element, not the backdrop —
+  // a backdrop with role=dialog confuses screen readers about which element is
+  // the actual conversation. The backdrop is a presentational click-target.
   return (
-    <div className="modal-backdrop" onClick={onCancel} role="dialog" aria-modal="true">
-      <div className="modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onCancel} role="presentation">
+      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>
         </div>

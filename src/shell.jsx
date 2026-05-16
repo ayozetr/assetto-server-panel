@@ -407,6 +407,55 @@ function ForcePasswordChange({ user, onDone, onLogout }) {
   );
 }
 
+// Focus trap for modals. Mounts: stash the previously-focused element, move
+// focus into the modal's first tabbable child. While active: Tab and Shift+Tab
+// wrap inside the modal instead of leaking to the page underneath. Unmount:
+// restore the original focus so the user lands back on the button they
+// pressed to open the modal. Pair with role="dialog" aria-modal="true" on
+// the modal's root for the screen-reader half of the contract.
+//
+// Returns a ref the caller assigns to the modal's outermost element.
+function useFocusTrap(active = true) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!active) return;
+    const node = ref.current;
+    if (!node) return;
+    const previouslyFocused = document.activeElement;
+    // Move focus inside. Prefer an explicit autoFocus child; fall back to the
+    // first tabbable element; fall back to the modal root itself (tabIndex=-1
+    // is set inline by the modal so this fallback actually focuses something).
+    const focusables = () => node.querySelectorAll(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    const initial = node.querySelector('[autofocus]') || focusables()[0] || node;
+    try { initial.focus(); } catch {}
+
+    const onKey = (e) => {
+      if (e.key !== 'Tab') return;
+      const list = Array.from(focusables());
+      if (list.length === 0) { e.preventDefault(); return; }
+      const first = list[0];
+      const last  = list[list.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !node.contains(document.activeElement)) {
+          e.preventDefault(); try { last.focus(); } catch {}
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault(); try { first.focus(); } catch {}
+        }
+      }
+    };
+    node.addEventListener('keydown', onKey);
+    return () => {
+      node.removeEventListener('keydown', onKey);
+      try { previouslyFocused && previouslyFocused.focus(); } catch {}
+    };
+  }, [active]);
+  return ref;
+}
+
 // Accessible switch. The CSS class .switch already produces the visual track
 // + thumb; this wrapper adds the ARIA contract and keyboard handlers so the
 // control is reachable by tab and triggered by Space/Enter. Use everywhere
@@ -433,4 +482,4 @@ function Switch({ on, onChange, disabled, ariaLabel, className = '', style }) {
   );
 }
 
-window.AppShell = { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast, Switch };
+window.AppShell = { Sidebar, Topbar, Login, ForcePasswordChange, ToastProvider, useToast, Switch, useFocusTrap };

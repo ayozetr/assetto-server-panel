@@ -139,9 +139,10 @@ function AddLapModal({ cars, tracks, pastPlayers, onSave, onClose }) {
     }
   };
 
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth: 560}}>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth: 560}} role="dialog" aria-modal="true" aria-label={t('times.add.title')} tabIndex={-1}>
         <div className="modal-header">
           <ITi.IconTimer size={15}/>
           <div className="modal-title">{t('times.add.title')}</div>

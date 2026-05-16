@@ -18,9 +18,15 @@ function NicknameModal({ player, onSave, onClose }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [value, setValue] = usePlayersState(player.nickname || '');
   const submit = () => onSave(value.trim().slice(0, 64));
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const trapRef = window.AppShell.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t('pl.nick.title')} tabIndex={-1}>
         <div className="modal-header">
           <I2P.IconEdit size={15}/>
           <div className="modal-title">{t('pl.nick.title')}</div>

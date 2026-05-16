@@ -54,14 +54,23 @@ if ('serviceWorker' in navigator) {
 
 function rmrf(dir) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} }
 
+// Plain-JS vendor files (no JSX, no transform — just copy through).
+// These are third-party libraries we ship from disk instead of CDN to keep
+// supply-chain control: the file is pinned in the repo with a hash, esbuild
+// passes it through with the minify flag honoured.
+const VENDOR_FILES = [
+  'vendor/qrcode-generator.js',
+].map(rel => path.join(SRC_DIR, rel));
+
 async function build() {
   rmrf(DIST_DIR);
   fs.mkdirSync(DIST_DIR, { recursive: true });
   fs.mkdirSync(path.join(DIST_DIR, 'pages'), { recursive: true });
+  fs.mkdirSync(path.join(DIST_DIR, 'vendor'), { recursive: true });
 
   const startedAt = Date.now();
   await esbuild.build({
-    entryPoints: ENTRY_POINTS,
+    entryPoints: [...ENTRY_POINTS, ...VENDOR_FILES],
     outdir:     DIST_DIR,
     outbase:    SRC_DIR,
     outExtension: { '.js': '.js' },

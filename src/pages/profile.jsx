@@ -1,6 +1,6 @@
 // Page: My Account (password change + generator). Split out of settings.jsx
 // for size.
-const { useState: useStateP, useEffect: useEffectP } = React;
+const { useState: useStateP, useEffect: useEffectP, useRef: useRefP } = React;
 const I4P = window.AppIcons;
 
 // ── Profile / Change password ─────────────────────────────────────────────────
@@ -229,12 +229,10 @@ function PageProfile({ user, setUser }) {
 //   - disabled  + step "setup"     → show secret + otpauth + 6-digit code input
 //   - enabled                      → show "Disable" form (password + code)
 //
-// The QR is rendered as a raw otpauth:// URI in a copy-friendly box; manual
-// entry of the secret works in every authenticator app (Aegis, Authy,
-// Bitwarden, 2FAS, Google Authenticator). We deliberately avoid pulling in a
-// QR-image library — the otpauth secret should never be sent to a third-party
-// QR-generator service, and shipping a JS QR encoder would add ~30 KB to the
-// bundle for a one-time setup screen.
+// The QR is rendered locally via the vendored qrcode-generator library (MIT,
+// shipped under /dist/vendor/) so the otpauth secret never leaves the device.
+// Manual entry of the secret remains supported as a fallback for setups where
+// scanning is not available (terminal, screen reader, copy/paste workflow).
 function TwoFactorCard({ user, setUser, t }) {
   const toast = window.AppShell.useToast();
   const [enabled, setEnabled] = useStateP(false);
@@ -246,6 +244,35 @@ function TwoFactorCard({ user, setUser, t }) {
   const [code,    setCode]    = useStateP('');
   const [pw,      setPw]      = useStateP('');
   const [busy,    setBusy]    = useStateP(false);
+  const qrRef = useRefP(null);
+
+  // Render the otpauth:// URI as a QR onto <canvas> as soon as we have it.
+  // typeNumber=0 lets qrcode-generator auto-pick the smallest version that
+  // fits the payload; 'M' is medium error correction — enough recovery for a
+  // dirty screen without blowing up the module count for a ~120-char URI.
+  useEffectP(() => {
+    if (step !== 'setup' || !otpauth || !qrRef.current || typeof window.qrcode !== 'function') return;
+    try {
+      const qr = window.qrcode(0, 'M');
+      qr.addData(otpauth);
+      qr.make();
+      const count = qr.getModuleCount();
+      const cell  = 5;
+      const pad   = 16;
+      const size  = count * cell + pad * 2;
+      const canvas = qrRef.current;
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#000000';
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (qr.isDark(r, c)) ctx.fillRect(pad + c * cell, pad + r * cell, cell, cell);
+        }
+      }
+    } catch { /* fallback to manual entry below */ }
+  }, [step, otpauth]);
 
   const refresh = () => fetch('/api/auth/2fa/status').then(r => r.json()).then(d => {
     setEnabled(!!d.enabled);
@@ -361,7 +388,18 @@ function TwoFactorCard({ user, setUser, t }) {
         {step === 'setup' && (
           <>
             <p className="muted" style={{fontSize: 13, margin: 0}}>
-              {t('profile.tfa.setup_step1') || 'Step 1: open your authenticator app, choose "Add account" → "Enter setup key", and paste these values:'}
+              {t('profile.tfa.setup_intro') || 'Scan the QR with your authenticator app — or enter the key below manually if you cannot scan.'}
+            </p>
+            <div style={{display:'flex', justifyContent:'center', padding:'4px 0'}}>
+              <canvas
+                ref={qrRef}
+                aria-label={t('profile.tfa.qr_alt') || 'QR code for two-factor setup'}
+                role="img"
+                style={{maxWidth:'100%', height:'auto', borderRadius:6, boxShadow:'0 0 0 1px var(--border-1)'}}
+              />
+            </div>
+            <p className="muted" style={{fontSize: 13, margin: 0}}>
+              {t('profile.tfa.setup_step1') || 'Or add the account manually — choose "Add account" → "Enter setup key" in your app, and paste these values:'}
             </p>
             <div className="field">
               <label className="field-label">{t('profile.tfa.account_label') || 'Account / Label'}</label>

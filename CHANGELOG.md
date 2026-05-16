@@ -10,6 +10,34 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-05-17
+
+Quality-of-life polish on the 2FA flow, plus the repo rename that was
+deferred from 1.4.0.
+
+### Added
+
+- **QR code on the 2FA setup screen.** The setup card now renders the
+  `otpauth://` URI as a scannable QR drawn locally on a `<canvas>`. The
+  secret never leaves the device — no third-party QR service is involved
+  — and the manual base32 key remains visible as a fallback for
+  workflows where scanning isn't an option (terminal, screen reader,
+  copy/paste into a password manager).
+- **Vendored qrcode-generator (MIT, Kazuhiko Arase).** Shipped from
+  `src/vendor/` through esbuild to `dist/vendor/qrcode-generator.js` so
+  there is no runtime CDN dependency and no new npm package — the file
+  is pinned in the repo and goes through the same supply-chain controls
+  as the rest of the codebase.
+
+### Changed
+
+- **Repository renamed to `assetto-server-panel`.** All references
+  across `LICENSE`, `README.md`, `CHANGELOG.md`, `ROADMAP.md`,
+  `docs/*`, `package.json` and source comments updated. Existing
+  clones will need a `git remote set-url`.
+- Service Worker cache bumped to `ac-panel-v37` so existing installs
+  pick up the vendored QR script on the next reload.
+
 ## [1.4.0] — 2026-05-17
 
 Bans gain context. Previously `POST /api/players/ban` only appended a GUID

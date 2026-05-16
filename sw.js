@@ -7,7 +7,7 @@
 //   - same-origin static    : stale-while-revalidate
 
 // Bump on every behaviour change so old caches are dropped at activate-time.
-const CACHE_NAME  = 'ac-panel-v36';
+const CACHE_NAME  = 'ac-panel-v37';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -15,6 +15,7 @@ const API_PREFIX  = '/api/';
 const PRECACHE = [
   '/',
   '/src/styles.css',
+  '/dist/vendor/qrcode-generator.js',
   '/dist/tweaks-panel.js',
   '/dist/icons.js',
   '/dist/utils.js',

@@ -118,7 +118,7 @@ The panel captures AC server output only when it **spawns** the AC process itsel
 Nothing is listening on port 3000.
 
 ```bash
-sudo systemctl status assetto-dashboard   # if running as a service
+sudo systemctl status assetto-server-panel   # if running as a service
 npm start                                 # or start manually
 ```
 
@@ -151,7 +151,7 @@ The panel uses several layers to make sure a deploy reaches every browser withou
 
 If you still see a stale UI:
 
-1. Confirm the server is actually up to date (`git log -1` and `systemctl status assetto-dashboard`).
+1. Confirm the server is actually up to date (`git log -1` and `systemctl status assetto-server-panel`).
 2. Hard reload once (Ctrl+Shift+R / Cmd+Shift+R) to bypass everything and seat the new SW.
 3. As a last resort, DevTools → Application → Service Workers → **Unregister**, then reload.
 

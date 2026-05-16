@@ -27,8 +27,8 @@ npm install -g npm@11.13.0
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/ayozetr/assetto-dashboard.git
-cd assetto-dashboard
+git clone https://github.com/ayozetr/assetto-server-panel.git
+cd assetto-server-panel
 ```
 
 ### 2. Select the correct Node.js version

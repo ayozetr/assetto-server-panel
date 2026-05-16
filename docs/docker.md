@@ -24,8 +24,8 @@ docker compose version        # Docker Compose version v2+
 ## Quick start (3 steps)
 
 ```bash
-git clone https://github.com/ayozetr/assetto-dashboard.git
-cd assetto-dashboard
+git clone https://github.com/ayozetr/assetto-server-panel.git
+cd assetto-server-panel
 cp .env.example .env          # edit the four AC_* paths to point at your acServer
 docker compose up -d
 ```
@@ -111,14 +111,14 @@ volumes:
 |---|---|---|
 | `${AC_CFG_DIR}` → `/srv/assetto/cfg` | bind | `server_cfg.ini`, `entry_list.ini`, `whitelist.txt`, the rotating `.bak` backups the panel writes when you save. Bind-mount so edits made via the panel UI land in the **real** files `acServer` reads. |
 | `${AC_CONTENT_DIR}` → `/srv/assetto/content` | bind | `cars/` + `tracks/` directories. The mod upload pipeline extracts new mods directly into these on the host. |
-| `panel-data` → `/data` | named volume | The SQLite DB (`assetto.db`) + WAL files. Named volume so `docker compose down` does NOT wipe player history, audit log, or sessions. `docker volume rm assetto-dashboard_panel-data` is the only way to delete the DB. |
+| `panel-data` → `/data` | named volume | The SQLite DB (`assetto.db`) + WAL files. Named volume so `docker compose down` does NOT wipe player history, audit log, or sessions. `docker volume rm assetto-server-panel_panel-data` is the only way to delete the DB. |
 | `panel-logs` → `/app/logs` | named volume | `ac_server.log` mirror written by `appendLog`. |
 
 > **Permissions trap.** The container runs as the non-root `panel` user (`useradd -r`). If the host's `${AC_CFG_DIR}` is owned by a different UID (typical: your interactive user owns `~/ac_server/cfg`), the panel won't be able to write `server_cfg.ini` and saves will fail with `EACCES`. Two ways out:
 > 1. **`chown -R` the host dir** to a UID/GID that matches the in-container `panel` user. Run `docker compose exec panel id` to find the in-container UID (usually `999:999`), then `sudo chown -R 999:999 /path/to/ac_server/cfg /path/to/ac_server/content` on the host.
 > 2. **Add the container user to the host's existing group**. Set `user: "${UID}:${GID}"` in `docker-compose.yml` with `UID` and `GID` exported in `.env` to match your interactive user (`id -u` / `id -g`). The container loses its hardened `panel` user but gains seamless write access.
 
-The named volumes live under `/var/lib/docker/volumes/assetto-dashboard_panel-{data,logs}/_data` on the host by default. Inspect with `docker volume inspect assetto-dashboard_panel-data`.
+The named volumes live under `/var/lib/docker/volumes/assetto-server-panel_panel-{data,logs}/_data` on the host by default. Inspect with `docker volume inspect assetto-server-panel_panel-data`.
 
 ---
 
@@ -247,7 +247,7 @@ docker compose exec panel sqlite3 /data/assetto.db
 ### Updating
 
 ```bash
-cd assetto-dashboard
+cd assetto-server-panel
 git pull
 docker compose build --pull        # --pull refreshes the base node:20 image
 docker compose up -d               # recreates the container with the new image

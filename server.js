@@ -1150,7 +1150,7 @@ function postDiscordMessage(content) {
     headers: {
       'Content-Type':   'application/json',
       'Content-Length': Buffer.byteLength(payload),
-      'User-Agent':     'assetto-dashboard',
+      'User-Agent':     'assetto-server-panel',
     },
     timeout: 5000,
   }, (res) => {
@@ -4380,7 +4380,7 @@ async function apiDiscordWebhookTest(req, res) {
         headers: {
           'Content-Type':   'application/json',
           'Content-Length': Buffer.byteLength(payload),
-          'User-Agent':     'assetto-dashboard',
+          'User-Agent':     'assetto-server-panel',
         },
         timeout: 5000,
       }, (resp) => {

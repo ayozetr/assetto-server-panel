@@ -13,7 +13,7 @@ Running the panel as a systemd service ensures it starts automatically on boot a
 ### 1. Create the service file
 
 ```bash
-sudo nano /etc/systemd/system/assetto-dashboard.service
+sudo nano /etc/systemd/system/assetto-server-panel.service
 ```
 
 ```ini
@@ -24,12 +24,12 @@ After=network.target
 [Service]
 Type=simple
 User=<your-user>
-WorkingDirectory=/path/to/assetto-dashboard
+WorkingDirectory=/path/to/assetto-server-panel
 ExecStartPre=/home/<your-user>/.nvm/versions/node/v20.20.2/bin/node build.js
 ExecStart=/home/<your-user>/.nvm/versions/node/v20.20.2/bin/node server.js
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/path/to/assetto-dashboard/.env
+EnvironmentFile=/path/to/assetto-server-panel/.env
 TimeoutStopSec=15      # matches the server's 10 s force-exit guard
 KillMode=process       # only signal the panel — acServer keeps running across panel redeploys
 
@@ -45,17 +45,17 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now assetto-dashboard
+sudo systemctl enable --now assetto-server-panel
 ```
 
 ### 3. Useful commands
 
 ```bash
-sudo systemctl status assetto-dashboard     # check status
-sudo systemctl restart assetto-dashboard    # apply changes after update
-sudo systemctl stop assetto-dashboard       # stop the panel
-journalctl -u assetto-dashboard -f          # live logs
-journalctl -u assetto-dashboard -n 100      # last 100 log lines
+sudo systemctl status assetto-server-panel     # check status
+sudo systemctl restart assetto-server-panel    # apply changes after update
+sudo systemctl stop assetto-server-panel       # stop the panel
+journalctl -u assetto-server-panel -f          # live logs
+journalctl -u assetto-server-panel -n 100      # last 100 log lines
 ```
 
 ---
@@ -126,10 +126,10 @@ sudo firewall-cmd --reload
 ## Updating
 
 ```bash
-cd assetto-dashboard
+cd assetto-server-panel
 git pull
 npm ci               # reproducible install, refuses to drift from package-lock.json
-sudo systemctl restart assetto-dashboard
+sudo systemctl restart assetto-server-panel
 ```
 
 > **`npm ci` vs `npm install`** — `npm install` rewrites `package-lock.json` whenever the lockfile and `package.json` disagree. If the panel host is ever compromised and `package.json` is amended with a malicious `postinstall`, `npm install` happily runs it on the next deploy. `npm ci` refuses any drift and aborts. Production deploys should use `npm ci`; switch back to `npm install` only when you intentionally edit `package.json` locally and want the lockfile to follow.
@@ -199,10 +199,10 @@ npm supply-chain attacks (Sep 2025 chalk/debug, Jul 2025 Shai-Hulud worm) repeat
 
 `AC_LOG_FILE` (default `<panel>/logs/ac_server.log`) grows as long as acServer runs. A panel that's been up for months can fill the disk and take everything down with it. The "Clear logs" admin button in the UI truncates the file on demand, but on a busy server you want automatic rotation too.
 
-Create `/etc/logrotate.d/assetto-dashboard`:
+Create `/etc/logrotate.d/assetto-server-panel`:
 
 ```
-/home/<your-user>/assetto-dashboard/logs/ac_server.log {
+/home/<your-user>/assetto-server-panel/logs/ac_server.log {
   weekly
   rotate 4
   compress
@@ -215,7 +215,7 @@ Create `/etc/logrotate.d/assetto-dashboard`:
 
 > `copytruncate` is the load-bearing line. The panel keeps the log fd open while it writes; a normal `rename + create` rotate would leave the panel writing into a deleted inode that never frees disk space. `copytruncate` copies the current contents to the rotated file, then truncates the original in place — no fd disturbance, no panel restart needed.
 
-Test with `sudo logrotate -d /etc/logrotate.d/assetto-dashboard` (dry-run) before relying on the cron.
+Test with `sudo logrotate -d /etc/logrotate.d/assetto-server-panel` (dry-run) before relying on the cron.
 
 ---
 
@@ -227,7 +227,7 @@ The minimal unit above is enough for a home lab. For tighter sandboxing add the 
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/path/to/assetto-dashboard /srv/assetto /home/<your-user>/ac_server
+ReadWritePaths=/path/to/assetto-server-panel /srv/assetto /home/<your-user>/ac_server
 PrivateTmp=true
 LimitNOFILE=4096
 MemoryMax=512M

@@ -479,6 +479,6 @@ history before this release. Notable feature work in the pre-1.0 era:
 - Cloudflare Tunnel-friendly defaults (cache-busting via `?v=BUILD_VERSION`,
   network-first SW for `/dist/` bundles).
 
-[Unreleased]: https://github.com/ayozetr/assetto-dashboard/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/ayozetr/assetto-dashboard/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/ayozetr/assetto-dashboard/releases/tag/v1.0.0
+[Unreleased]: https://github.com/ayozetr/assetto-server-panel/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ayozetr/assetto-server-panel/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/ayozetr/assetto-server-panel/releases/tag/v1.0.0

@@ -83,8 +83,8 @@ Full interface available in **English**, **Spanish** and **Italian**.
 ## Quick start
 
 ```bash
-git clone https://github.com/ayozetr/assetto-dashboard.git
-cd assetto-dashboard
+git clone https://github.com/ayozetr/assetto-server-panel.git
+cd assetto-server-panel
 nvm use 20.20.2
 npm install
 cp .env.example .env   # fill in your server paths

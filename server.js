@@ -4446,9 +4446,50 @@ function _releaseExtractor() {
   }
 }
 
+// Refuse uploads when the destination filesystem doesn't have enough free
+// space to safely expand the archive. We estimate the worst case as
+// `compressed × 5` (matches what acServer mod packs typically expand to).
+// fs.statfs is Node 19+; on older versions or non-POSIX FS the call throws
+// and we skip the check — better to attempt the upload than to refuse
+// blindly when we can't measure.
+async function _checkFreeSpace(extractedDir, compressedBytes) {
+  if (!fsp.statfs) return null; // older Node — silently skip
+  try {
+    // Walk up until we find a path that actually exists. Brand-new content
+    // dirs (first-ever mod) won't exist yet; their parent will.
+    let probe = extractedDir;
+    for (let i = 0; i < 8; i++) {
+      try { await fsp.stat(probe); break; } catch { probe = path.dirname(probe); if (probe === '/' || !probe) break; }
+    }
+    const s = await fsp.statfs(probe);
+    const free = Number(s.bavail) * Number(s.bsize);
+    const need = Math.max(compressedBytes * 5, 256 * 1024 * 1024); // floor at 256 MB so a tiny mod still has headroom
+    if (free < need) {
+      return { ok: false, free, need };
+    }
+    return { ok: true, free, need };
+  } catch { return null; }
+}
+
 async function processModBuffer(buffer, filename) {
   await _acquireExtractor();
   try {
+    // Disk-space gate. Refuse the upload before extracting if the destination
+    // looks dangerously full — running out of disk mid-extract leaves a
+    // half-installed mod that's worse than a clean rejection.
+    const ext = path.extname(filename).toLowerCase();
+    const probeDir = ext === '.zip' || ext === '.rar' || ext === '.7z'
+      ? AC_CARS_DIR // either AC_CARS_DIR or AC_TRACKS_DIR works as a probe; both live on the same volume in practice
+      : os.tmpdir();
+    const space = await _checkFreeSpace(probeDir, buffer.length);
+    if (space && !space.ok) {
+      const freeMb = Math.floor(space.free / 1024 / 1024);
+      const needMb = Math.ceil(space.need / 1024 / 1024);
+      throw Object.assign(
+        new Error(`Not enough disk space (free=${freeMb} MB, estimated need=${needMb} MB)`),
+        { status: 507 } // 507 Insufficient Storage
+      );
+    }
     return await _processModBufferInner(buffer, filename);
   } finally {
     _releaseExtractor();

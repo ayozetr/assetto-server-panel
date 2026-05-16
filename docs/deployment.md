@@ -167,9 +167,58 @@ sudo systemctl restart assetto-dashboard
 # Once a month, check for outdated or vulnerable deps
 npm outdated
 npm audit --audit-level=high
+
+# Belt-and-braces supply-chain scan (compromised-version list +
+# registry integrity check). See SECURITY.md for the rationale.
+npm run audit:deps
 ```
 
 `npm audit fix --dry-run` shows the proposed changes before they are applied. Don't run `npm audit fix` blindly — review the diff first; some "fixes" downgrade major versions.
+
+### Safe update procedure
+
+npm supply-chain attacks (Sep 2025 chalk/debug, Jul 2025 Shai-Hulud worm) repeatedly catch installs that just trust whatever is on the registry. Follow this checklist before bumping any dependency:
+
+1. **Diff the lockfile** before applying.
+
+   ```bash
+   npm install <pkg>@<version> --package-lock-only --no-audit --no-fund
+   git diff package-lock.json | less   # eyeball the integrity hashes
+   ```
+
+   New integrity hashes that look reasonable + the same `resolved` URL pattern as before are normal. Wildly different URL paths or a missing `integrity` field is a red flag — stop.
+
+2. **Run the supply-chain audit** locally.
+
+   ```bash
+   npm run audit:deps
+   ```
+
+   This re-fetches each top-level package's integrity hash from `registry.npmjs.org` and compares it against the lockfile. A mismatch means the tarball was retroactively swapped — abort the update, report to the registry.
+
+3. **Install for real** with `npm ci` (not `npm install`).
+
+   ```bash
+   npm ci --no-audit --no-fund
+   ```
+
+   `npm ci` refuses to install if the lockfile and `package.json` disagree, so the only way new code reaches your `node_modules` is via the lockfile you just diffed.
+
+4. **(Optional, paranoid)** skip every transitive postinstall script.
+
+   ```bash
+   npm ci --ignore-scripts
+   ```
+
+   This skips `preinstall` / `install` / `postinstall` hooks across the tree. `better-sqlite3` uses such a hook to download a prebuilt native binary from GitHub Releases; with `--ignore-scripts` you'll need a build toolchain (`build-essential`, `python3`) so node-gyp can compile from source as a fallback. The Dockerfile in this repo already does that. Bare-metal installs may prefer to skip this step unless you're actively investigating a supply-chain incident.
+
+5. **Run the smoke test** before restarting the live panel.
+
+   ```bash
+   npm test
+   ```
+
+6. **Restart and watch the journal** for unexpected logs in the first minute. The boot lines should be: `migration … applied/recorded`, `Database ready`, `[UDP] listening`, the banner, the AC paths check. Anything else is worth investigating before you walk away.
 
 ---
 

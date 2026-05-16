@@ -54,3 +54,20 @@ The author makes a good-faith effort that each tagged release is free of *known*
 - Forced password change for the seeded admin until a new password is set, enforced server-side on every authenticated route. The panel refuses to delete or demote the last remaining admin so an operator cannot accidentally lock everyone out.
 
 If you are deploying the Panel in production, please also read [`README.md`](README.md), the [deployment guide](docs/deployment.md), and [`TASKS.md`](TASKS.md) (the audit backlog — local-only) if you have a copy.
+
+## Supply-chain hygiene
+
+npm supply-chain attacks against the open-source ecosystem are recurring: maintainer accounts get compromised (the Sep 2025 chalk/debug/ansi-styles incident, the Jul 2025 Shai-Hulud worm, the May 2024 rxnt-* typosquats, and so on). The Panel ships defences against the most common patterns:
+
+- **`npm ci` in production** (documented in `docs/deployment.md`). Refuses to install if `package-lock.json` and `package.json` disagree — a hostile actor cannot just amend `package.json` and have your next deploy pull their malicious version.
+- **Pinned `package-lock.json` with integrity hashes**. Every dependency in the lockfile carries a sha512 hash that npm verifies against the downloaded tarball. A tampered tarball fails the install.
+- **`npm run audit:deps`** runs three independent checks before any release:
+  1. Scans the lockfile against a hand-curated list of versions known to be compromised in past incidents (kept in `tools/audit-deps.js`; update by appending).
+  2. Runs `npm audit --audit-level=moderate` and fails on moderate-or-higher.
+  3. Compares each top-level package's lockfile integrity hash against what `registry.npmjs.org` currently reports. A mismatch means either the tarball was retroactively swapped (very rare) or the lockfile was hand-edited (more common — and almost always a mistake).
+
+  Run it as part of every release checklist; consider wiring into a pre-push git hook if you push from an automated environment.
+- **No `postinstall` scripts in this project**. The panel's own `package.json` only declares `prestart` (runs `build.js` — purely local) and a couple of `tools/*.js` runners. Transitive deps may run their own scripts during install; if you want to opt out of that surface in production add `--ignore-scripts` to `npm ci`, and document any postinstall step the deps actually need (currently only `better-sqlite3`'s prebuild download, which fetches a signed binary from GitHub Releases — not arbitrary code).
+- **`npm-shrinkwrap.json` is not used** intentionally: the lockfile is the source of truth and ships with the repo. If you fork the project, do not delete `package-lock.json` to "force a fresh install" — that disables every integrity check above.
+
+If you discover that a package in our lockfile has been compromised after publication, **please open a security advisory immediately** so we can bump it. Do not push a fix yourself without coordinating — an emergency major-version bump of a transitive dep can break the build chain in subtle ways.

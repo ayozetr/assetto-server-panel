@@ -19,7 +19,8 @@
     "prestart": "node build.js",
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node tools/test-smoke.js"
+    "test": "node tools/test-smoke.js",
+    "audit:deps": "node tools/audit-deps.js"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",

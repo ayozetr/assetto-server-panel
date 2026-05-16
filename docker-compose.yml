@@ -1,0 +1,84 @@
+# ───────────────────────────────────────────────────────────────────────────────
+# Assetto Server Panel — docker-compose
+#
+# Usage:
+#   1. Copy .env.example → .env and adjust the AC_* paths to match your install.
+#      The panel reads the same env vars whether it runs bare-metal or in
+#      Docker, so the existing .env (if you have one) works as-is.
+#   2. docker compose up -d
+#   3. Open http://localhost:3000 — default creds Admin / Admin1234! (forced
+#      change on first login).
+#
+# What this file does:
+#   - Builds the image from the local Dockerfile.
+#   - Bind-mounts the AC server's cfg + content dirs into the container so
+#     edits made via the panel land in the real files acServer reads.
+#   - Persists the SQLite DB + logs to named volumes so `docker compose down`
+#     never wipes state.
+#   - Sets HOST=127.0.0.1 inside the container and exposes port 3000 to the
+#     host only — combine with a reverse proxy (nginx / Caddy / Cloudflare
+#     Tunnel) if you need internet access.
+# ───────────────────────────────────────────────────────────────────────────────
+
+services:
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: assetto-panel:latest
+    container_name: assetto-panel
+    restart: unless-stopped
+
+    # Read env vars from .env in this directory. Override any of the AC_* paths
+    # here if your host layout differs.
+    env_file:
+      - .env
+
+    # Override the host bind for safety: the container's HOST=0.0.0.0 is fine
+    # because Docker's port mapping below only publishes to 127.0.0.1 by default.
+    environment:
+      HOST: 0.0.0.0
+      DB_PATH: /data/assetto.db
+      AC_SERVER_LOG: /app/logs/ac_server.log
+
+    # Publish 3000 ONLY to loopback. Use a reverse proxy / Cloudflare Tunnel for
+    # remote access. Change to "3000:3000" if you intentionally want LAN access.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    volumes:
+      # AC server data — adjust to your host paths. These are the same dirs
+      # AC_CFG_DIR / AC_CONTENT_DIR point at in .env, but mounted by Docker
+      # so the in-container path matches.
+      - ${AC_CFG_DIR:-/srv/assetto/cfg}:/srv/assetto/cfg:rw
+      - ${AC_CONTENT_DIR:-/srv/assetto/content}:/srv/assetto/content:rw
+
+      # Panel state. Survives container recreation.
+      - panel-data:/data
+      - panel-logs:/app/logs
+
+    # Light hardening. cap_drop is the most useful here — the panel never
+    # needs raw network / privileged file access.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN          # write to mounted dirs as non-root
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # tini handles signals — ensures graceful shutdown when compose stops us.
+    init: false   # we use tini in the Dockerfile entrypoint instead
+
+volumes:
+  panel-data:
+  panel-logs:

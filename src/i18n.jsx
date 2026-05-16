@@ -59,6 +59,8 @@ const dict = {
     'login.err_pass': 'Enter password',
     'login.err_cred': 'Invalid credentials',
     'login.err_conn': 'Connection error',
+    'login.setup_needed': 'Configuration needed',
+    'login.setup_hint':   'The panel cannot find one or more AC server paths. Edit your .env file and restart, or run',
 
     // Common / Global
     'common.save': 'Save',
@@ -563,6 +565,8 @@ const dict = {
     'login.err_pass': 'Introduce una contraseña',
     'login.err_cred': 'Credenciales incorrectas',
     'login.err_conn': 'Error de conexión con el servidor',
+    'login.setup_needed': 'Configuración necesaria',
+    'login.setup_hint':   'El panel no encuentra alguna ruta de acServer. Edita tu .env y reinicia, o ejecuta',
 
     // Common / Global
     'common.save': 'Guardar',
@@ -1067,6 +1071,8 @@ const dict = {
     'login.err_pass': 'Inserisci una password',
     'login.err_cred': 'Credenziali non valide',
     'login.err_conn': 'Errore di connessione',
+    'login.setup_needed': 'Configurazione necessaria',
+    'login.setup_hint':   'Il pannello non trova uno o più percorsi di acServer. Modifica il file .env e riavvia, oppure esegui',
 
     // Common / Global
     'common.save': 'Salva',

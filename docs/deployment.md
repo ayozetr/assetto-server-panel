@@ -1,6 +1,39 @@
 # Production Deployment
 
-## Systemd service (recommended)
+## Docker (easiest path)
+
+The repo ships a multi-stage `Dockerfile` and `docker-compose.yml`. If you already have Docker installed on the host that runs acServer (or anywhere with network access to the same `cfg/` and `content/` dirs), this is the smallest possible setup:
+
+```bash
+cp .env.example .env       # adjust AC_* paths to match your host
+docker compose up -d
+```
+
+That's it. The compose file:
+
+- Builds the panel image (multi-stage; runtime is `node:20-bookworm-slim` with `p7zip-full` for the 7z extractor + `tini` to reap zombies if the panel ever spawns acServer as a child).
+- Mounts your host's `${AC_CFG_DIR}` and `${AC_CONTENT_DIR}` into the container at the same paths the panel reads them from, so edits made via the UI land in the real files acServer loads.
+- Persists the SQLite DB (`/data`) and logs (`/app/logs`) to named Docker volumes — `docker compose down` does NOT wipe state.
+- Publishes port `3000` to `127.0.0.1` only, on purpose. Put a reverse proxy or Cloudflare Tunnel in front of it for remote access.
+
+The container runs as a non-root `panel` user with `cap_drop: [ALL]` and `no-new-privileges: true`. Apply `MemoryMax` / `CPUQuota` from your orchestrator if you want hard ceilings.
+
+> **acServer in or out of Docker?** The panel does NOT include acServer — it manages an instance that runs on the host (or in another container). The compose file assumes acServer lives on the host and binds the same `cfg/` and `content/` dirs the panel needs to read/write. If you containerise acServer too, mount the same volumes into both containers; the panel doesn't care where acServer runs, only that it can talk to its HTTP API on `127.0.0.1:${AC_HTTP_PORT}`.
+
+### Updating a containerised install
+
+```bash
+cd assetto-dashboard
+git pull
+docker compose build --pull
+docker compose up -d
+```
+
+The `panel-data` volume keeps the DB. Migrations run on startup. No data loss.
+
+---
+
+## Systemd service (bare-metal)
 
 Running the panel as a systemd service ensures it starts automatically on boot and restarts if it crashes.
 

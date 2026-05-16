@@ -9,10 +9,12 @@
   "repository": { "type": "git", "url": "https://github.com/ayozetr/assetto-dashboard.git" },
   "engines": { "node": ">=20" },
   "scripts": {
+    "setup":    "node tools/setup.js",
     "build":    "node build.js",
     "prestart": "node build.js",
     "start":    "node server.js",
-    "dev":      "node server.js"
+    "dev":      "node server.js",
+    "test":     "node tools/test-smoke.js"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",

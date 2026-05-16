@@ -150,6 +150,20 @@ function App() {
   const [dataLoaded, setDataLoaded] = uS({ cars: false, tracks: false, lapTimes: false });
   const [backendDown, setBackendDown] = uS(false);
   const failCount = uR(0);
+  const [setupStatus, setSetupStatus] = uS(null);
+
+  // Poll /api/setup/status once on mount. The endpoint is public so the login
+  // screen can render a banner even before the user authenticates — operators
+  // who misconfigure AC_CFG_DIR otherwise see "server_cfg.ini not found"
+  // errors all over the panel without an obvious root cause.
+  uE(() => {
+    let cancelled = false;
+    fetch('/api/setup/status')
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setSetupStatus(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Persist theme & user
   uE(() => {
@@ -319,7 +333,7 @@ function App() {
 
   const serverDisplay = { ...server, cpu: Math.round(server.cpu) };
 
-  if (!user) return <Login onLogin={setUser}/>;
+  if (!user) return <Login onLogin={setUser} setupStatus={setupStatus}/>;
 
   // Block the rest of the panel until the user clears the must_change_password flag.
   // The server enforces the same gate — no admin/data API will respond until flag = 0.

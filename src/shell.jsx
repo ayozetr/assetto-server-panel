@@ -228,7 +228,7 @@ function Topbar({ theme, setTheme, server, onServerAction, user, onMenuClick }) 
 // ──────────────────────────────────────────────────────
 // Login screen
 // ──────────────────────────────────────────────────────
-function Login({ onLogin }) {
+function Login({ onLogin, setupStatus }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
@@ -237,6 +237,34 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const userRef = useRef(null);
   const passRef = useRef(null);
+  // Setup banner: when /api/setup/status returns ready=false the panel is
+  // technically up (login still works) but pretty much every page after
+  // login will show errors because the AC paths are wrong. Surface the
+  // actionable detail here so the operator doesn't have to log in to
+  // discover what's missing.
+  const setupBanner = setupStatus && setupStatus.ready === false
+    ? (
+      <div role="alert" style={{
+        marginBottom: 18, padding: '12px 14px', borderRadius: 8,
+        background: 'color-mix(in srgb, #f59e0b 12%, transparent)',
+        border: '1px solid color-mix(in srgb, #f59e0b 40%, transparent)',
+        fontSize: 12.5, lineHeight: 1.5,
+      }}>
+        <div style={{fontWeight: 600, marginBottom: 4, color: '#b45309'}}>
+          {t('login.setup_needed') || 'Configuration needed'}
+        </div>
+        <div style={{color: 'var(--text-muted)'}}>
+          {t('login.setup_hint') || 'The panel cannot find one or more AC server paths. Edit your .env file and restart, or run'} <code style={{background:'var(--bg-3)', padding:'1px 5px', borderRadius:3}}>npm run setup</code>.
+        </div>
+        <ul style={{margin: '6px 0 0 18px', padding: 0, color: 'var(--text-muted)'}}>
+          {(setupStatus.issues || []).map(k => {
+            const p = setupStatus.paths && setupStatus.paths[k];
+            return <li key={k}><strong>{k}</strong>: <span className="mono" style={{fontSize: 11}}>{p?.path || '(unset)'}</span> {p?.missing ? '— missing' : ''}</li>;
+          })}
+        </ul>
+      </div>
+    )
+    : null;
 
   const submit = async (e) => {
     e?.preventDefault();
@@ -273,6 +301,8 @@ function Login({ onLogin }) {
             <div className="login-sub">{t('login.subtitle')}</div>
           </div>
         </div>
+
+        {setupBanner}
 
         <div className="login-fields">
           <div className="field">

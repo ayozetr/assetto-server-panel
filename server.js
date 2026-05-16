@@ -65,21 +65,82 @@ function newRequestId() {
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const HOST         = process.env.HOST              || '0.0.0.0';
+// The four AC_* env vars below are the only ones a fresh install must supply.
+// Everything else (results dir, log file, blacklist/whitelist paths) is
+// derived so an operator can ship a 4-line .env and have it work.
+//
+// Auto-detect when an env var is missing: walk a small list of conventional
+// paths and pick the first one that exists. Order matches what the README
+// recommends — user-home install first, then the system-wide /srv layout.
+function _firstExistingPath(candidates) {
+  for (const p of candidates) {
+    if (!p) continue;
+    try { fs.accessSync(p); return p; } catch {}
+  }
+  return null;
+}
+const _DEFAULT_AC_ROOTS = [
+  process.env.HOME && path.join(process.env.HOME, 'ac_server'),
+  '/srv/assetto',
+  '/opt/ac_server',
+  '/srv/acserver',
+].filter(Boolean);
+const _detectedAcRoot = _firstExistingPath(_DEFAULT_AC_ROOTS);
+function _ac(envName, ...relParts) {
+  if (process.env[envName]) return process.env[envName];
+  if (!_detectedAcRoot) return null;
+  return path.join(_detectedAcRoot, ...relParts);
+}
+
+const HOST         = process.env.HOST              || '127.0.0.1';
 const PORT         = parseInt(process.env.PORT     || '3000', 10);
 const AC_HTTP_PORT = parseInt(process.env.AC_HTTP_PORT || '8081', 10);
+
+// AC_SERVER_DIR is the anchor: if the env var is missing, prefer an explicit
+// AC_SERVER_BIN's parent, then the auto-detected root. The other AC_* paths
+// fall back to subdirs of this anchor.
+const AC_BIN_RAW   = process.env.AC_SERVER_BIN || _ac('AC_SERVER_BIN', 'acServer');
+const AC_BIN_DIR_RAW = process.env.AC_SERVER_DIR
+  || (AC_BIN_RAW ? path.dirname(AC_BIN_RAW) : null)
+  || _detectedAcRoot
+  || '/srv/assetto';
+const AC_BIN          = AC_BIN_RAW || path.join(AC_BIN_DIR_RAW, 'acServer');
+const AC_BIN_DIR      = AC_BIN_DIR_RAW;
+
 const AC_LOG_FILE  = process.env.AC_SERVER_LOG     || path.join(__dirname, 'logs', 'ac_server.log');
-const AC_RESULTS   = process.env.AC_SERVER_RESULTS || path.join(os.homedir(), 'ac_server', 'results');
-const AC_CFG_FILE  = path.join(process.env.AC_CFG_DIR || '/srv/assetto/cfg', 'server_cfg.ini');
-const AC_CARS_DIR  = path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'cars');
-const AC_TRACKS_DIR= path.join(process.env.AC_CONTENT_DIR || '/srv/assetto/content', 'tracks');
+const AC_RESULTS   = process.env.AC_SERVER_RESULTS || path.join(AC_BIN_DIR, 'results');
+const _AC_CFG_DIR_RESOLVED = process.env.AC_CFG_DIR
+  || (_detectedAcRoot ? path.join(_detectedAcRoot, 'cfg') : '/srv/assetto/cfg');
+const AC_CFG_FILE  = path.join(_AC_CFG_DIR_RESOLVED, 'server_cfg.ini');
+const _AC_CONTENT_DIR_RESOLVED = process.env.AC_CONTENT_DIR
+  || (_detectedAcRoot ? path.join(_detectedAcRoot, 'content') : '/srv/assetto/content');
+const AC_CARS_DIR  = path.join(_AC_CONTENT_DIR_RESOLVED, 'cars');
+const AC_TRACKS_DIR= path.join(_AC_CONTENT_DIR_RESOLVED, 'tracks');
 const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
-const AC_BIN          = process.env.AC_SERVER_BIN || path.join(os.homedir(), 'ac_server', 'acServer');
-const AC_BIN_DIR      = process.env.AC_SERVER_DIR || path.dirname(AC_BIN);
-const AC_BLACKLIST    = process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt');
-const ADMIN_TOKEN     = process.env.ADMIN_TOKEN || '';
+const AC_BLACKLIST = process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt');
+const ADMIN_TOKEN  = process.env.ADMIN_TOKEN || '';
 const ROOT            = __dirname;
 const KUNOS_ASSETS_DIR = path.join(__dirname, 'src/assets/kunos');
+
+// Boot-time path summary. Logged once on startup so operators can verify the
+// auto-detection picked sane defaults without grepping the source. Failures
+// here are non-fatal — the panel boots and shows a setup banner inside the UI.
+function _logBootConfig() {
+  const exists = p => { try { fs.accessSync(p); return true; } catch { return false; } };
+  const status = (label, p) => `    ${label.padEnd(20)} ${p || '(unset)'} ${p ? (exists(p) ? '✓' : '✗ MISSING') : ''}`;
+  console.log('  AC paths:');
+  console.log(status('AC_CFG_DIR',     _AC_CFG_DIR_RESOLVED));
+  console.log(status('AC_CONTENT_DIR', _AC_CONTENT_DIR_RESOLVED));
+  console.log(status('AC_SERVER_BIN',  AC_BIN));
+  console.log(status('AC_SERVER_DIR',  AC_BIN_DIR));
+  if (!process.env.AC_CFG_DIR && !process.env.AC_CONTENT_DIR && _detectedAcRoot) {
+    console.log(`    (auto-detected root: ${_detectedAcRoot})`);
+  }
+  if (!exists(AC_CFG_FILE)) {
+    console.warn(`  ⚠️  server_cfg.ini not found at ${AC_CFG_FILE}. The Config / Session pages will`);
+    console.warn(`     show an error until you point AC_CFG_DIR at the directory that holds it.`);
+  }
+}
 
 let acChild = null; // tracked child process for the AC server
 
@@ -4362,6 +4423,45 @@ async function apiAdminMetricsProm(req, res) {
 // Admin: panel internals snapshot for ops debugging. Returns sweeper status,
 // table sizes, and current in-flight counters. Useful when "is the panel still
 // alive?" can't be answered from the UI alone.
+// Quick existence + type check for the four AC paths the panel needs. Used by
+// /api/admin/stats and /api/setup/status to drive a setup banner in the UI.
+async function _pathHealth() {
+  const probe = async (p, kind) => {
+    if (!p) return { path: p, exists: false, kind, missing: true };
+    try {
+      const st = await fsp.stat(p);
+      const ok = kind === 'dir' ? st.isDirectory() : st.isFile();
+      return { path: p, exists: true, kind, ok };
+    } catch { return { path: p, exists: false, kind, missing: true }; }
+  };
+  return {
+    cfgFile:   await probe(AC_CFG_FILE, 'file'),
+    cars:      await probe(AC_CARS_DIR, 'dir'),
+    tracks:    await probe(AC_TRACKS_DIR, 'dir'),
+    serverBin: await probe(AC_BIN,       'file'),
+    serverDir: await probe(AC_BIN_DIR,   'dir'),
+    results:   await probe(AC_RESULTS,   'dir'),
+  };
+}
+
+// Public endpoint: tells the frontend whether the panel is fully configured.
+// Returns the boolean `ready` plus the per-path summary so the UI can render
+// an actionable banner pointing operators at the specific path that's
+// missing. No auth required because (a) the same data is needed before any
+// login can succeed if AC_CFG_DIR is wrong, and (b) it leaks no secret —
+// only the filesystem paths the operator already chose in their own .env.
+async function apiSetupStatus(req, res) {
+  const paths = await _pathHealth();
+  const critical = ['cfgFile', 'cars', 'tracks'];
+  const issues = critical.filter(k => !paths[k] || !paths[k].exists);
+  json(res, 200, {
+    ready: issues.length === 0,
+    issues,
+    paths,
+    detectedAcRoot: _detectedAcRoot || null,
+  });
+}
+
 async function apiAdminStats(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   const counts = {};
@@ -4377,6 +4477,7 @@ async function apiAdminStats(req, res) {
   try { chunkDirs = (await fsp.readdir(CHUNK_TMP_DIR).catch(() => [])).length; } catch {}
   json(res, 200, {
     nodeVersion:        process.version,
+    panelVersion:       require('./package.json').version,
     uptimeSec:          Math.floor(process.uptime()),
     memoryMb:           Math.round(process.memoryUsage().rss / 1024 / 1024),
     auditRetentionDays: AUDIT_RETENTION_DAYS,
@@ -4387,6 +4488,12 @@ async function apiAdminStats(req, res) {
     sseClients:         sseClients.size,
     sweepers:           _sweeperState,
     counts,
+    paths:              await _pathHealth(),
+    backupConfig: {
+      intervalHours: BACKUP_INTERVAL_HOURS,
+      keep:          BACKUP_KEEP,
+      dir:           BACKUP_DIR,
+    },
   });
 }
 
@@ -4968,6 +5075,10 @@ function handler(req, res) {
     // clients; it is a fingerprinting signal worth nothing to legitimate health probes.
     if (urlPath === '/api/health' && req.method === 'GET')
       return json(res, 200, { ok: true });
+    // /api/setup/status is also public: the login screen reads it to render a
+    // configuration banner before any login can succeed when AC_CFG_DIR is
+    // wrong. No secrets leak — only the filesystem paths the operator chose.
+    if (urlPath === '/api/setup/status' && req.method === 'GET') return apiSetupStatus(req, res);
 
     // Auth
     if (urlPath === '/api/auth/me'              && req.method === 'GET')  return apiAuthMe(req, res);
@@ -5262,6 +5373,58 @@ function sweepExpiredSessions() {
 sweepExpiredSessions();
 setInterval(sweepExpiredSessions, 60 * 60 * 1000);
 
+// ── Scheduled DB backups ─────────────────────────────────────────────────────
+// VACUUM INTO produces a consistent snapshot of the live DB without locking
+// readers/writers, so the sweep can run while the panel is serving requests.
+// BACKUP_INTERVAL_HOURS=0 (default) disables auto-backups; the manual
+// /api/admin/backup endpoint still works either way.
+//
+// Files land in BACKUP_DIR (default: a `backups/` dir next to the DB) with
+// names like `assetto-2026-05-16T14-30-00.db`. Anything older than the most
+// recent BACKUP_KEEP files is deleted.
+const BACKUP_INTERVAL_HOURS = Math.max(0, parseInt(process.env.BACKUP_INTERVAL_HOURS, 10) || 0);
+const BACKUP_KEEP           = Math.max(1, parseInt(process.env.BACKUP_KEEP, 10) || 14);
+const BACKUP_DIR            = path.resolve(process.env.BACKUP_DIR || path.join(path.dirname(DB_PATH), 'backups'));
+_sweeperState.backups = { lastRunAt: null, lastRemoved: 0, lastFile: null, lastError: null };
+
+async function runScheduledBackup() {
+  if (!db) return;
+  try {
+    await fsp.mkdir(BACKUP_DIR, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const dest  = path.join(BACKUP_DIR, `assetto-${stamp}.db`);
+    // VACUUM INTO refuses to overwrite. The timestamp resolution is 1 s so
+    // two manually-forced sweeps in the same second would collide; unlink
+    // any pre-existing file first to keep the cron robust.
+    await fsp.unlink(dest).catch(() => {});
+    db.prepare('VACUUM INTO ?').run(dest);
+    // Retention: keep the newest BACKUP_KEEP files, drop the rest.
+    const files = (await fsp.readdir(BACKUP_DIR))
+      .filter(n => /^assetto-.*\.db$/.test(n))
+      .sort()
+      .reverse();
+    let removed = 0;
+    for (const f of files.slice(BACKUP_KEEP)) {
+      await fsp.unlink(path.join(BACKUP_DIR, f)).catch(() => {});
+      removed++;
+    }
+    _sweeperState.backups = { lastRunAt: Date.now(), lastRemoved: removed, lastFile: dest, lastError: null };
+    const st = await fsp.stat(dest);
+    insertAuditLog('system', 'admin.backup.auto', path.basename(dest), `${st.size} bytes; pruned ${removed} older snapshot(s)`);
+    log.info(`backup sweep: wrote ${path.basename(dest)} (${st.size} bytes), pruned ${removed} old file(s)`);
+  } catch (e) {
+    _sweeperState.backups.lastError = e.message;
+    log.warn('backup sweep failed:', e.message);
+  }
+}
+if (BACKUP_INTERVAL_HOURS > 0) {
+  // Don't run on boot — wait a full interval so a panel that restarts every
+  // few minutes (during initial setup) doesn't spam backup files. The first
+  // backup fires BACKUP_INTERVAL_HOURS hours after boot.
+  setInterval(runScheduledBackup, BACKUP_INTERVAL_HOURS * 60 * 60 * 1000);
+  log.info(`scheduled backups enabled: every ${BACKUP_INTERVAL_HOURS}h, keeping ${BACKUP_KEEP} snapshots in ${BACKUP_DIR}`);
+}
+
 const server = http.createServer((req, res) => {
   // Honour an upstream X-Request-Id (e.g. from Cloudflare) to keep correlation
   // across the proxy → panel → AC server hops; otherwise mint a fresh one.
@@ -5278,11 +5441,13 @@ server.listen(PORT, HOST, () => {
   const ip   = getNetworkIP();
   const line = '─'.repeat(44);
   console.log(`\n  ${line}`);
-  console.log(`    Assetto Server Panel`);
+  console.log(`    Assetto Server Panel v${require('./package.json').version}`);
   console.log(`  ${line}`);
   console.log(`    Local    →  http://localhost:${PORT}`);
   console.log(`    Network  →  http://${ip}:${PORT}`);
   console.log(`  ${line}\n`);
+  _logBootConfig();
+  console.log('');
 
   // Boot-time misconfiguration warning. TRUST_PROXY=1 plus HOST=0.0.0.0 used to
   // let any LAN client spoof CF-Connecting-IP and frame the audit log / bypass

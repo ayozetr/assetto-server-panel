@@ -6,7 +6,9 @@
   ![Node.js](https://img.shields.io/badge/Node.js-20.20.2-339933?logo=node.js&logoColor=white)
   ![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white)
   ![Build](https://img.shields.io/badge/build-esbuild-FFCF00?logo=esbuild)
-  ![License](https://img.shields.io/badge/license-Source--Available-orange)
+  ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+  ![License](https://img.shields.io/badge/license-Source--Available%20%2B%20Attribution-orange?logo=opensourceinitiative&logoColor=white)
+  ![Redistribution](https://img.shields.io/badge/redistribution-prohibited-red)
 </div>
 
 ---
@@ -20,7 +22,7 @@ A full web interface to manage your Assetto Corsa server without touching the te
 ## Features
 
 ### 📊 Real-time monitoring
-Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events. Admin-only **persistent "Limpiar logs"** drops the in-memory buffer AND truncates `AC_LOG_FILE` on disk, then broadcasts an SSE `clear` event so every open tab wipes in lock-step — refreshing the page no longer brings the lines back. Activity card resolves car model IDs to their catalogue display name (`Toyota AE86` instead of `ks_toyota_ae86`).
+Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events. Admin-only **persistent "Clear logs"** drops the in-memory buffer AND truncates `AC_LOG_FILE` on disk, then broadcasts an SSE `clear` event so every open tab wipes in lock-step — refreshing the page no longer brings the lines back. Activity card resolves car model IDs to their catalogue display name (`Toyota AE86` instead of `ks_toyota_ae86`).
 
 ### 🏎️ Player management
 Live player table with car, lap count, best/last time and country flag. Kick and ban directly from the panel. Full history of every player who has ever joined the server. **Per-player admin-set nicknames** — pencil button in the history table opens a modal to attach a real name to an in-game alias; the panel then renders rows as "Nickname (in-game)" everywhere, including historic lap times.
@@ -28,7 +30,7 @@ Live player table with car, lap count, best/last time and country flag. Kick and
 ### ⏱️ Lap times database
 Every lap time stored in SQLite automatically. **Live ingest via UDP plugin** — laps land in the database within milliseconds of crossing the finish line, no waiting for the session-end JSON dump. The panel auto-configures `UDP_PLUGIN_LOCAL_PORT` and `UDP_PLUGIN_ADDRESS` in `server_cfg.ini` on the first session apply (zero manual setup). Cross-source dedup via a content-based UNIQUE INDEX prevents the post-session JSON importer from duplicating laps the UDP listener already captured; the JSON instead fills in sector splits on those rows.
 
-Three views: **Records** (best lap per driver+track), **All laps** (every row, paginated 10/page) and **Compare drivers** (side-by-side delta table for up to 4 drivers). Filter by track, car, date or validity. CSV export. **Manual lap insert** — admin-only "Añadir tiempo" popup writes directly into the same `laps` table the UDP listener uses (shared dedup index, `lap.create` audit entry, Discord-record notification reused), so a missed lap from a server outage or an external timing source can be backfilled without touching SQLite by hand.
+Three views: **Records** (best lap per driver+track), **All laps** (every row, paginated 10/page) and **Compare drivers** (side-by-side delta table for up to 4 drivers). Filter by track, car, date or validity. CSV export. **Manual lap insert** — admin-only "Add lap" popup writes directly into the same `laps` table the UDP listener uses (shared dedup index, `lap.create` audit entry, Discord-record notification reused), so a missed lap from a server outage or an external timing source can be backfilled without touching SQLite by hand.
 
 ### 🚗 Cars & tracks catalogue
 Browse all installed cars and tracks with images, specs and multi-layout support. Separate **Kunos content** / **Mod content** toggles — the Kunos toggle auto-flips off on first load when mods are present so modded servers don't drown the catalogue in stock content. Spinner-overlay on each thumbnail with fade-in once fully loaded, so heavy mod previews don't paint in visible chunks. **Per-slot skin selection**: the modal's "Add to slot" passes the selected skin to a `slots` array in session config — the same car can occupy multiple grid positions with different liveries (e.g. FK2 blue + FK2 red as two distinct slots), each landing as its own `[CAR_n]` block in `entry_list.ini`. **Admin-only "Delete" button** inside each modal removes the mod car/track folder recursively from `/content/{cars,tracks}` (audited as `car.delete` / `track.delete`); Kunos content is hard-refused server-side and the button is hidden for it, so the bundled DLC catalogue stays intact and continues serving as the asset-fallback source for the rest of the panel.
@@ -46,10 +48,10 @@ Edit `server_cfg.ini` through a visual interface: server name, ports, slots, pas
 Create, edit and delete panel users. Each user has their own profile with password change and a built-in secure password generator (uses `crypto.getRandomValues`). The panel refuses to delete *or demote* the last remaining admin and revokes a user's active sessions when an admin resets their password.
 
 ### 🔐 Granular role permissions
-The `user` role is gated by nine independent toggles edited from the **Usuarios** page: `serverControl`, `sessionEdit`, `serverConfig`, `whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`, `auditView`, `dbBackup`. Admin always passes every check. Defaults preserve the open grants from earlier deployments (server control / session edit / mod upload on; the rest off). Editing a permission takes effect on the affected user's next request — no re-login needed. Panel-user CRUD, AC `PASSWORD` / `ADMIN_PASSWORD` and the permission set itself are reserved to admins by design (cannot be exposed as toggles without enabling privilege escalation).
+The `user` role is gated by nine independent toggles edited from the **Users** page: `serverControl`, `sessionEdit`, `serverConfig`, `whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`, `auditView`, `dbBackup`. Admin always passes every check. Defaults preserve the open grants from earlier deployments (server control / session edit / mod upload on; the rest off). Editing a permission takes effect on the affected user's next request — no re-login needed. Panel-user CRUD, AC `PASSWORD` / `ADMIN_PASSWORD` and the permission set itself are reserved to admins by design (cannot be exposed as toggles without enabling privilege escalation).
 
 ### 🔔 Discord notifications for lap records
-Drop a Discord webhook URL into Configuración → Discord; the server posts a localized message every time a driver beats the previous best lap for a `(track, layout, car)` combination on the live UDP path. First-ever lap on a combo is **not** a record, so opening up new content doesn't spam the channel. The message uses the panel language stored server-side (en/es/it) and resolves track/car to their catalogue display names. Webhook URL is treated as a secret — never returned to non-admins / users without the `discordWebhook` permission.
+Drop a Discord webhook URL into Settings → Discord; the server posts a localized message every time a driver beats the previous best lap for a `(track, layout, car)` combination on the live UDP path. First-ever lap on a combo is **not** a record, so opening up new content doesn't spam the channel. The message uses the panel language stored server-side (en/es/it) and resolves track/car to their catalogue display names. Webhook URL is treated as a secret — never returned to non-admins / users without the `discordWebhook` permission.
 
 ### 🛡️ Security
 - **Sessions:** scrypt password hashing with cost params pinned in `SCRYPT_PARAMS` (constant-time compare), `HttpOnly; SameSite=Strict` cookies with 7-day TTL plus the `Secure` flag when the request arrived over HTTPS, automatic 401 → logout interceptor on the client.

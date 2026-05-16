@@ -68,7 +68,7 @@ set so the frontend can render conditional UI without an extra fetch.
 ```
 
 Admin always gets every permission as `true`. Users get whatever the admin has
-configured via the Usuarios → Permissions card (see `/api/permissions/role`).
+configured via the Users → Permissions card (see `/api/permissions/role`).
 
 ---
 
@@ -163,7 +163,7 @@ Persistent wipe — drops the in-memory `logBuffer`, truncates `AC_LOG_FILE` on 
 
 **Response:** `{ "ok": true }`
 
-The "Limpiar logs" button in the Logs page invokes this. Non-admins don't see the button — the action affects every viewer and is irreversible.
+The "Clear logs" button in the Logs page invokes this. Non-admins don't see the button — the action affects every viewer and is irreversible.
 
 ---
 
@@ -330,7 +330,7 @@ Lap times from imported result files. Supports server-side filtering — push th
 ---
 
 ### `POST /api/laps`
-Insert a lap manually. Used by the "Añadir tiempo" popup on the Tiempos page to backfill a record that wasn't captured by the UDP listener / result importer (e.g. server outage, external timing source). Shares the `laps_dedup_runtime` UNIQUE index with the other importers; re-submitting the same `(driver_guid, ms, car, track, track_config)` returns `409`.
+Insert a lap manually. Used by the "Add lap" popup on the Lap times page to backfill a record that wasn't captured by the UDP listener / result importer (e.g. server outage, external timing source). Shares the `laps_dedup_runtime` UNIQUE index with the other importers; re-submitting the same `(driver_guid, ms, car, track, track_config)` returns `409`.
 
 **Auth required:** yes (admin only — strictly `checkAdminAuth`)
 
@@ -349,9 +349,9 @@ Insert a lap manually. Used by the "Añadir tiempo" popup on the Tiempos page to
 | `cuts` | no | Cut count for invalid laps. |
 | `session_date` | no | `YYYY-MM-DD`. Defaults to today. |
 
-The driver is also upserted into the `players` table (`total_laps` incremented) so the new pilot shows up on the Jugadores page. A `lap.create` audit log entry is written and, if the lap beats the previous best for `(track, layout, car)`, the Discord webhook fires the same record-broken notification used by the UDP path.
+The driver is also upserted into the `players` table (`total_laps` incremented) so the new pilot shows up on the Players page. A `lap.create` audit log entry is written and, if the lap beats the previous best for `(track, layout, car)`, the Discord webhook fires the same record-broken notification used by the UDP path.
 
-The Tiempos page popup builds its driver dropdown from `/api/players/history`, so the common case ("backfill a lap for an existing pilot") sends the player's real Steam GUID and the lap lands on their existing `players` row instead of creating a `manual:<slug>` synthetic. A "Custom" sentinel in the dropdown re-reveals free-text name + GUID inputs for pilots who have never connected.
+The Lap times page popup builds its driver dropdown from `/api/players/history`, so the common case ("backfill a lap for an existing pilot") sends the player's real Steam GUID and the lap lands on their existing `players` row instead of creating a `manual:<slug>` synthetic. A "Custom" sentinel in the dropdown re-reveals free-text name + GUID inputs for pilots who have never connected.
 
 ---
 
@@ -387,7 +387,7 @@ Recursively delete a **mod** car directory from `AC_CARS_DIR`. Refuses Kunos IDs
 
 **Response:** `{ "ok": true }` on success, `404 { error: "Not found" }` if the directory doesn't exist, `400 { error: "Invalid ID" }` on a malformed id.
 
-A `car.delete` row is written to the audit log. The Tiempos page button calls this and also strips the deleted id from `sessionCfg.slots` so Apply doesn't reference a now-missing mod (acServer refuses to boot when a `[CAR_n].MODEL` is unknown).
+A `car.delete` row is written to the audit log. The Cars page Delete button calls this and also strips the deleted id from `sessionCfg.slots` so Apply doesn't reference a now-missing mod (acServer refuses to boot when a `[CAR_n].MODEL` is unknown).
 
 ---
 

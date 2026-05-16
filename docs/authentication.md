@@ -54,7 +54,7 @@ Then log in normally and use the **Reset password** flow.
 ## Granular permissions
 
 The `user` role is gated by a set of nine independent boolean toggles edited
-from the **Usuarios** page (admin only). They are stored as a single JSON value
+from the **Users** page (admin only). They are stored as a single JSON value
 under the key `role_permissions_user` in `panel_settings`, and surface on
 `/api/auth/me` so the frontend can hide buttons / pages the user cannot use.
 
@@ -63,7 +63,7 @@ under the key `role_permissions_user` in `panel_settings`, and surface on
 | `serverControl`    | Start / stop / restart / reload the AC server from the topbar. |
 | `sessionEdit`      | Edit the session (track, layout, cars, skins, weather, time, penalties) and apply it. |
 | `serverConfig`     | Edit `server_cfg.ini` — name, ports, race rules, etc. AC `PASSWORD` and `ADMIN_PASSWORD` stay admin-only inside the same endpoint. |
-| `whitelistManage`  | Add / remove Steam IDs from the whitelist (per-player button on Players + the editor on Configuración). |
+| `whitelistManage`  | Add / remove Steam IDs from the whitelist (per-player button on Players + the editor on Settings). |
 | `playerModeration` | Kick / ban connected drivers, edit panel nicknames. |
 | `modUpload`        | Upload mods. The Mods page still loads in read-only mode for users without this permission, so they can see the history. |
 | `discordWebhook`   | View / edit the Discord webhook URL and trigger the test post. |

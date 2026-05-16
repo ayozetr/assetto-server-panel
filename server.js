@@ -4363,12 +4363,27 @@ async function apiModUpload(req, res) {
 // Cookie is SameSite=Strict so cross-site requests already lose the cookie,
 // but the Origin check is a belt-and-braces second layer (e.g. against
 // subtle browser bugs or a same-site malicious context).
+//
+// CSRF only matters for cookie-based auth. A request with no `sid` cookie
+// cannot replay the user's session (a malicious site has no way to forge a
+// cookie that is HttpOnly + SameSite=Strict); such requests bypass the
+// Origin check so headless ADMIN_TOKEN callers (which use X-Admin-Token /
+// Authorization: Bearer, never cookies) keep working.
+//
+// When a session cookie IS present, the request MUST carry a matching
+// Origin or Referer. Modern browsers always attach Origin to
+// POST/PUT/DELETE/PATCH; a missing pair would only come from a hand-crafted
+// client or a `Referrer-Policy: no-referrer` form from another origin —
+// the exact shape of a CSRF attempt. Refuse.
 function isUnsafeMethod(m) { return m === 'POST' || m === 'PUT' || m === 'DELETE' || m === 'PATCH'; }
 function checkOrigin(req) {
   const host = (req.headers.host || '').toLowerCase();
   if (!host) return false;
+  // No session cookie = no cookie-based auth = no CSRF vector. Token-only
+  // headless callers (ADMIN_TOKEN) hit this branch and pass without an Origin.
+  if (!readCookie(req, 'sid')) return true;
   const raw = req.headers.origin || req.headers.referer || '';
-  if (!raw) return true; // some proxies strip Origin/Referer; allow cookie-only flow
+  if (!raw) return false; // cookie present + no Origin/Referer → refuse
   try {
     const u = new URL(raw);
     return u.host.toLowerCase() === host;

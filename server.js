@@ -2871,8 +2871,19 @@ function renderPublicPlayerHtml(data, origin, lang) {
   // PNG instead of SVG because Discord's parser doesn't render SVG and bails
   // with 'couldn't load image'. PNG is rendered server-side on demand from
   // the same SVG template (see apiPublicPlayerOgPng).
+  //
+  // The ?v=… on og:image is critical: Discord caches social-card images by
+  // their URL forever (effectively — no public TTL). Without a versioned
+  // URL, the very first preview Discord sees gets pinned across deploys
+  // and data updates. We combine getBuildVersion() (rolls forward on every
+  // panel deploy) with the driver's lastSeen date (rolls forward on every
+  // session they close) — when either changes, Discord sees a different
+  // image URL and re-fetches. The server-side handler ignores the query
+  // (router strips it before matching) so the same physical PNG keeps
+  // serving; only the cache key changes.
   const ogUrl = `${origin}/p/${p.guid}`;
-  const ogImageUrl = `${origin}/p/${p.guid}/og.png`;
+  const ogCacheBust = `${getBuildVersion()}-${(p.lastSeen || '').replace(/-/g, '')}`;
+  const ogImageUrl = `${origin}/p/${p.guid}/og.png?v=${encodeURIComponent(ogCacheBust)}`;
 
   return `<!DOCTYPE html>
 <html lang="${_htmlEsc(lang)}" data-theme="dark">

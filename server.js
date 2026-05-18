@@ -2372,6 +2372,84 @@ function publicProfilesEnabled() {
   } catch { return true; }
 }
 
+// Resolves a (trackId, layoutId) pair into the same two display strings the
+// React Tracks/Session pages render: the base track name (e.g. "Red Bull Ring")
+// and the short layout name (e.g. "Grand Prix" — the variant after stripping
+// the shared track prefix). Mirrors the algorithm in src/utils.jsx's
+// `layoutShortName` so the public profile reads identically to the panel's own
+// "Sesión activa" card. Reads ui_track.json per layout from disk; results are
+// memoized for the lifetime of the process via _trackLayoutCache so a Players
+// page with 50 rows of records doesn't re-stat the same dir 50 times.
+const _trackLayoutCache = new Map();
+function _trackLayoutDisplay(trackId, layoutId) {
+  const key = `${trackId}|${layoutId || ''}`;
+  const cached = _trackLayoutCache.get(key);
+  if (cached) return cached;
+
+  const out = { trackName: formatName(trackId || ''), layoutName: '' };
+  if (!isValidContentId(trackId)) { _trackLayoutCache.set(key, out); return out; }
+
+  // Per-layout ui_track.json — most multi-layout tracks live here. Kunos
+  // fallback covers stock content shipped inside src/assets/kunos.
+  let layoutJsonName = '';
+  if (layoutId && isValidContentId(layoutId)) {
+    const l = _readUiJsonSync(path.join(AC_TRACKS_DIR, trackId, 'ui', layoutId, 'ui_track.json'))
+           || _readUiJsonSync(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'ui', layoutId, 'ui_track.json'));
+    if (l?.name) layoutJsonName = l.name;
+  }
+  // Root ui_track.json — single-layout tracks live here, multi-layout tracks
+  // sometimes carry it too as a parent label.
+  let baseName = '';
+  const base = _readUiJsonSync(path.join(AC_TRACKS_DIR, trackId, 'ui', 'ui_track.json'))
+            || _readUiJsonSync(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'ui', 'ui_track.json'));
+  if (base?.name) baseName = base.name;
+
+  // Multi-layout track with no root ui_track.json — derive the base name from
+  // the longest common prefix of every layout's display name. This matches
+  // what trackBaseName() in src/utils.jsx does in the SPA so the public page
+  // never disagrees with what the Tracks page shows for the same combo.
+  if (!baseName) {
+    try {
+      const uiDir = path.join(AC_TRACKS_DIR, trackId, 'ui');
+      const sub = fs.readdirSync(uiDir, { withFileTypes: true })
+        .filter(e => e.isDirectory()).map(e => e.name);
+      const names = [];
+      for (const ld of sub) {
+        const j = _readUiJsonSync(path.join(uiDir, ld, 'ui_track.json'));
+        if (j?.name) names.push(j.name);
+      }
+      if (names.length >= 2) {
+        let p = names[0];
+        for (let i = 1; i < names.length; i++) {
+          let j = 0;
+          while (j < p.length && j < names[i].length && p[j] === names[i][j]) j++;
+          p = p.slice(0, j);
+          if (!p) break;
+        }
+        p = p.replace(/[\s_/-]+$/, '');
+        if (p.length >= 3) baseName = p;
+      } else if (names.length === 1) baseName = names[0];
+    } catch {}
+  }
+  if (!baseName) baseName = formatName(trackId);
+
+  // Short layout name = layout name with the base track prefix stripped, so
+  // "Red Bull Ring" reads as "Grand Prix". If stripping
+  // would empty the string (e.g. the layout name IS the base name) we keep
+  // the full name so the cell isn't blank.
+  let shortLayout = layoutJsonName;
+  if (shortLayout && baseName && shortLayout.toLowerCase().startsWith(baseName.toLowerCase())) {
+    const stripped = shortLayout.slice(baseName.length).replace(/^[\s_/-]+/, '').trim();
+    if (stripped) shortLayout = stripped;
+  }
+  if (!shortLayout && layoutId) shortLayout = formatName(layoutId);
+
+  out.trackName  = baseName;
+  out.layoutName = shortLayout;
+  _trackLayoutCache.set(key, out);
+  return out;
+}
+
 // Pulls everything the public profile needs in four small queries. Returns
 // null when the player has never been seen by the panel (no row in players).
 function getPublicPlayerData(guid) {
@@ -2468,25 +2546,33 @@ function getPublicPlayerData(guid) {
       bestDate:   bestDate,
       recordsHeld: records.length,
     },
-    records: records.map(r => ({
-      track:       r.track,
-      trackName:   formatName(r.track),
-      trackConfig: r.track_config || '',
-      car:         r.car,
-      carName:     formatName(r.car),
-      ms:          r.best_ms,
-      date:        r.set_date || '',
-      tiedOthers:  r.tied_others || 0,
-    })),
-    personalBests: personalBests.map(pb => ({
-      track:       pb.track,
-      trackName:   formatName(pb.track),
-      trackConfig: pb.track_config || '',
-      car:         pb.car,
-      carName:     formatName(pb.car),
-      ms:          pb.best_ms,
-      date:        pb.last_date || '',
-    })),
+    records: records.map(r => {
+      const td = _trackLayoutDisplay(r.track, r.track_config);
+      return {
+        track:       r.track,
+        trackName:   td.trackName,
+        trackConfig: r.track_config || '',
+        layoutName:  td.layoutName,
+        car:         r.car,
+        carName:     carDisplayName(r.car),
+        ms:          r.best_ms,
+        date:        r.set_date || '',
+        tiedOthers:  r.tied_others || 0,
+      };
+    }),
+    personalBests: personalBests.map(pb => {
+      const td = _trackLayoutDisplay(pb.track, pb.track_config);
+      return {
+        track:       pb.track,
+        trackName:   td.trackName,
+        trackConfig: pb.track_config || '',
+        layoutName:  td.layoutName,
+        car:         pb.car,
+        carName:     carDisplayName(pb.car),
+        ms:          pb.best_ms,
+        date:        pb.last_date || '',
+      };
+    }),
   };
 }
 
@@ -2539,7 +2625,7 @@ function renderPublicPlayerHtml(data, origin) {
         <tr>
           <td>
             <div class="combo-track">${_htmlEsc(r.trackName)}</div>
-            ${r.trackConfig ? `<div class="combo-layout">${_htmlEsc(r.trackConfig)}</div>` : ''}
+            ${r.layoutName ? `<div class="combo-layout">${_htmlEsc(r.layoutName)}</div>` : ''}
           </td>
           <td class="muted">${_htmlEsc(r.carName)}</td>
           <td class="mono lap-time">${_fmtLapMs(r.ms)}</td>
@@ -2552,7 +2638,7 @@ function renderPublicPlayerHtml(data, origin) {
         <tr>
           <td>
             <div class="combo-track">${_htmlEsc(pb.trackName)}</div>
-            ${pb.trackConfig ? `<div class="combo-layout">${_htmlEsc(pb.trackConfig)}</div>` : ''}
+            ${pb.layoutName ? `<div class="combo-layout">${_htmlEsc(pb.layoutName)}</div>` : ''}
           </td>
           <td class="muted">${_htmlEsc(pb.carName)}</td>
           <td class="mono lap-time">${_fmtLapMs(pb.ms)}</td>
@@ -2652,19 +2738,26 @@ function renderPublicPlayerHtml(data, origin) {
     }
     .pp-flag { font-size: 22px; line-height: 1; }
     .pp-aka { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    /* Badge is the Steam link itself: the whole chip is clickable, icon on
+       the left identifies the destination, GUID renders to the right. No
+       extra external-link icon — the chip-as-link pattern is enough. */
     .pp-guid {
-      display: inline-flex; align-items: center; gap: 6px;
-      margin-top: 10px; padding: 4px 10px;
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 10px; padding: 5px 12px 5px 10px;
       background: var(--bg-3); border: 1px solid var(--border);
       border-radius: 999px;
       font-family: var(--font-mono); font-size: 11.5px;
       color: var(--text-muted);
+      text-decoration: none;
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
     }
-    .pp-guid a {
-      color: var(--text-muted); text-decoration: none;
-      display: inline-flex; align-items: center; gap: 4px;
+    .pp-guid:hover {
+      color: var(--text);
+      background: var(--bg);
+      border-color: var(--border-strong);
     }
-    .pp-guid a:hover { color: var(--text); }
+    .pp-guid-steam { display: inline-flex; align-items: center; flex-shrink: 0; }
+    .pp-guid-steam svg { width: 13px; height: 13px; }
 
     .pp-kpis {
       display: grid;
@@ -2792,16 +2885,14 @@ function renderPublicPlayerHtml(data, origin) {
           ${flagEmoji ? `<span class="pp-flag" title="${_htmlEsc(p.nation)}">${flagEmoji}</span>` : ''}
         </div>
         ${p.nickname ? `<div class="pp-aka">in-game: ${_htmlEsc(p.name)}</div>` : ''}
-        <div class="pp-guid">
-          <span>${_htmlEsc(p.guid)}</span>
-          <a href="https://steamcommunity.com/profiles/${_htmlEsc(p.guid)}" target="_blank" rel="noreferrer noopener" title="Open Steam profile">
-            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
+        <a class="pp-guid" href="https://steamcommunity.com/profiles/${_htmlEsc(p.guid)}" target="_blank" rel="noreferrer noopener" title="Open Steam profile">
+          <span class="pp-guid-steam" aria-hidden="true">
+            <svg viewBox="-1.5 0 259 259" fill="currentColor" stroke="none" aria-hidden="true">
+              <path fill-rule="evenodd" d="M127.778579,0 C60.4203546,0 5.24030561,52.412282 0,119.013983 L68.7236558,147.68805 C74.5451924,143.665561 81.5845466,141.322185 89.1497766,141.322185 C89.8324924,141.322185 90.5059824,141.340637 91.1702465,141.377541 L121.735621,96.668877 L121.735621,96.0415165 C121.735621,69.1388208 143.425688,47.2457835 170.088511,47.2457835 C196.751333,47.2457835 218.441401,69.1388208 218.441401,96.0415165 C218.441401,122.944212 196.751333,144.846475 170.088511,144.846475 C169.719475,144.846475 169.359666,144.83725 168.99063,144.828024 L125.398299,176.205276 C125.425977,176.786507 125.444428,177.367738 125.444428,177.939743 C125.444428,198.144443 109.160732,214.575753 89.1497766,214.575753 C71.5836817,214.575753 56.8868387,201.917832 53.5655182,185.163615 L4.40997549,164.654462 C19.6326942,218.967277 69.0834655,258.786219 127.778579,258.786219 C198.596511,258.786219 256,200.847629 256,129.393109 C256,57.9293643 198.596511,0 127.778579,0 Z M80.3519677,196.332478 L64.6033732,189.763644 C67.389592,195.63131 72.2239585,200.539484 78.6359521,203.233444 C92.4932392,209.064206 108.472481,202.430791 114.247888,188.435116 C117.043333,181.663313 117.061785,174.190342 114.294018,167.400086 C111.526251,160.609831 106.295171,155.31417 99.5879487,152.491048 C92.9176301,149.695603 85.7767911,149.797088 79.5031858,152.186594 L95.777656,158.976849 C105.999942,163.276114 110.834309,175.122157 106.571948,185.436702 C102.318812,195.751247 90.574254,200.631743 80.3519677,196.332478 Z M202.30901,96.0424391 C202.30901,78.1165345 187.85204,63.5211763 170.092201,63.5211763 C152.323137,63.5211763 137.866167,78.1165345 137.866167,96.0424391 C137.866167,113.968344 152.323137,128.554476 170.092201,128.554476 C187.85204,128.554476 202.30901,113.968344 202.30901,96.0424391 Z M145.938821,95.9870838 C145.938821,82.4988323 156.779242,71.5661525 170.138331,71.5661525 C183.506646,71.5661525 194.347066,82.4988323 194.347066,95.9870838 C194.347066,109.475335 183.506646,120.408015 170.138331,120.408015 C156.779242,120.408015 145.938821,109.475335 145.938821,95.9870838 Z"/>
             </svg>
-          </a>
-        </div>
+          </span>
+          <span>${_htmlEsc(p.guid)}</span>
+        </a>
       </div>
     </div>
 

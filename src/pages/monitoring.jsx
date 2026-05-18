@@ -5,6 +5,29 @@
 const { useState, useEffect, useRef: useRefMon, useMemo: useMemoMon } = React;
 const I2 = window.AppIcons;
 
+// Splits the combined "<track>[-<layout>]" or "<track>/<layout>" string from
+// acServer's /INFO endpoint into the two ids the catalogue + content API
+// expect. Naive split('-') breaks for trackIds that contain a dash
+// themselves (e.g. "trento-bondone"), so we walk dash positions and pick
+// the longest prefix that matches a known track in the catalogue. Falls
+// back to treating the whole string as the trackId with no layout.
+function _splitLiveTrack(raw, tracks) {
+  if (!raw) return [null, null];
+  const list = tracks || [];
+  if (list.some(t => t.id === raw)) return [raw, null];
+  if (raw.includes('/')) {
+    const i = raw.indexOf('/');
+    return [raw.slice(0, i), raw.slice(i + 1)];
+  }
+  for (let i = raw.length - 1; i >= 1; i--) {
+    if (raw[i] !== '-') continue;
+    if (list.some(t => t.id === raw.slice(0, i))) {
+      return [raw.slice(0, i), raw.slice(i + 1)];
+    }
+  }
+  return [raw, null];
+}
+
 // ── Live track minimap with car dots ─────────────────────────────────────────
 // Renders the current track's map.png as the canvas and animates one
 // absolute-positioned dot per connected car at the position acServer streams
@@ -411,9 +434,20 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         </div>
       </div>
 
-      {server.status === 'running' && players.length > 0 && liveTrackId && (
-        <LiveMapCard trackId={liveTrackId} layoutId={sessionCfg.layout} tracks={tracks}/>
-      )}
+      {server.status === 'running' && players.length > 0 && (() => {
+        // acServer's /INFO collapses the running combo into a single string
+        // (e.g. "ks_red_bull_ring-layout_gp"); split it back into the two
+        // ids the content API expects. Prefer the running-state values over
+        // sessionCfg because if the operator changed config without
+        // restarting, drivers are on the OLD track and the map should match
+        // what they actually see.
+        const [liveTrackBareId, liveLayoutBareId] = _splitLiveTrack(server.liveTrack, tracks);
+        const mapTrackId  = liveTrackBareId  || sessionCfg.trackId;
+        const mapLayoutId = liveLayoutBareId || sessionCfg.layout;
+        return mapTrackId ? (
+          <LiveMapCard trackId={mapTrackId} layoutId={mapLayoutId} tracks={tracks}/>
+        ) : null;
+      })()}
 
       <div style={{marginTop: 16}}>
         <div className="card">

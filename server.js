@@ -6608,11 +6608,16 @@ function handler(req, res) {
     // The query param is stripped on the server side (urlPath ignores it),
     // so the same physical files keep serving — only the cache key changes.
     if (requested === '/index.html') {
+      const v = getBuildVersion();
       data = Buffer.from(
-        data.toString('utf8').replace(
-          /(src="(?:[^"]*\/)?dist\/[^"]+\.js)"/g,
-          `$1?v=${getBuildVersion()}"`
-        ),
+        data.toString('utf8')
+          // Cache-bust /dist/*.js script tags
+          .replace(/(src="(?:[^"]*\/)?dist\/[^"]+\.js)"/g, `$1?v=${v}"`)
+          // Cache-bust src/styles.css link too — Cloudflare honours the
+          // origin's max-age=600 on the file so without a versioned URL a
+          // CSS-only deploy stays invisible for up to 10 min while the
+          // edge replays the previous stylesheet.
+          .replace(/(href="(?:[^"]*\/)?src\/styles\.css)"/g, `$1?v=${v}"`),
         'utf8'
       );
     }

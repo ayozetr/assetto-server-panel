@@ -3604,29 +3604,56 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   const nameTxt = _xmlEsc(truncate(displayName, 22));
   const igTxt   = _xmlEsc(truncate(inGameLine, 30));
 
-  const carName    = k.mostUsedCar     ? truncate(k.mostUsedCar.carName,   14) : '—';
-  const trackName  = k.mostPlayedTrack ? truncate(k.mostPlayedTrack.trackName, 14) : '—';
+  // Raw car name fed into splitTwoLines below — DO NOT pre-truncate, the
+  // splitter needs the full word boundaries to balance properly. Previous
+  // version truncated to 14 chars first, leaving 'Toyota…' which
+  // then split into 'Toyota' / 'Honda…' — losing the actual brand.
+  const carNameFull = k.mostUsedCar ? k.mostUsedCar.carName : '—';
+  const trackName   = k.mostPlayedTrack ? truncate(k.mostPlayedTrack.trackName, 14) : '—';
   const trackLayout = k.mostPlayedTrack && k.mostPlayedTrack.layoutName
     ? truncate(k.mostPlayedTrack.layoutName, 18) : '';
 
   // 5 KPI tiles in a single row at the bottom. ~210px wide each, 24px gaps,
   // so 5*210 + 4*24 = 1146 — leaves 27px margin on each side at canvas 1200.
-  // Each tile carries an `isText` flag — text values (car/track names)
-  // render at smaller font sizes than the numeric ones because at 32px a
-  // 16-char car name clips out of the tile, while a numeric '5' or '17m'
-  // looks ridiculous at any other size. The "most-played track" tile was
-  // replaced with "best lap here" because the same info is already covered
-  // by the map silhouette + caption in the upper-right hero block — the
-  // KPI slot now adds genuinely-new data (driver's PB on that combo, any
-  // car) instead of restating what's visually there.
+  // Text-valued tiles (car names) split into two lines on 3+ words so a
+  // mod-pack-prefixed name like 'Toyota AE86' shows entirely
+  // ('Toyota' / 'CRX EE8') instead of being truncated after the
+  // boring prefix. Numeric tiles stay single-line at 32px monospace.
   const lapsWord = lang === 'es' ? 'vueltas' : lang === 'it' ? 'giri' : 'laps';
   const lapWord  = lang === 'es' ? 'vuelta'  : lang === 'it' ? 'giro' : 'lap';
+
+  // Split a text value into 1 or 2 lines, greedy by character budget so
+  // 'Toyota AE86' becomes 'Toyota' + 'CRX EE8' (each
+  // line fits the ~178px tile width at 20px font, roughly 16 chars). The
+  // single-line path keeps short names like 'Ferrari F40' on one row.
+  const splitTwoLines = (s, maxPerLine = 16) => {
+    const words = String(s || '').split(/\s+/).filter(Boolean);
+    if (words.length === 0) return ['—', ''];
+    // 1-2 words and short enough → single line.
+    const joined = words.join(' ');
+    if (words.length === 1 || joined.length <= maxPerLine) return [truncate(joined, maxPerLine), ''];
+    // Greedy pack line 1 as many words as fit, line 2 takes the rest
+    // (truncated if it overflows). Keeps line 1 dominant which reads more
+    // naturally for 'Brand Model Variant' patterns.
+    let line1 = words[0];
+    let i = 1;
+    while (i < words.length && (line1 + ' ' + words[i]).length <= maxPerLine) {
+      line1 += ' ' + words[i];
+      i++;
+    }
+    const remainder = words.slice(i).join(' ');
+    return [line1, truncate(remainder, maxPerLine)];
+  };
+
   const kpis = [
-    { label: T.total_laps,        value: String(k.laps),               meta: k.sessions ? `${k.sessions} ${k.sessions === 1 ? T.session_one : T.session_many}` : '',                       isText: false },
-    { label: T.time_on_track,     value: k.totalTime,                  meta: p.firstSeen ? `${T.since} ${p.firstSeen}` : '',                                                            isText: false },
-    { label: T.most_used_car,     value: truncate(carName, 14),        meta: k.mostUsedCar ? `${k.mostUsedCar.laps} ${k.mostUsedCar.laps === 1 ? lapWord : lapsWord}` : '',                  isText: true  },
-    { label: T.best_on_this_track,value: k.bestOnMostPlayed ? _fmtLapMs(k.bestOnMostPlayed.ms) : '—', meta: k.bestOnMostPlayed ? truncate(k.bestOnMostPlayed.carName, 22) : '',           isText: false },
-    { label: T.server_records,    value: String(k.recordsHeld),        meta: k.recordsHeld ? T.combos_owned : '',                                                                       isText: false },
+    { label: T.total_laps,        value: String(k.laps),               value2: '', meta: k.sessions ? `${k.sessions} ${k.sessions === 1 ? T.session_one : T.session_many}` : '',                       isText: false },
+    { label: T.time_on_track,     value: k.totalTime,                  value2: '', meta: p.firstSeen ? `${T.since} ${p.firstSeen}` : '',                                                            isText: false },
+    (() => {
+      const [v1, v2] = splitTwoLines(carNameFull);
+      return { label: T.most_used_car, value: v1, value2: v2, meta: k.mostUsedCar ? `${k.mostUsedCar.laps} ${k.mostUsedCar.laps === 1 ? lapWord : lapsWord}` : '', isText: true };
+    })(),
+    { label: T.best_on_this_track,value: k.bestOnMostPlayed ? _fmtLapMs(k.bestOnMostPlayed.ms) : '—', value2: '', meta: k.bestOnMostPlayed ? truncate(k.bestOnMostPlayed.carName, 22) : '',           isText: false },
+    { label: T.server_records,    value: String(k.recordsHeld),        value2: '', meta: k.recordsHeld ? T.combos_owned : '',                                                                       isText: false },
   ];
 
   const logo = _getPanelIconDataUrl();
@@ -3693,20 +3720,29 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   ${trackLayout ? `<text x="1075" y="290" text-anchor="middle" fill="${C.kpiMeta}" font-size="12">${_xmlEsc(trackLayout)}</text>` : ''}
   ` : ''}
 
-  <!-- KPI row (5 tiles). Text-valued tiles (car names) get a smaller font
-       + sans-serif. textLength + lengthAdjust='spacingAndGlyphs' on both
-       the value and the meta line tell SVG to squeeze a long string into
-       the available 178px (210 tile width - 16 padding × 2) instead of
-       overflowing the box — catches edge cases like 'Toyota CRX'
-       that the truncate(14) heuristic alone can't always handle. -->
+  <!-- KPI row (5 tiles). Labels render at natural width (no textLength —
+       previously fixed-width labels stretched short ones and squished
+       long ones, producing inconsistent visual weight across tiles).
+       Text values may span 1 or 2 lines (see splitTwoLines above) — when
+       2 lines, font shrinks to 20px so both fit cleanly between label
+       (y=28) and meta (y=118). Numeric values stay single-line monospace
+       at 32px. -->
   <g transform="translate(27, 414)">
-    ${kpis.map((kpi, i) => `
+    ${kpis.map((kpi, i) => {
+      const hasTwoLines = !!kpi.value2;
+      const valueFont = kpi.isText ? (hasTwoLines ? 20 : 24) : 32;
+      const valueFamily = kpi.isText ? '' : 'font-family="JetBrains Mono, ui-monospace, monospace"';
+      const line1Y = hasTwoLines ? 70 : (kpi.isText ? 80 : 82);
+      const line2Y = hasTwoLines ? 96 : 0;
+      return `
       <g transform="translate(${i * 234}, 0)">
         <rect x="0" y="0" width="210" height="140" rx="12" fill="${C.cardBg}" stroke="${C.cardBorder}" stroke-width="1"/>
-        <text x="16" y="28" fill="${C.kpiLabel}" font-size="11" font-weight="600" letter-spacing="1" textLength="178" lengthAdjust="spacingAndGlyphs">${_xmlEsc(kpi.label.toUpperCase())}</text>
-        <text x="16" y="${kpi.isText ? 76 : 82}" fill="${C.kpiValue}" font-size="${kpi.isText ? 22 : 32}" font-weight="700" ${kpi.isText ? '' : 'font-family="JetBrains Mono, ui-monospace, monospace"'} ${kpi.isText ? 'textLength="178" lengthAdjust="spacingAndGlyphs"' : ''}>${_xmlEsc(kpi.value)}</text>
-        <text x="16" y="118" fill="${C.kpiMeta}" font-size="13" textLength="${Math.min(178, kpi.meta.length * 8)}" lengthAdjust="spacingAndGlyphs">${_xmlEsc(kpi.meta)}</text>
-      </g>`).join('')}
+        <text x="16" y="28" fill="${C.kpiLabel}" font-size="11" font-weight="600" letter-spacing="1">${_xmlEsc(kpi.label.toUpperCase())}</text>
+        <text x="16" y="${line1Y}" fill="${C.kpiValue}" font-size="${valueFont}" font-weight="700" ${valueFamily}>${_xmlEsc(kpi.value)}</text>
+        ${hasTwoLines ? `<text x="16" y="${line2Y}" fill="${C.kpiValue}" font-size="${valueFont}" font-weight="700">${_xmlEsc(kpi.value2)}</text>` : ''}
+        <text x="16" y="118" fill="${C.kpiMeta}" font-size="13">${_xmlEsc(kpi.meta)}</text>
+      </g>`;
+    }).join('')}
   </g>
 
   <!-- Footer with public URL — gives anyone who sees the saved PNG a way back -->

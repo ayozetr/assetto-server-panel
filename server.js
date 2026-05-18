@@ -2387,10 +2387,23 @@ function getPublicPlayerData(guid) {
       COUNT(DISTINCT session_date)                       AS sessions,
       COUNT(id)                                          AS lap_count,
       COALESCE(SUM(ms), 0)                               AS total_ms,
-      MIN(CASE WHEN valid = 1 THEN ms ELSE NULL END)     AS best_ms,
-      MIN(CASE WHEN valid = 1 THEN session_date ELSE NULL END) AS best_date
+      MIN(CASE WHEN valid = 1 THEN ms ELSE NULL END)     AS best_ms
     FROM laps WHERE driver_guid = ?
   `).get(guid) || { sessions: 0, lap_count: 0, total_ms: 0, best_ms: null };
+  // Date of the fastest valid lap. Separate query because the aggregate above
+  // can't reach the session_date of the row that owns the MIN(ms) — a naive
+  // MIN(session_date) returns the earliest valid lap, not the date of the
+  // fastest one. LIMIT 1 covers the case where multiple laps share the
+  // millisecond-rounded record; we just pick one deterministically.
+  let bestDate = '';
+  if (kpis.best_ms) {
+    const row = db.prepare(`
+      SELECT session_date FROM laps
+      WHERE driver_guid = ? AND valid = 1 AND ms = ?
+      ORDER BY session_date DESC LIMIT 1
+    `).get(guid, kpis.best_ms);
+    bestDate = row?.session_date || '';
+  }
 
   // Personal best per (track, layout, car), valid laps only. The session_date
   // is the day that best was set (MAX over rows tied on the min — SQLite
@@ -2452,7 +2465,7 @@ function getPublicPlayerData(guid) {
       totalMs:    kpis.total_ms   || 0,
       totalTime:  formatTotalTime(kpis.total_ms),
       bestMs:     kpis.best_ms    || null,
-      bestDate:   kpis.best_date  || '',
+      bestDate:   bestDate,
       recordsHeld: records.length,
     },
     records: records.map(r => ({
@@ -6035,13 +6048,13 @@ function handler(req, res) {
   // needs a panel login to open". The toggle in panel_settings disables it
   // server-side when an operator doesn't want the panel publicly visible.
   const publicPlayerPageMatch = urlPath.match(/^\/p\/(\d{17})$/);
-  if (publicPlayerPageMatch && req.method === 'GET') {
+  if (publicPlayerPageMatch && (req.method === 'GET' || req.method === 'HEAD')) {
     return apiPublicPlayerPage(req, res, publicPlayerPageMatch[1]);
   }
   // Companion JS for the public profile page's theme toggle. Tiny static
   // string; served unauthenticated so the page actually loads without a
   // session cookie. Cached aggressively because the body is a constant.
-  if (urlPath === '/p/_theme.js' && req.method === 'GET') {
+  if (urlPath === '/p/_theme.js' && (req.method === 'GET' || req.method === 'HEAD')) {
     res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
     return respond(res, 200, 'application/javascript; charset=utf-8', _PUBLIC_PROFILE_THEME_JS);
   }
@@ -6071,8 +6084,9 @@ function handler(req, res) {
     // stats without scraping the HTML. Auth-less; rate-limited per IP. Match
     // on the prefix (not the strict 17-digit shape) so an invalid Steam ID
     // produces a 400 from the handler instead of a confusing 401 from the
-    // auth gate below.
-    if (urlPath.startsWith('/api/public/players/') && req.method === 'GET') {
+    // auth gate below. HEAD is accepted so a Discord bot's existence check
+    // doesn't trip the auth gate either.
+    if (urlPath.startsWith('/api/public/players/') && (req.method === 'GET' || req.method === 'HEAD')) {
       const guid = urlPath.slice('/api/public/players/'.length);
       return apiPublicPlayer(req, res, guid);
     }

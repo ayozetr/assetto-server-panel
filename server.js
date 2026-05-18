@@ -3498,10 +3498,13 @@ function renderPublicPlayerOgSvg(data, lang, theme) {
   <circle cx="180" cy="320" r="100" fill="#dc2626"/>
   <text x="180" y="356" text-anchor="middle" fill="#fff" font-size="92" font-weight="700">${_xmlEsc(initial)}</text>
 
-  <!-- Name + in-game line -->
+  <!-- Name + in-game line; Steam glyph sits before the GUID so the chip
+       reads as a Steam profile id at a glance, matching the chip on the
+       SSR /p/<guid> page. -->
   <text x="320" y="290" fill="${C.name}" font-size="64" font-weight="700">${nameTxt}</text>
   ${igTxt ? `<text x="320" y="340" fill="${C.aka}" font-size="26" font-weight="400">${igTxt}</text>` : ''}
-  <text x="320" y="${igTxt ? '390' : '350'}" fill="${C.guid}" font-size="20" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
+  ${_steamGlyph(320, igTxt ? 374 : 334, 22, C.guid)}
+  <text x="350" y="${igTxt ? '390' : '350'}" fill="${C.guid}" font-size="20" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
 
   <!-- KPI strip -->
   <g transform="translate(60, 460)">
@@ -3519,6 +3522,18 @@ function renderPublicPlayerOgSvg(data, lang, theme) {
       </g>`).join('')}
   </g>
 </svg>`;
+}
+
+// Steam glyph as an inline SVG path. Reused inside both the OG card and the
+// download card next to the GUID so the chip reads as a Steam profile id at
+// a glance, matching the chip on the SSR /p/<guid> page. Renders in
+// whatever `currentColor` resolves to in the parent `<g>` so we can match
+// the surrounding text colour per theme without duplicating the path.
+const _STEAM_GLYPH_PATH = 'M127.778579,0 C60.4203546,0 5.24030561,52.412282 0,119.013983 L68.7236558,147.68805 C74.5451924,143.665561 81.5845466,141.322185 89.1497766,141.322185 C89.8324924,141.322185 90.5059824,141.340637 91.1702465,141.377541 L121.735621,96.668877 L121.735621,96.0415165 C121.735621,69.1388208 143.425688,47.2457835 170.088511,47.2457835 C196.751333,47.2457835 218.441401,69.1388208 218.441401,96.0415165 C218.441401,122.944212 196.751333,144.846475 170.088511,144.846475 C169.719475,144.846475 169.359666,144.83725 168.99063,144.828024 L125.398299,176.205276 C125.425977,176.786507 125.444428,177.367738 125.444428,177.939743 C125.444428,198.144443 109.160732,214.575753 89.1497766,214.575753 C71.5836817,214.575753 56.8868387,201.917832 53.5655182,185.163615 L4.40997549,164.654462 C19.6326942,218.967277 69.0834655,258.786219 127.778579,258.786219 C198.596511,258.786219 256,200.847629 256,129.393109 C256,57.9293643 198.596511,0 127.778579,0 Z M80.3519677,196.332478 L64.6033732,189.763644 C67.389592,195.63131 72.2239585,200.539484 78.6359521,203.233444 C92.4932392,209.064206 108.472481,202.430791 114.247888,188.435116 C117.043333,181.663313 117.061785,174.190342 114.294018,167.400086 C111.526251,160.609831 106.295171,155.31417 99.5879487,152.491048 C92.9176301,149.695603 85.7767911,149.797088 79.5031858,152.186594 L95.777656,158.976849 C105.999942,163.276114 110.834309,175.122157 106.571948,185.436702 C102.318812,195.751247 90.574254,200.631743 80.3519677,196.332478 Z M202.30901,96.0424391 C202.30901,78.1165345 187.85204,63.5211763 170.092201,63.5211763 C152.323137,63.5211763 137.866167,78.1165345 137.866167,96.0424391 C137.866167,113.968344 152.323137,128.554476 170.092201,128.554476 C187.85204,128.554476 202.30901,113.968344 202.30901,96.0424391 Z M145.938821,95.9870838 C145.938821,82.4988323 156.779242,71.5661525 170.138331,71.5661525 C183.506646,71.5661525 194.347066,82.4988323 194.347066,95.9870838 C194.347066,109.475335 183.506646,120.408015 170.138331,120.408015 C156.779242,120.408015 145.938821,109.475335 145.938821,95.9870838 Z';
+function _steamGlyph(x, y, size, color) {
+  // The path's natural viewBox is roughly 256×259. Scale uniformly.
+  const scale = size / 256;
+  return `<g transform="translate(${x},${y}) scale(${scale})"><path fill="${color}" fill-rule="evenodd" d="${_STEAM_GLYPH_PATH}"/></g>`;
 }
 
 // Minimal XML-escape for SVG text nodes. Mostly the same as HTML escape but
@@ -3668,7 +3683,18 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   const mapDataUrl = k.mostPlayedTrack
     ? _getTrackMapDataUrl(k.mostPlayedTrack.track, k.mostPlayedTrack.trackConfig)
     : '';
-  const mapInvertFilter = theme === 'dark' ? 'filter="url(#mapInvert)"' : '';
+  // The AC map.png ships anti-aliased with a low-contrast trail colour
+  // that fades into a #ffffff card surface to nearly invisible. Tried two
+  // approaches: (a) RGB contrast-boost with feComponentTransfer — didn't
+  // recover enough density because the trail's antialiased edges live in
+  // the alpha channel, not RGB. (b) Always invert the map AND give its
+  // container rect a dark fill regardless of theme — produces a sharp
+  // white-trail-on-dark thumbnail that pops as a focal element on the
+  // light card while staying cohesive on the dark one (the dark rect is
+  // already the dark theme's cardBg). Going with (b).
+  const mapImageFilter = 'filter="url(#mapInvert)"';
+  const mapRectFill    = '#131318'; // matches the dark theme's cardBg
+  const mapRectStroke  = theme === 'dark' ? C.cardBorder : '#131318'; // invisible border on light to keep it a clean rectangle
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" font-family="Inter, system-ui, sans-serif">
@@ -3688,6 +3714,21 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
     <filter id="mapInvert" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix" values="-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0"/>
     </filter>
+    <!-- Light-theme contrast booster: pushes any RGB value below 50%
+         toward 0 (true black) and amplifies the rest, so a faint AC
+         trail at ~40% grey reads sharp on the white card surface. The
+         linear transform on each channel is slope*x + intercept; with
+         slope=2 / intercept=-1 the function is f(x)=2x−1 clamped to
+         [0,1], i.e. midpoint 0.5 becomes 0 and 1.0 stays 1.0. Alpha
+         is left untouched so transparent map backgrounds keep showing
+         the card surface beneath. -->
+    <filter id="mapEnhanceLight" x="0%" y="0%" width="100%" height="100%">
+      <feComponentTransfer>
+        <feFuncR type="linear" slope="2" intercept="-1"/>
+        <feFuncG type="linear" slope="2" intercept="-1"/>
+        <feFuncB type="linear" slope="2" intercept="-1"/>
+      </feComponentTransfer>
+    </filter>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
   <circle cx="200" cy="240" r="320" fill="url(#glow)"/>
@@ -3704,16 +3745,20 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   <circle cx="180" cy="280" r="92" fill="#dc2626"/>
   <text x="180" y="314" text-anchor="middle" fill="#fff" font-size="84" font-weight="700">${_xmlEsc(initial)}</text>
 
-  <!-- Name + in-game + GUID -->
+  <!-- Name + in-game + GUID; Steam glyph before the GUID for instant
+       recognition (same pattern as the OG card and the SSR page chip). -->
   <text x="310" y="252" fill="${C.name}" font-size="56" font-weight="700">${nameTxt}</text>
   ${igTxt ? `<text x="310" y="296" fill="${C.aka}" font-size="22" font-weight="400">${igTxt}</text>` : ''}
-  <text x="310" y="${igTxt ? '336' : '294'}" fill="${C.guid}" font-size="18" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
+  ${_steamGlyph(310, igTxt ? 322 : 280, 18, C.guid)}
+  <text x="336" y="${igTxt ? '336' : '294'}" fill="${C.guid}" font-size="18" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
 
   ${mapDataUrl ? `
-  <!-- Most-played track silhouette, upper-right corner -->
+  <!-- Most-played track silhouette, upper-right corner. Rect fill is the
+       dark surface regardless of theme so the inverted (white-trail) map
+       reads sharply on both light and dark cards. -->
   <g transform="translate(990, 60)">
-    <rect x="0" y="0" width="170" height="170" rx="14" fill="${C.cardBg}" stroke="${C.cardBorder}" stroke-width="1"/>
-    <image href="${mapDataUrl}" x="12" y="12" width="146" height="146" preserveAspectRatio="xMidYMid meet" ${mapInvertFilter}/>
+    <rect x="0" y="0" width="170" height="170" rx="14" fill="${mapRectFill}" stroke="${mapRectStroke}" stroke-width="1"/>
+    <image href="${mapDataUrl}" x="12" y="12" width="146" height="146" preserveAspectRatio="xMidYMid meet" ${mapImageFilter}/>
   </g>
   <text x="1075" y="252" text-anchor="middle" fill="${C.brandSub}" font-size="12" font-weight="600" letter-spacing="1">${_xmlEsc(T.most_played_track.toUpperCase())}</text>
   <text x="1075" y="272" text-anchor="middle" fill="${C.name}" font-size="15" font-weight="600">${_xmlEsc(trackName)}</text>

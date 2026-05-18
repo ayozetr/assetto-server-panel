@@ -2781,24 +2781,27 @@ function _panelDefaultLang() {
   } catch { return 'en'; }
 }
 
+// Returns { lang, explicit } so the caller can decide whether to propagate
+// the lang through to the OG image URL — when the visitor passed ?lang=
+// explicitly, we want every downstream image fetch to honour that choice
+// even if Discord's crawler (which doesn't send Accept-Language) is the one
+// fetching the og:image. Auto-detected langs (via Accept-Language) stay
+// out of the URL because they're visitor-specific, not link-specific.
 function resolvePublicLang(req) {
-  // 1) Explicit ?lang= override — handy for link-sharing in a specific lang.
   try {
     const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
     const q = (qs.get('lang') || '').toLowerCase();
-    if (_PUBLIC_PROFILE_I18N[q]) return q;
+    if (_PUBLIC_PROFILE_I18N[q]) return { lang: q, explicit: true };
   } catch {}
-  // 2) Accept-Language header — first match wins.
   const al = (req.headers && req.headers['accept-language']) || '';
   for (const tok of al.split(',')) {
     const t = tok.split(';')[0].trim().toLowerCase().slice(0, 2);
-    if (_PUBLIC_PROFILE_I18N[t]) return t;
+    if (_PUBLIC_PROFILE_I18N[t]) return { lang: t, explicit: false };
   }
-  // 3) Panel-wide default. 4) en.
-  return _panelDefaultLang();
+  return { lang: _panelDefaultLang(), explicit: false };
 }
 
-function renderPublicPlayerHtml(data, origin, lang) {
+function renderPublicPlayerHtml(data, origin, lang, langExplicit) {
   const T = _PUBLIC_PROFILE_I18N[lang] || _PUBLIC_PROFILE_I18N.en;
   const p = data.player;
   const k = data.kpis;
@@ -2881,9 +2884,15 @@ function renderPublicPlayerHtml(data, origin, lang) {
   // image URL and re-fetches. The server-side handler ignores the query
   // (router strips it before matching) so the same physical PNG keeps
   // serving; only the cache key changes.
+  //
+  // When the page URL had an explicit ?lang=…, propagate it onto the OG URL
+  // so Discord's preview matches the language the sharer chose — without
+  // this, Discord's crawler (which doesn't send Accept-Language) falls
+  // back to the panel's default lang and the preview disagrees with the
+  // page the visitor sees.
   const ogUrl = `${origin}/p/${p.guid}`;
   const ogCacheBust = `${getBuildVersion()}-${(p.lastSeen || '').replace(/-/g, '')}`;
-  const ogImageUrl = `${origin}/p/${p.guid}/og.png?v=${encodeURIComponent(ogCacheBust)}`;
+  const ogImageUrl = `${origin}/p/${p.guid}/og.png?v=${encodeURIComponent(ogCacheBust)}${langExplicit ? `&lang=${encodeURIComponent(lang)}` : ''}`;
 
   return `<!DOCTYPE html>
 <html lang="${_htmlEsc(lang)}" data-theme="dark">
@@ -2925,8 +2934,28 @@ function renderPublicPlayerHtml(data, origin, lang) {
     .pp-topbar .brand-mark { width: 28px; height: 28px; border-radius: 6px; }
     .pp-topbar .brand-name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
     .pp-topbar .brand-sub  { font-size: 11.5px; color: var(--text-muted); }
-    .pp-theme-toggle {
+    /* Lang switcher: 3 flag chips on the right of the topbar, just before
+       the theme toggle. The active language is outlined with the panel
+       accent so the visitor sees which one is in effect; the others are
+       muted until hovered. Click navigates with ?lang=xx; the server picks
+       up the override (resolvePublicLang) and re-renders. */
+    .pp-lang-switch {
       margin-left: auto;
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px; border-radius: 999px;
+      background: var(--bg-3); border: 1px solid var(--border);
+    }
+    .pp-lang-btn {
+      display: inline-grid; place-items: center;
+      width: 24px; height: 24px; border-radius: 50%;
+      text-decoration: none; opacity: 0.55;
+      transition: opacity 120ms ease, box-shadow 120ms ease;
+    }
+    .pp-lang-btn:hover  { opacity: 0.95; }
+    .pp-lang-btn.active { opacity: 1; box-shadow: 0 0 0 2px var(--red); }
+    .pp-lang-btn img    { display: block; border-radius: 2px; }
+
+    .pp-theme-toggle {
       width: 32px; height: 32px; border-radius: var(--radius-sm);
       display: grid; place-items: center; color: var(--text-muted);
       background: transparent; border: 1px solid var(--border);
@@ -3115,6 +3144,15 @@ function renderPublicPlayerHtml(data, origin, lang) {
       <div>
         <div class="brand-name">Assetto Server Panel</div>
         <div class="brand-sub">${_htmlEsc(T.driver_profile)}</div>
+      </div>
+      <div class="pp-lang-switch" role="group" aria-label="Language">
+        ${['en','es','it'].map(code => {
+          const flag = code === 'en' ? 'gb' : (code === 'es' ? 'es' : 'it');
+          const active = code === lang;
+          return `<a class="pp-lang-btn${active ? ' active' : ''}" href="?lang=${code}" aria-current="${active ? 'true' : 'false'}" aria-label="${_htmlEsc(code.toUpperCase())}">
+            <img src="https://flagcdn.com/16x12/${flag}.png" srcset="https://flagcdn.com/16x12/${flag}.png 1x, https://flagcdn.com/32x24/${flag}.png 2x" alt="" width="16" height="12"/>
+          </a>`;
+        }).join('')}
       </div>
       <button class="pp-theme-toggle" type="button" id="pp-theme-btn" aria-label="${_htmlEsc(T.toggle_theme)}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3344,7 +3382,7 @@ function apiPublicPlayerOgImage(req, res, guid) {
   }
   const data = getPublicPlayerData(guid);
   if (!data) return respond(res, 404, 'text/plain; charset=utf-8', 'Player not found');
-  const lang = resolvePublicLang(req);
+  const { lang } = resolvePublicLang(req);
   const svg  = renderPublicPlayerOgSvg(data, lang);
   res.setHeader('Cache-Control', 'public, max-age=300'); // 5 min — bots re-fetch on each link share
   respond(res, 200, 'image/svg+xml; charset=utf-8', svg);
@@ -3387,7 +3425,7 @@ function apiPublicPlayerOgPng(req, res, guid) {
   const resvg = _loadResvg();
   if (!resvg) return _fallbackOgPng(res);
   try {
-    const lang = resolvePublicLang(req);
+    const { lang } = resolvePublicLang(req);
     const svg  = renderPublicPlayerOgSvg(data, lang);
     // fitTo width:1200 matches the SVG's intrinsic viewBox so the output
     // is the exact 1200×630 Discord/Twitter expect for summary_large_image
@@ -3431,8 +3469,8 @@ function apiPublicPlayerPage(req, res, guid) {
   // — operators behind a tunnel get the public hostname instead of 127.0.0.1.
   const proto = requestIsHttps(req) ? 'https' : 'http';
   const host  = req.headers.host || 'localhost';
-  const lang  = resolvePublicLang(req);
-  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`, lang);
+  const { lang, explicit: langExplicit } = resolvePublicLang(req);
+  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`, lang, langExplicit);
   res.setHeader('Cache-Control', 'no-store');
   respond(res, 200, 'text/html; charset=utf-8', html);
 }

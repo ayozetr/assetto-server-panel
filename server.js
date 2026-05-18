@@ -2494,6 +2494,19 @@ function getPublicPlayerData(guid) {
     ORDER BY track, track_config, car
   `).all(guid);
 
+  // Latest 10 laps the driver has set, valid or invalid. id is monotonic
+  // auto-increment so DESC sorts correctly even when session_date collides
+  // (multiple laps in the same day or in the same session). Invalid laps
+  // are kept because seeing "set a 1:45 but with 3 cuts" is more useful
+  // than hiding it — the SSR table renders them strike-through.
+  const recentLaps = db.prepare(`
+    SELECT id, track, track_config, car, ms, cuts, valid, session_date
+    FROM laps
+    WHERE driver_guid = ?
+    ORDER BY id DESC
+    LIMIT 10
+  `).all(guid);
+
   // Server records this player holds. A combo's record is the min(ms) across
   // every valid lap; the player owns the record when their min lap on that
   // combo equals the server-wide min. Tied lap times (rare but possible)
@@ -2573,6 +2586,21 @@ function getPublicPlayerData(guid) {
         date:        pb.last_date || '',
       };
     }),
+    recentLaps: recentLaps.map(rl => {
+      const td = _trackLayoutDisplay(rl.track, rl.track_config);
+      return {
+        track:       rl.track,
+        trackName:   td.trackName,
+        trackConfig: rl.track_config || '',
+        layoutName:  td.layoutName,
+        car:         rl.car,
+        carName:     carDisplayName(rl.car),
+        ms:          rl.ms,
+        cuts:        rl.cuts || 0,
+        valid:       rl.valid === 1,
+        date:        rl.session_date || '',
+      };
+    }),
   };
 }
 
@@ -2606,21 +2634,189 @@ function _fmtLapMs(ms) {
   return `${m}:${s}`;
 }
 
-function renderPublicPlayerHtml(data, origin) {
+// ISO-3166-1 alpha-3 → alpha-2 lookup used by both the unicode-flag fallback
+// and the flagcdn.com image URL. Mirrors the _NATION_ISO2 map in
+// src/utils.jsx (panel UI side) so a driver's nation renders identically on
+// the public page and inside the panel's Players table. Falls back to the
+// raw value when it's already a 2-letter code.
+const _NATION_ISO3_TO_ISO2 = {
+  AFG:'AF',ALB:'AL',ALG:'DZ',AND:'AD',ANG:'AO',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',AZE:'AZ',
+  BEL:'BE',BGR:'BG',BIH:'BA',BLR:'BY',BOL:'BO',BRA:'BR',BUL:'BG',CAN:'CA',CHE:'CH',CHI:'CL',
+  CHN:'CN',COL:'CO',CRO:'HR',CYP:'CY',CZE:'CZ',DEN:'DK',DNK:'DK',ECU:'EC',EGY:'EG',ESP:'ES',
+  EST:'EE',ETH:'ET',FIN:'FI',FRA:'FR',GBR:'GB',GEO:'GE',GER:'DE',DEU:'DE',GRE:'GR',GRC:'GR',
+  HKG:'HK',HRV:'HR',HUN:'HU',IND:'IN',IRL:'IE',IRN:'IR',ISL:'IS',ISR:'IL',ITA:'IT',JPN:'JP',
+  KAZ:'KZ',KOR:'KR',LAT:'LV',LTU:'LT',LUX:'LU',MAR:'MA',MEX:'MX',MKD:'MK',MNE:'ME',MON:'MC',
+  NED:'NL',NLD:'NL',NOR:'NO',NZL:'NZ',PER:'PE',POL:'PL',POR:'PT',PRT:'PT',ROM:'RO',ROU:'RO',
+  RSA:'ZA',ZAF:'ZA',RUS:'RU',SCO:'GB',SER:'RS',SRB:'RS',SLO:'SI',SVN:'SI',SVK:'SK',SPA:'ES',
+  SUI:'CH',SWE:'SE',THA:'TH',TUN:'TN',TUR:'TR',UAE:'AE',UKR:'UA',URU:'UY',USA:'US',VEN:'VE',
+  WAL:'GB',
+};
+function _nationToIso2(nation) {
+  if (!nation || !/^[A-Za-z]{2,3}$/.test(nation)) return '';
+  const u = nation.toUpperCase();
+  if (u.length === 2) return u;
+  return _NATION_ISO3_TO_ISO2[u] || '';
+}
+function _nationFlagUrl(nation, size) {
+  const iso2 = _nationToIso2(nation);
+  if (!iso2) return '';
+  return `https://flagcdn.com/${size || '20x15'}/${iso2.toLowerCase()}.png`;
+}
+
+// SSR i18n dictionary for the public profile page. Three flat keysets (en /
+// es / it) covering every visible label and template fragment. The helper
+// resolvePublicLang() picks one based on a ?lang= query param (highest
+// precedence — explicit override), then Accept-Language (visitor's browser
+// preference), then panel_settings.lang (operator's panel default), then a
+// last-resort 'en'. Kept inline because there are only ~25 keys; pulling in
+// src/i18n.jsx server-side would mean either a separate JSON file or a
+// React dependency we don't need.
+const _PUBLIC_PROFILE_I18N = {
+  en: {
+    driver_profile:      'Driver profile',
+    toggle_theme:        'Toggle theme',
+    open_steam:          'Open Steam profile',
+    in_game:             'in-game:',
+    total_laps:          'Total laps',
+    session_one:         'session',
+    session_many:        'sessions',
+    time_on_track:       'Time on track',
+    since:               'since',
+    best_lap:            'Best lap',
+    on:                  'on',
+    server_records:      'Server records',
+    combos_owned:        'combos owned',
+    server_records_held: 'Server records held',
+    personal_bests:      'Personal bests',
+    recent_laps:         'Recent laps',
+    col_track:           'Track',
+    col_car:             'Car',
+    col_lap_time:        'Lap time',
+    col_set_on:          'Set on',
+    col_date:            'Date',
+    cuts_short:          'cuts',
+    invalid_short:       'invalid',
+    no_records_yet:      'No server records yet — pick a combo nobody owns and set the bar.',
+    no_valid_laps:       'No valid laps recorded yet.',
+    no_recent_laps:      'No laps recorded yet.',
+    powered_by:          'Powered by',
+    desc_with_nickname:  (n, ig, l, t, r, b) => `${n} (${ig}) on Assetto Corsa: ${l} laps, ${t} on track, ${r} server record${r === 1 ? '' : 's'}, best lap ${b}.`,
+    desc_no_nickname:    (n, l, t, r, b)     => `${n} on Assetto Corsa: ${l} laps, ${t} on track, ${r} server record${r === 1 ? '' : 's'}, best lap ${b}.`,
+    desc_fallback:       'Driver profile.',
+    title_suffix:        (l, b) => `${l} laps · best ${b}`,
+  },
+  es: {
+    driver_profile:      'Perfil de piloto',
+    toggle_theme:        'Cambiar tema',
+    open_steam:          'Abrir perfil de Steam',
+    in_game:             'en juego:',
+    total_laps:          'Vueltas totales',
+    session_one:         'sesión',
+    session_many:        'sesiones',
+    time_on_track:       'Tiempo en pista',
+    since:               'desde',
+    best_lap:            'Mejor vuelta',
+    on:                  'el',
+    server_records:      'Récords del servidor',
+    combos_owned:        'combos en propiedad',
+    server_records_held: 'Récords del servidor en propiedad',
+    personal_bests:      'Mejores tiempos personales',
+    recent_laps:         'Últimas vueltas',
+    col_track:           'Tramo',
+    col_car:             'Coche',
+    col_lap_time:        'Vuelta',
+    col_set_on:          'Fecha',
+    col_date:            'Fecha',
+    cuts_short:          'cortes',
+    invalid_short:       'no válida',
+    no_records_yet:      'Sin récords del servidor todavía — elige un combo que nadie tenga y marca la pauta.',
+    no_valid_laps:       'Aún no hay vueltas válidas registradas.',
+    no_recent_laps:      'Aún no hay vueltas registradas.',
+    powered_by:          'Hecho con',
+    desc_with_nickname:  (n, ig, l, t, r, b) => `${n} (${ig}) en Assetto Corsa: ${l} vueltas, ${t} en pista, ${r} récord${r === 1 ? '' : 's'} del servidor, mejor vuelta ${b}.`,
+    desc_no_nickname:    (n, l, t, r, b)     => `${n} en Assetto Corsa: ${l} vueltas, ${t} en pista, ${r} récord${r === 1 ? '' : 's'} del servidor, mejor vuelta ${b}.`,
+    desc_fallback:       'Perfil de piloto.',
+    title_suffix:        (l, b) => `${l} vueltas · mejor ${b}`,
+  },
+  it: {
+    driver_profile:      'Profilo pilota',
+    toggle_theme:        'Cambia tema',
+    open_steam:          'Apri profilo Steam',
+    in_game:             'in-game:',
+    total_laps:          'Giri totali',
+    session_one:         'sessione',
+    session_many:        'sessioni',
+    time_on_track:       'Tempo in pista',
+    since:               'dal',
+    best_lap:            'Miglior giro',
+    on:                  'il',
+    server_records:      'Record del server',
+    combos_owned:        'combo possedute',
+    server_records_held: 'Record del server detenuti',
+    personal_bests:      'Migliori tempi personali',
+    recent_laps:         'Ultimi giri',
+    col_track:           'Tracciato',
+    col_car:             'Auto',
+    col_lap_time:        'Giro',
+    col_set_on:          'Data',
+    col_date:            'Data',
+    cuts_short:          'tagli',
+    invalid_short:       'non valido',
+    no_records_yet:      'Nessun record del server ancora — scegli una combo che nessuno detiene e fissa il limite.',
+    no_valid_laps:       'Nessun giro valido registrato.',
+    no_recent_laps:      'Nessun giro registrato.',
+    powered_by:          'Powered by',
+    desc_with_nickname:  (n, ig, l, t, r, b) => `${n} (${ig}) su Assetto Corsa: ${l} giri, ${t} in pista, ${r} record del server, miglior giro ${b}.`,
+    desc_no_nickname:    (n, l, t, r, b)     => `${n} su Assetto Corsa: ${l} giri, ${t} in pista, ${r} record del server, miglior giro ${b}.`,
+    desc_fallback:       'Profilo pilota.',
+    title_suffix:        (l, b) => `${l} giri · miglior ${b}`,
+  },
+};
+
+function _panelDefaultLang() {
+  if (!db) return 'en';
+  try {
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
+    return (row?.value && _PUBLIC_PROFILE_I18N[row.value]) ? row.value : 'en';
+  } catch { return 'en'; }
+}
+
+function resolvePublicLang(req) {
+  // 1) Explicit ?lang= override — handy for link-sharing in a specific lang.
+  try {
+    const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
+    const q = (qs.get('lang') || '').toLowerCase();
+    if (_PUBLIC_PROFILE_I18N[q]) return q;
+  } catch {}
+  // 2) Accept-Language header — first match wins.
+  const al = (req.headers && req.headers['accept-language']) || '';
+  for (const tok of al.split(',')) {
+    const t = tok.split(';')[0].trim().toLowerCase().slice(0, 2);
+    if (_PUBLIC_PROFILE_I18N[t]) return t;
+  }
+  // 3) Panel-wide default. 4) en.
+  return _panelDefaultLang();
+}
+
+function renderPublicPlayerHtml(data, origin, lang) {
+  const T = _PUBLIC_PROFILE_I18N[lang] || _PUBLIC_PROFILE_I18N.en;
   const p = data.player;
   const k = data.kpis;
   const initial = (p.nickname || p.name || '?').slice(0, 1).toUpperCase();
   const displayName = p.nickname ? `${p.nickname} (${p.name})` : p.name;
-  const title = `${displayName} · ${k.laps} laps · best ${_fmtLapMs(k.bestMs)}`;
-  const desc  = p.name
-    ? `${displayName} on Assetto Corsa: ${k.laps} laps, ${k.totalTime} on track, ${k.recordsHeld} server record${k.recordsHeld === 1 ? '' : 's'}, best lap ${_fmtLapMs(k.bestMs)}.`
-    : 'Driver profile.';
+  const bestLap = _fmtLapMs(k.bestMs);
+  const title = `${displayName} · ${T.title_suffix(k.laps, bestLap)}`;
+  const desc = !p.name
+    ? T.desc_fallback
+    : (p.nickname
+        ? T.desc_with_nickname(p.nickname, p.name, k.laps, k.totalTime, k.recordsHeld, bestLap)
+        : T.desc_no_nickname(p.name, k.laps, k.totalTime, k.recordsHeld, bestLap));
 
   // Pre-render the tables on the server so the page is meaningful without
   // executing JS — Discord/Twitter cards render this, and the panel's own
   // CSP doesn't allow inline script anyway.
   const recordsRows = data.records.length === 0
-    ? `<tr><td colspan="4" class="empty-cell">No server records yet — pick a combo nobody owns and set the bar.</td></tr>`
+    ? `<tr><td colspan="4" class="empty-cell">${_htmlEsc(T.no_records_yet)}</td></tr>`
     : data.records.map(r => `
         <tr>
           <td>
@@ -2633,7 +2829,7 @@ function renderPublicPlayerHtml(data, origin) {
         </tr>`).join('');
 
   const pbRows = data.personalBests.length === 0
-    ? `<tr><td colspan="4" class="empty-cell">No valid laps recorded yet.</td></tr>`
+    ? `<tr><td colspan="4" class="empty-cell">${_htmlEsc(T.no_valid_laps)}</td></tr>`
     : data.personalBests.map(pb => `
         <tr>
           <td>
@@ -2645,31 +2841,38 @@ function renderPublicPlayerHtml(data, origin) {
           <td class="mono muted date">${_htmlEsc(pb.date) || '—'}</td>
         </tr>`).join('');
 
-  // Flag emoji from ISO-3166-1 alpha-3 → alpha-2 → regional indicator pair.
-  // The panel uses image flags elsewhere (countryFlags.svg sprite); here a
-  // unicode flag keeps the page self-contained with zero asset deps.
-  let flagEmoji = '';
-  if (/^[A-Za-z]{2,3}$/.test(p.nation || '')) {
-    const code = p.nation.toUpperCase();
-    const ISO3 = {
-      ESP:'ES', GBR:'GB', USA:'US', FRA:'FR', ITA:'IT', DEU:'DE', PRT:'PT', NLD:'NL',
-      BEL:'BE', CHE:'CH', AUT:'AT', POL:'PL', SWE:'SE', NOR:'NO', FIN:'FI', DNK:'DK',
-      ARG:'AR', BRA:'BR', MEX:'MX', CHL:'CL', URY:'UY', COL:'CO', PER:'PE', VEN:'VE',
-      JPN:'JP', KOR:'KR', CHN:'CN', AUS:'AU', NZL:'NZ', CAN:'CA', IRL:'IE', ISL:'IS',
-      CZE:'CZ', SVK:'SK', HUN:'HU', ROU:'RO', BGR:'BG', GRC:'GR', TUR:'TR', RUS:'RU',
-      UKR:'UA', BLR:'BY', LTU:'LT', LVA:'LV', EST:'EE',
-    };
-    const a2 = code.length === 2 ? code : (ISO3[code] || '');
-    if (a2.length === 2 && /^[A-Z]{2}$/.test(a2)) {
-      flagEmoji = String.fromCodePoint(0x1F1E6 + a2.charCodeAt(0) - 65) +
-                  String.fromCodePoint(0x1F1E6 + a2.charCodeAt(1) - 65);
-    }
-  }
+  // Recent-laps section: last 10 laps the driver has set (any combo, valid
+  // or invalid). Surfaces "what did I do today" without forcing the visitor
+  // to scroll through the records table. Invalid laps render with a muted
+  // strike-through on the time + a "no válida" badge so the visitor can tell
+  // at a glance.
+  const recentRows = (data.recentLaps || []).length === 0
+    ? `<tr><td colspan="4" class="empty-cell">${_htmlEsc(T.no_recent_laps)}</td></tr>`
+    : data.recentLaps.map(rl => `
+        <tr${rl.valid ? '' : ' class="lap-invalid"'}>
+          <td>
+            <div class="combo-track">${_htmlEsc(rl.trackName)}</div>
+            ${rl.layoutName ? `<div class="combo-layout">${_htmlEsc(rl.layoutName)}</div>` : ''}
+          </td>
+          <td class="muted">${_htmlEsc(rl.carName)}</td>
+          <td class="mono lap-time">${_fmtLapMs(rl.ms)}${rl.valid ? '' : ` <span class="lap-invalid-tag" title="${_htmlEsc(T.cuts_short)}: ${rl.cuts}">${_htmlEsc(T.invalid_short)}</span>`}</td>
+          <td class="mono muted date">${_htmlEsc(rl.date) || '—'}</td>
+        </tr>`).join('');
 
+  // Real flag image from flagcdn.com via ISO3→ISO2. Previously used unicode
+  // regional-indicator codepoints which render inconsistently on Windows
+  // (often falls back to the letters 'ES'/'GB'/etc); a 20×15 PNG over HTTPS
+  // is a few KB and renders the same on every platform.
+  const flagUrl = _nationFlagUrl(p.nation, '20x15');
+  const flagUrl2x = _nationFlagUrl(p.nation, '40x30');
+
+  // og:image points at the per-driver SVG card so a paste in Discord/Twitter
+  // gets a rich preview with the avatar + KPIs instead of a text-only embed.
   const ogUrl = `${origin}/p/${p.guid}`;
+  const ogImageUrl = `${origin}/p/${p.guid}/og.svg`;
 
   return `<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="${_htmlEsc(lang)}" data-theme="dark">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -2681,9 +2884,14 @@ function renderPublicPlayerHtml(data, origin) {
   <meta property="og:description" content="${_htmlEsc(desc)}"/>
   <meta property="og:url" content="${_htmlEsc(ogUrl)}"/>
   <meta property="og:site_name" content="Assetto Server Panel"/>
-  <meta name="twitter:card" content="summary"/>
+  <meta property="og:image" content="${_htmlEsc(ogImageUrl)}"/>
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+  <meta property="og:image:type" content="image/svg+xml"/>
+  <meta name="twitter:card" content="summary_large_image"/>
   <meta name="twitter:title" content="${_htmlEsc(displayName)}"/>
   <meta name="twitter:description" content="${_htmlEsc(desc)}"/>
+  <meta name="twitter:image" content="${_htmlEsc(ogImageUrl)}"/>
   <link rel="icon" type="image/png" href="/src/assets/icon.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -2736,7 +2944,31 @@ function renderPublicPlayerHtml(data, origin) {
       font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     }
-    .pp-flag { font-size: 22px; line-height: 1; }
+    /* Real flag image (flagcdn.com 20x15 PNG, 2x for retina). Slight
+       border-radius so the rectangle reads as a chip not a poster, and a
+       subtle ring so a white-on-white case (e.g. JP, KR) doesn't disappear
+       against the surface. */
+    .pp-flag {
+      display: inline-block;
+      width: 20px; height: 15px;
+      border-radius: 2px;
+      box-shadow: 0 0 0 1px var(--border);
+      vertical-align: middle;
+    }
+    /* Recent-laps invalid-row treatment: muted strikethrough on the time,
+       small badge tag inline. Keeps the row visible — invalid laps still
+       happened, just shouldn't be confused with the driver's bests. */
+    .pp-table tr.lap-invalid .lap-time { color: var(--text-muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+    .lap-invalid-tag {
+      display: inline-block; margin-left: 6px;
+      padding: 1px 6px; border-radius: 999px;
+      font-family: var(--font-sans); font-size: 10px; font-weight: 500;
+      background: color-mix(in srgb, #f59e0b 14%, transparent);
+      color: #b45309; border: 1px solid transparent;
+      text-decoration: none;
+      vertical-align: 1px;
+    }
+    [data-theme="dark"] .lap-invalid-tag { color: #fbbf24; }
     .pp-aka { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
     /* Badge is the Steam link itself: the whole chip is clickable, icon on
        the left identifies the destination, GUID renders to the right. No
@@ -2868,9 +3100,9 @@ function renderPublicPlayerHtml(data, origin) {
       <img class="brand-mark" src="/src/assets/icon.png" alt=""/>
       <div>
         <div class="brand-name">Assetto Server Panel</div>
-        <div class="brand-sub">Driver profile</div>
+        <div class="brand-sub">${_htmlEsc(T.driver_profile)}</div>
       </div>
-      <button class="pp-theme-toggle" type="button" id="pp-theme-btn" aria-label="Toggle theme">
+      <button class="pp-theme-toggle" type="button" id="pp-theme-btn" aria-label="${_htmlEsc(T.toggle_theme)}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
         </svg>
@@ -2882,10 +3114,10 @@ function renderPublicPlayerHtml(data, origin) {
       <div class="pp-id">
         <div class="pp-name">
           <span>${_htmlEsc(p.nickname || p.name)}</span>
-          ${flagEmoji ? `<span class="pp-flag" title="${_htmlEsc(p.nation)}">${flagEmoji}</span>` : ''}
+          ${flagUrl ? `<img class="pp-flag" src="${_htmlEsc(flagUrl)}" srcset="${_htmlEsc(flagUrl)} 1x, ${_htmlEsc(flagUrl2x)} 2x" alt="${_htmlEsc(p.nation)}" title="${_htmlEsc(p.nation)}" width="20" height="15"/>` : ''}
         </div>
-        ${p.nickname ? `<div class="pp-aka">in-game: ${_htmlEsc(p.name)}</div>` : ''}
-        <a class="pp-guid" href="https://steamcommunity.com/profiles/${_htmlEsc(p.guid)}" target="_blank" rel="noreferrer noopener" title="Open Steam profile">
+        ${p.nickname ? `<div class="pp-aka">${_htmlEsc(T.in_game)} ${_htmlEsc(p.name)}</div>` : ''}
+        <a class="pp-guid" href="https://steamcommunity.com/profiles/${_htmlEsc(p.guid)}" target="_blank" rel="noreferrer noopener" title="${_htmlEsc(T.open_steam)}">
           <span class="pp-guid-steam" aria-hidden="true">
             <svg viewBox="-1.5 0 259 259" fill="currentColor" stroke="none" aria-hidden="true">
               <path fill-rule="evenodd" d="M127.778579,0 C60.4203546,0 5.24030561,52.412282 0,119.013983 L68.7236558,147.68805 C74.5451924,143.665561 81.5845466,141.322185 89.1497766,141.322185 C89.8324924,141.322185 90.5059824,141.340637 91.1702465,141.377541 L121.735621,96.668877 L121.735621,96.0415165 C121.735621,69.1388208 143.425688,47.2457835 170.088511,47.2457835 C196.751333,47.2457835 218.441401,69.1388208 218.441401,96.0415165 C218.441401,122.944212 196.751333,144.846475 170.088511,144.846475 C169.719475,144.846475 169.359666,144.83725 168.99063,144.828024 L125.398299,176.205276 C125.425977,176.786507 125.444428,177.367738 125.444428,177.939743 C125.444428,198.144443 109.160732,214.575753 89.1497766,214.575753 C71.5836817,214.575753 56.8868387,201.917832 53.5655182,185.163615 L4.40997549,164.654462 C19.6326942,218.967277 69.0834655,258.786219 127.778579,258.786219 C198.596511,258.786219 256,200.847629 256,129.393109 C256,57.9293643 198.596511,0 127.778579,0 Z M80.3519677,196.332478 L64.6033732,189.763644 C67.389592,195.63131 72.2239585,200.539484 78.6359521,203.233444 C92.4932392,209.064206 108.472481,202.430791 114.247888,188.435116 C117.043333,181.663313 117.061785,174.190342 114.294018,167.400086 C111.526251,160.609831 106.295171,155.31417 99.5879487,152.491048 C92.9176301,149.695603 85.7767911,149.797088 79.5031858,152.186594 L95.777656,158.976849 C105.999942,163.276114 110.834309,175.122157 106.571948,185.436702 C102.318812,195.751247 90.574254,200.631743 80.3519677,196.332478 Z M202.30901,96.0424391 C202.30901,78.1165345 187.85204,63.5211763 170.092201,63.5211763 C152.323137,63.5211763 137.866167,78.1165345 137.866167,96.0424391 C137.866167,113.968344 152.323137,128.554476 170.092201,128.554476 C187.85204,128.554476 202.30901,113.968344 202.30901,96.0424391 Z M145.938821,95.9870838 C145.938821,82.4988323 156.779242,71.5661525 170.138331,71.5661525 C183.506646,71.5661525 194.347066,82.4988323 194.347066,95.9870838 C194.347066,109.475335 183.506646,120.408015 170.138331,120.408015 C156.779242,120.408015 145.938821,109.475335 145.938821,95.9870838 Z"/>
@@ -2898,24 +3130,24 @@ function renderPublicPlayerHtml(data, origin) {
 
     <div class="pp-kpis">
       <div class="pp-kpi">
-        <div class="pp-kpi-label">Total laps</div>
-        <div class="pp-kpi-value">${k.laps.toLocaleString('en')}</div>
-        <div class="pp-kpi-meta">${k.sessions} session${k.sessions === 1 ? '' : 's'}</div>
+        <div class="pp-kpi-label">${_htmlEsc(T.total_laps)}</div>
+        <div class="pp-kpi-value">${k.laps.toLocaleString(lang === 'en' ? 'en' : (lang === 'es' ? 'es-ES' : 'it-IT'))}</div>
+        <div class="pp-kpi-meta">${k.sessions} ${_htmlEsc(k.sessions === 1 ? T.session_one : T.session_many)}</div>
       </div>
       <div class="pp-kpi">
-        <div class="pp-kpi-label">Time on track</div>
+        <div class="pp-kpi-label">${_htmlEsc(T.time_on_track)}</div>
         <div class="pp-kpi-value">${_htmlEsc(k.totalTime)}</div>
-        <div class="pp-kpi-meta">since ${_htmlEsc(p.firstSeen) || '—'}</div>
+        <div class="pp-kpi-meta">${p.firstSeen ? `${_htmlEsc(T.since)} ${_htmlEsc(p.firstSeen)}` : '—'}</div>
       </div>
       <div class="pp-kpi">
-        <div class="pp-kpi-label">Best lap</div>
+        <div class="pp-kpi-label">${_htmlEsc(T.best_lap)}</div>
         <div class="pp-kpi-value">${_fmtLapMs(k.bestMs)}</div>
-        <div class="pp-kpi-meta">${k.bestDate ? `on ${_htmlEsc(k.bestDate)}` : '—'}</div>
+        <div class="pp-kpi-meta">${k.bestDate ? `${_htmlEsc(T.on)} ${_htmlEsc(k.bestDate)}` : '—'}</div>
       </div>
       <div class="pp-kpi">
-        <div class="pp-kpi-label">Server records</div>
+        <div class="pp-kpi-label">${_htmlEsc(T.server_records)}</div>
         <div class="pp-kpi-value">${k.recordsHeld}</div>
-        <div class="pp-kpi-meta">${k.recordsHeld ? 'combos owned' : '—'}</div>
+        <div class="pp-kpi-meta">${k.recordsHeld ? _htmlEsc(T.combos_owned) : '—'}</div>
       </div>
     </div>
 
@@ -2925,16 +3157,16 @@ function renderPublicPlayerHtml(data, origin) {
           <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/>
           <path d="M17 4h3v2a3 3 0 0 1-3 3M7 4H4v2a3 3 0 0 0 3 3"/>
         </svg>
-        <div class="pp-card-title">Server records held</div>
+        <div class="pp-card-title">${_htmlEsc(T.server_records_held)}</div>
         <span class="pp-badge ${data.records.length ? 'pp-badge-record' : ''}">${data.records.length}</span>
       </div>
       <table class="pp-table">
         <thead>
           <tr>
-            <th>Track</th>
-            <th>Car</th>
-            <th style="width: 120px">Lap time</th>
-            <th style="width: 110px">Set on</th>
+            <th>${_htmlEsc(T.col_track)}</th>
+            <th>${_htmlEsc(T.col_car)}</th>
+            <th style="width: 120px">${_htmlEsc(T.col_lap_time)}</th>
+            <th style="width: 110px">${_htmlEsc(T.col_set_on)}</th>
           </tr>
         </thead>
         <tbody>${recordsRows}</tbody>
@@ -2947,24 +3179,46 @@ function renderPublicPlayerHtml(data, origin) {
           <polyline points="3 17 9 11 13 15 21 7"/>
           <polyline points="14 7 21 7 21 14"/>
         </svg>
-        <div class="pp-card-title">Personal bests</div>
+        <div class="pp-card-title">${_htmlEsc(T.personal_bests)}</div>
         <span class="pp-badge">${data.personalBests.length}</span>
       </div>
       <table class="pp-table">
         <thead>
           <tr>
-            <th>Track</th>
-            <th>Car</th>
-            <th style="width: 120px">Lap time</th>
-            <th style="width: 110px">Set on</th>
+            <th>${_htmlEsc(T.col_track)}</th>
+            <th>${_htmlEsc(T.col_car)}</th>
+            <th style="width: 120px">${_htmlEsc(T.col_lap_time)}</th>
+            <th style="width: 110px">${_htmlEsc(T.col_set_on)}</th>
           </tr>
         </thead>
         <tbody>${pbRows}</tbody>
       </table>
     </div>
 
+    <div class="pp-card">
+      <div class="pp-card-header">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--text-muted)">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 15 14"/>
+        </svg>
+        <div class="pp-card-title">${_htmlEsc(T.recent_laps)}</div>
+        <span class="pp-badge">${(data.recentLaps || []).length}</span>
+      </div>
+      <table class="pp-table">
+        <thead>
+          <tr>
+            <th>${_htmlEsc(T.col_track)}</th>
+            <th>${_htmlEsc(T.col_car)}</th>
+            <th style="width: 140px">${_htmlEsc(T.col_lap_time)}</th>
+            <th style="width: 110px">${_htmlEsc(T.col_date)}</th>
+          </tr>
+        </thead>
+        <tbody>${recentRows}</tbody>
+      </table>
+    </div>
+
     <div class="pp-footer">
-      Powered by <a href="/">Assetto Server Panel</a>
+      ${_htmlEsc(T.powered_by)} <a href="/">Assetto Server Panel</a>
     </div>
   </div>
   <script src="/p/_theme.js"></script>
@@ -2990,6 +3244,98 @@ const _PUBLIC_PROFILE_THEME_JS = `(function(){
   });
 })();`;
 
+// OpenGraph card as a 1200×630 SVG. Servers like Discord / Twitter / Mastodon
+// fetch the og:image URL and embed the rendered preview alongside the link.
+// SVG keeps the panel dep-free (no canvas/sharp/jimp/etc) — modern Discord
+// renders SVG OG images, and the platforms that don't (older Twitter cache)
+// fall back to text-only embed which is what we had before anyway. Cached
+// 5 minutes at the edge so a popular profile doesn't re-render the SVG on
+// every preview-bot fetch.
+function renderPublicPlayerOgSvg(data, lang) {
+  const T = _PUBLIC_PROFILE_I18N[lang] || _PUBLIC_PROFILE_I18N.en;
+  const p = data.player;
+  const k = data.kpis;
+  const initial = (p.nickname || p.name || '?').slice(0, 1).toUpperCase();
+  const bestLap = _fmtLapMs(k.bestMs);
+  const displayName = p.nickname || p.name || '—';
+  const inGameLine  = p.nickname && p.name ? `${T.in_game} ${p.name}` : '';
+
+  // Truncate the display name + in-game line so a 30-char alias doesn't
+  // spill past the SVG bounds. The widths are eyeballed against the chosen
+  // font-size; trim with a trailing ellipsis when over the cutoff.
+  const truncate = (s, max) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
+  const nameTxt = _xmlEsc(truncate(displayName, 22));
+  const igTxt   = _xmlEsc(truncate(inGameLine, 30));
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0b0d"/>
+      <stop offset="100%" stop-color="#17171b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#dc2626" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="200" cy="240" r="320" fill="url(#glow)"/>
+
+  <!-- Brand strip top -->
+  <text x="60" y="80" fill="#a1a1aa" font-size="22" font-weight="600" letter-spacing="2">ASSETTO SERVER PANEL</text>
+  <text x="60" y="110" fill="#71717a" font-size="18">${_xmlEsc(T.driver_profile.toUpperCase())}</text>
+
+  <!-- Avatar -->
+  <circle cx="180" cy="320" r="100" fill="#dc2626"/>
+  <text x="180" y="356" text-anchor="middle" fill="#fff" font-size="92" font-weight="700">${_xmlEsc(initial)}</text>
+
+  <!-- Name + in-game line -->
+  <text x="320" y="290" fill="#f4f4f5" font-size="64" font-weight="700">${nameTxt}</text>
+  ${igTxt ? `<text x="320" y="340" fill="#a1a1aa" font-size="26" font-weight="400">${igTxt}</text>` : ''}
+  <text x="320" y="${igTxt ? '390' : '350'}" fill="#71717a" font-size="20" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
+
+  <!-- KPI strip -->
+  <g transform="translate(60, 460)">
+    ${[
+      [T.total_laps,     String(k.laps),       k.sessions ? `${k.sessions} ${k.sessions === 1 ? T.session_one : T.session_many}` : ''],
+      [T.time_on_track,  k.totalTime,          p.firstSeen ? `${T.since} ${p.firstSeen}` : ''],
+      [T.best_lap,       bestLap,              k.bestDate ? `${T.on} ${k.bestDate}` : ''],
+      [T.server_records, String(k.recordsHeld),k.recordsHeld ? T.combos_owned : ''],
+    ].map((kpi, i) => `
+      <g transform="translate(${i * 270}, 0)">
+        <rect x="0" y="0" width="250" height="120" rx="12" fill="#131318" stroke="#26262c" stroke-width="1"/>
+        <text x="20" y="30" fill="#a1a1aa" font-size="14" font-weight="600" letter-spacing="1">${_xmlEsc(kpi[0].toUpperCase())}</text>
+        <text x="20" y="80" fill="#f4f4f5" font-size="40" font-weight="700" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(kpi[1])}</text>
+        <text x="20" y="105" fill="#71717a" font-size="14">${_xmlEsc(kpi[2])}</text>
+      </g>`).join('')}
+  </g>
+</svg>`;
+}
+
+// Minimal XML-escape for SVG text nodes. Mostly the same as HTML escape but
+// kept separate as a marker — SVG/XML strictness around quoted attributes
+// catches its own breed of injection if we ever inline an attribute value.
+function _xmlEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function apiPublicPlayerOgImage(req, res, guid) {
+  if (!publicProfilesEnabled()) return respond(res, 404, 'text/plain; charset=utf-8', 'Not Found');
+  if (!/^\d{17}$/.test(guid))    return respond(res, 400, 'text/plain; charset=utf-8', 'Invalid Steam ID');
+  if (!checkRateLimit('public-player', clientIp(req), 120, 60 * 1000)) {
+    return respond(res, 429, 'text/plain; charset=utf-8', 'Too many requests');
+  }
+  const data = getPublicPlayerData(guid);
+  if (!data) return respond(res, 404, 'text/plain; charset=utf-8', 'Player not found');
+  const lang = resolvePublicLang(req);
+  const svg  = renderPublicPlayerOgSvg(data, lang);
+  res.setHeader('Cache-Control', 'public, max-age=300'); // 5 min — bots re-fetch on each link share
+  respond(res, 200, 'image/svg+xml; charset=utf-8', svg);
+}
+
 function apiPublicPlayerPage(req, res, guid) {
   if (!publicProfilesEnabled()) return respond(res, 404, 'text/plain; charset=utf-8', 'Public profiles disabled');
   if (!/^\d{17}$/.test(guid))    return respond(res, 400, 'text/plain; charset=utf-8', 'Invalid Steam ID');
@@ -3002,7 +3348,8 @@ function apiPublicPlayerPage(req, res, guid) {
   // — operators behind a tunnel get the public hostname instead of 127.0.0.1.
   const proto = requestIsHttps(req) ? 'https' : 'http';
   const host  = req.headers.host || 'localhost';
-  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`);
+  const lang  = resolvePublicLang(req);
+  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`, lang);
   res.setHeader('Cache-Control', 'no-store');
   respond(res, 200, 'text/html; charset=utf-8', html);
 }
@@ -6403,6 +6750,13 @@ function handler(req, res) {
   const publicPlayerPageMatch = urlPath.match(/^\/p\/(\d{17})$/);
   if (publicPlayerPageMatch && (req.method === 'GET' || req.method === 'HEAD')) {
     return apiPublicPlayerPage(req, res, publicPlayerPageMatch[1]);
+  }
+  // OpenGraph card image for the same driver — served as SVG so we don't
+  // need to bundle a raster image library. Discord/Twitter/Mastodon hit
+  // this when a /p/<guid> link is pasted into a chat.
+  const publicPlayerOgMatch = urlPath.match(/^\/p\/(\d{17})\/og\.svg$/);
+  if (publicPlayerOgMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    return apiPublicPlayerOgImage(req, res, publicPlayerOgMatch[1]);
   }
   // Companion JS for the public profile page's theme toggle. Tiny static
   // string; served unauthenticated so the page actually loads without a

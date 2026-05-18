@@ -504,6 +504,11 @@ try {
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('lang', 'en')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('chunked_upload', '0')`).run();
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('discord_webhook', '')`).run();
+  // Public per-player profile pages reachable at /p/<guid> with a matching
+  // JSON view at /api/public/players/<guid>. On by default so the feature is
+  // discoverable; admins can flip it off if the server isn't meant to be
+  // visible at all (e.g. development boxes behind Cloudflare Access).
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('public_profiles_enabled', '1')`).run();
   // Default permission set for the `user` role. Mirrors the live state right
   // before this granular-permissions feature shipped (server control, session
   // edit and mod upload were already open to users), so an upgrade in place
@@ -2346,6 +2351,556 @@ function apiPlayersHistory(res) {
     }));
     json(res, 200, players);
   } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+// ── Public player profiles ───────────────────────────────────────────────────
+// Two unauthenticated views per player at /api/public/players/<guid> (JSON)
+// and /p/<guid> (HTML page rendered server-side, reusing the panel's CSS so
+// the design is continuous). Off-switchable via panel_settings, see
+// publicProfilesEnabled / apiPanelSettings*.
+//
+// Exposed: name, nickname, nation, GUID, totals, server records held, personal
+// bests per (track, layout, car). NOT exposed: anything that isn't already in
+// the players/laps tables (no IPs, no admin notes — the schema doesn't store
+// them in the first place).
+
+function publicProfilesEnabled() {
+  if (!db) return false;
+  try {
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'public_profiles_enabled'`).get();
+    return row?.value !== '0';
+  } catch { return true; }
+}
+
+// Pulls everything the public profile needs in four small queries. Returns
+// null when the player has never been seen by the panel (no row in players).
+function getPublicPlayerData(guid) {
+  if (!db || !/^\d{17}$/.test(guid)) return null;
+  const player = db.prepare(`
+    SELECT guid, name, nickname, nation, first_seen, last_seen, last_car, last_track
+    FROM players WHERE guid = ?
+  `).get(guid);
+  if (!player) return null;
+
+  const kpis = db.prepare(`
+    SELECT
+      COUNT(DISTINCT session_date)                       AS sessions,
+      COUNT(id)                                          AS lap_count,
+      COALESCE(SUM(ms), 0)                               AS total_ms,
+      MIN(CASE WHEN valid = 1 THEN ms ELSE NULL END)     AS best_ms,
+      MIN(CASE WHEN valid = 1 THEN session_date ELSE NULL END) AS best_date
+    FROM laps WHERE driver_guid = ?
+  `).get(guid) || { sessions: 0, lap_count: 0, total_ms: 0, best_ms: null };
+
+  // Personal best per (track, layout, car), valid laps only. The session_date
+  // is the day that best was set (MAX over rows tied on the min — SQLite
+  // resolves the MAX deterministically, good enough for "last set on" copy).
+  const personalBests = db.prepare(`
+    SELECT track, track_config, car, MIN(ms) AS best_ms, MAX(session_date) AS last_date
+    FROM laps
+    WHERE driver_guid = ? AND valid = 1
+    GROUP BY track, track_config, car
+    ORDER BY track, track_config, car
+  `).all(guid);
+
+  // Server records this player holds. A combo's record is the min(ms) across
+  // every valid lap; the player owns the record when their min lap on that
+  // combo equals the server-wide min. Tied lap times (rare but possible)
+  // surface the player here as long as one of their laps matches the min.
+  const records = db.prepare(`
+    SELECT
+      sb.track, sb.track_config, sb.car, sb.best_ms,
+      (SELECT MAX(session_date) FROM laps
+        WHERE driver_guid = ? AND valid = 1
+          AND track = sb.track AND track_config = sb.track_config
+          AND car = sb.car AND ms = sb.best_ms) AS set_date,
+      (SELECT COUNT(*) FROM laps
+        WHERE valid = 1
+          AND track = sb.track AND track_config = sb.track_config
+          AND car = sb.car AND ms = sb.best_ms
+          AND driver_guid != ?) AS tied_others
+    FROM (
+      SELECT track, track_config, car, MIN(ms) AS best_ms
+      FROM laps WHERE valid = 1
+      GROUP BY track, track_config, car
+    ) sb
+    INNER JOIN laps me
+      ON me.track        = sb.track
+     AND me.track_config = sb.track_config
+     AND me.car          = sb.car
+     AND me.ms           = sb.best_ms
+     AND me.driver_guid  = ?
+     AND me.valid        = 1
+    GROUP BY sb.track, sb.track_config, sb.car
+    ORDER BY sb.best_ms ASC
+  `).all(guid, guid, guid);
+
+  return {
+    player: {
+      guid:      player.guid,
+      name:      player.name || '',
+      nickname:  player.nickname || '',
+      nation:    player.nation || '',
+      firstSeen: player.first_seen || '',
+      lastSeen:  player.last_seen  || '',
+      lastCar:   player.last_car   || '',
+      lastTrack: player.last_track || '',
+    },
+    kpis: {
+      sessions:   kpis.sessions   || 0,
+      laps:       kpis.lap_count  || 0,
+      totalMs:    kpis.total_ms   || 0,
+      totalTime:  formatTotalTime(kpis.total_ms),
+      bestMs:     kpis.best_ms    || null,
+      bestDate:   kpis.best_date  || '',
+      recordsHeld: records.length,
+    },
+    records: records.map(r => ({
+      track:       r.track,
+      trackName:   formatName(r.track),
+      trackConfig: r.track_config || '',
+      car:         r.car,
+      carName:     formatName(r.car),
+      ms:          r.best_ms,
+      date:        r.set_date || '',
+      tiedOthers:  r.tied_others || 0,
+    })),
+    personalBests: personalBests.map(pb => ({
+      track:       pb.track,
+      trackName:   formatName(pb.track),
+      trackConfig: pb.track_config || '',
+      car:         pb.car,
+      carName:     formatName(pb.car),
+      ms:          pb.best_ms,
+      date:        pb.last_date || '',
+    })),
+  };
+}
+
+function apiPublicPlayer(req, res, guid) {
+  if (!publicProfilesEnabled()) return json(res, 404, { error: 'Not Found' });
+  if (!/^\d{17}$/.test(guid))    return json(res, 400, { error: 'Invalid Steam ID' });
+  // Cheap per-IP throttle. The endpoint is unauthenticated and trivially
+  // scannable (17-digit GUIDs are guessable), so cap at 120/min/IP — plenty
+  // for an honest browser and a Discord bot, painful for a scraper.
+  if (!checkRateLimit('public-player', clientIp(req), 120, 60 * 1000)) {
+    return json(res, 429, { error: 'Rate limit' });
+  }
+  const data = getPublicPlayerData(guid);
+  if (!data) return json(res, 404, { error: 'Player not found' });
+  json(res, 200, data);
+}
+
+// Tiny HTML escape; the page renders user-controllable strings (driver name,
+// nickname). Escaping here keeps the SSR template injection-free without
+// pulling in a templating dependency.
+function _htmlEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function _fmtLapMs(ms) {
+  if (ms == null || ms <= 0) return '—';
+  const m = Math.floor(ms / 60000);
+  const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0');
+  return `${m}:${s}`;
+}
+
+function renderPublicPlayerHtml(data, origin) {
+  const p = data.player;
+  const k = data.kpis;
+  const initial = (p.nickname || p.name || '?').slice(0, 1).toUpperCase();
+  const displayName = p.nickname ? `${p.nickname} (${p.name})` : p.name;
+  const title = `${displayName} · ${k.laps} laps · best ${_fmtLapMs(k.bestMs)}`;
+  const desc  = p.name
+    ? `${displayName} on Assetto Corsa: ${k.laps} laps, ${k.totalTime} on track, ${k.recordsHeld} server record${k.recordsHeld === 1 ? '' : 's'}, best lap ${_fmtLapMs(k.bestMs)}.`
+    : 'Driver profile.';
+
+  // Pre-render the tables on the server so the page is meaningful without
+  // executing JS — Discord/Twitter cards render this, and the panel's own
+  // CSP doesn't allow inline script anyway.
+  const recordsRows = data.records.length === 0
+    ? `<tr><td colspan="4" class="empty-cell">No server records yet — pick a combo nobody owns and set the bar.</td></tr>`
+    : data.records.map(r => `
+        <tr>
+          <td>
+            <div class="combo-track">${_htmlEsc(r.trackName)}</div>
+            ${r.trackConfig ? `<div class="combo-layout">${_htmlEsc(r.trackConfig)}</div>` : ''}
+          </td>
+          <td class="muted">${_htmlEsc(r.carName)}</td>
+          <td class="mono lap-time">${_fmtLapMs(r.ms)}</td>
+          <td class="mono muted date">${_htmlEsc(r.date) || '—'}</td>
+        </tr>`).join('');
+
+  const pbRows = data.personalBests.length === 0
+    ? `<tr><td colspan="4" class="empty-cell">No valid laps recorded yet.</td></tr>`
+    : data.personalBests.map(pb => `
+        <tr>
+          <td>
+            <div class="combo-track">${_htmlEsc(pb.trackName)}</div>
+            ${pb.trackConfig ? `<div class="combo-layout">${_htmlEsc(pb.trackConfig)}</div>` : ''}
+          </td>
+          <td class="muted">${_htmlEsc(pb.carName)}</td>
+          <td class="mono lap-time">${_fmtLapMs(pb.ms)}</td>
+          <td class="mono muted date">${_htmlEsc(pb.date) || '—'}</td>
+        </tr>`).join('');
+
+  // Flag emoji from ISO-3166-1 alpha-3 → alpha-2 → regional indicator pair.
+  // The panel uses image flags elsewhere (countryFlags.svg sprite); here a
+  // unicode flag keeps the page self-contained with zero asset deps.
+  let flagEmoji = '';
+  if (/^[A-Za-z]{2,3}$/.test(p.nation || '')) {
+    const code = p.nation.toUpperCase();
+    const ISO3 = {
+      ESP:'ES', GBR:'GB', USA:'US', FRA:'FR', ITA:'IT', DEU:'DE', PRT:'PT', NLD:'NL',
+      BEL:'BE', CHE:'CH', AUT:'AT', POL:'PL', SWE:'SE', NOR:'NO', FIN:'FI', DNK:'DK',
+      ARG:'AR', BRA:'BR', MEX:'MX', CHL:'CL', URY:'UY', COL:'CO', PER:'PE', VEN:'VE',
+      JPN:'JP', KOR:'KR', CHN:'CN', AUS:'AU', NZL:'NZ', CAN:'CA', IRL:'IE', ISL:'IS',
+      CZE:'CZ', SVK:'SK', HUN:'HU', ROU:'RO', BGR:'BG', GRC:'GR', TUR:'TR', RUS:'RU',
+      UKR:'UA', BLR:'BY', LTU:'LT', LVA:'LV', EST:'EE',
+    };
+    const a2 = code.length === 2 ? code : (ISO3[code] || '');
+    if (a2.length === 2 && /^[A-Z]{2}$/.test(a2)) {
+      flagEmoji = String.fromCodePoint(0x1F1E6 + a2.charCodeAt(0) - 65) +
+                  String.fromCodePoint(0x1F1E6 + a2.charCodeAt(1) - 65);
+    }
+  }
+
+  const ogUrl = `${origin}/p/${p.guid}`;
+
+  return `<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#dc2626"/>
+  <title>${_htmlEsc(title)}</title>
+  <meta name="description" content="${_htmlEsc(desc)}"/>
+  <meta property="og:type" content="profile"/>
+  <meta property="og:title" content="${_htmlEsc(displayName)}"/>
+  <meta property="og:description" content="${_htmlEsc(desc)}"/>
+  <meta property="og:url" content="${_htmlEsc(ogUrl)}"/>
+  <meta property="og:site_name" content="Assetto Server Panel"/>
+  <meta name="twitter:card" content="summary"/>
+  <meta name="twitter:title" content="${_htmlEsc(displayName)}"/>
+  <meta name="twitter:description" content="${_htmlEsc(desc)}"/>
+  <link rel="icon" type="image/png" href="/src/assets/icon.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/src/styles.css"/>
+  <style>
+    /* Public-profile-specific layout. Inherits all the design tokens from
+       styles.css (--red, --bg, --surface, --radius, etc.) so the look is
+       continuous with the panel; only the wrapping geometry differs. */
+    body { background: var(--bg-2); }
+    .pp-wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px 56px; }
+    .pp-topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 0 22px; border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+    .pp-topbar .brand-mark { width: 28px; height: 28px; border-radius: 6px; }
+    .pp-topbar .brand-name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+    .pp-topbar .brand-sub  { font-size: 11.5px; color: var(--text-muted); }
+    .pp-theme-toggle {
+      margin-left: auto;
+      width: 32px; height: 32px; border-radius: var(--radius-sm);
+      display: grid; place-items: center; color: var(--text-muted);
+      background: transparent; border: 1px solid var(--border);
+      cursor: pointer; transition: background 120ms ease, color 120ms ease;
+    }
+    .pp-theme-toggle:hover { background: var(--bg-3); color: var(--text); }
+    .pp-theme-toggle svg { width: 14px; height: 14px; }
+
+    .pp-hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      display: flex; align-items: center; gap: 20px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 18px;
+    }
+    .pp-avatar {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: var(--red); color: #fff;
+      display: grid; place-items: center;
+      font-weight: 600; font-size: 28px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 14px rgba(220,38,38,0.25);
+    }
+    .pp-id { flex: 1; min-width: 0; }
+    .pp-name {
+      font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .pp-flag { font-size: 22px; line-height: 1; }
+    .pp-aka { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .pp-guid {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 10px; padding: 4px 10px;
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: var(--font-mono); font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .pp-guid a {
+      color: var(--text-muted); text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .pp-guid a:hover { color: var(--text); }
+
+    .pp-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .pp-kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .pp-kpi-label {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted);
+      font-weight: 600;
+    }
+    .pp-kpi-value {
+      font-size: 26px; font-weight: 600; letter-spacing: -0.02em;
+      margin-top: 6px; line-height: 1;
+      font-family: var(--font-mono);
+    }
+    .pp-kpi-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+
+    .pp-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .pp-card-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .pp-card-title { font-size: 13px; font-weight: 600; }
+    .pp-card-trophy { color: var(--red); }
+    .pp-badge {
+      margin-left: auto;
+      display: inline-flex; align-items: center;
+      padding: 2px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 500;
+      background: var(--bg-2); color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .pp-badge-record {
+      background: color-mix(in srgb, var(--red) 14%, transparent);
+      color: var(--red); border-color: transparent;
+    }
+
+    .pp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pp-table th, .pp-table td {
+      text-align: left;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .pp-table th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+      font-weight: 600;
+      background: var(--bg-2);
+    }
+    .pp-table tbody tr:last-child td { border-bottom: none; }
+    .pp-table tbody tr:hover { background: var(--bg-2); }
+    .combo-track  { font-weight: 500; }
+    .combo-layout { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+    .lap-time     { font-weight: 600; color: var(--text); }
+    .empty-cell {
+      text-align: center !important; padding: 28px 18px !important;
+      color: var(--text-faint); font-style: italic;
+    }
+    .muted { color: var(--text-muted); }
+    .mono  { font-family: var(--font-mono); font-size: 12px; }
+    .date  { white-space: nowrap; }
+
+    .pp-footer {
+      margin-top: 26px;
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--text-faint);
+    }
+    .pp-footer a { color: var(--text-muted); text-decoration: none; }
+    .pp-footer a:hover { color: var(--text); }
+
+    @media (max-width: 700px) {
+      .pp-wrap   { padding: 18px 14px 36px; }
+      .pp-hero   { padding: 18px; gap: 14px; }
+      .pp-avatar { width: 56px; height: 56px; font-size: 22px; }
+      .pp-name   { font-size: 18px; }
+      .pp-kpis   { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .pp-kpi    { padding: 14px 16px; }
+      .pp-kpi-value { font-size: 20px; }
+      .pp-card-header { padding: 12px 14px; }
+      .pp-table th, .pp-table td { padding: 9px 12px; }
+      .pp-card { overflow-x: auto; }
+      .pp-table { min-width: 480px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="pp-wrap">
+    <div class="pp-topbar">
+      <img class="brand-mark" src="/src/assets/icon.png" alt=""/>
+      <div>
+        <div class="brand-name">Assetto Server Panel</div>
+        <div class="brand-sub">Driver profile</div>
+      </div>
+      <button class="pp-theme-toggle" type="button" id="pp-theme-btn" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="pp-hero">
+      <div class="pp-avatar">${_htmlEsc(initial)}</div>
+      <div class="pp-id">
+        <div class="pp-name">
+          <span>${_htmlEsc(p.nickname || p.name)}</span>
+          ${flagEmoji ? `<span class="pp-flag" title="${_htmlEsc(p.nation)}">${flagEmoji}</span>` : ''}
+        </div>
+        ${p.nickname ? `<div class="pp-aka">in-game: ${_htmlEsc(p.name)}</div>` : ''}
+        <div class="pp-guid">
+          <span>${_htmlEsc(p.guid)}</span>
+          <a href="https://steamcommunity.com/profiles/${_htmlEsc(p.guid)}" target="_blank" rel="noreferrer noopener" title="Open Steam profile">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="pp-kpis">
+      <div class="pp-kpi">
+        <div class="pp-kpi-label">Total laps</div>
+        <div class="pp-kpi-value">${k.laps.toLocaleString('en')}</div>
+        <div class="pp-kpi-meta">${k.sessions} session${k.sessions === 1 ? '' : 's'}</div>
+      </div>
+      <div class="pp-kpi">
+        <div class="pp-kpi-label">Time on track</div>
+        <div class="pp-kpi-value">${_htmlEsc(k.totalTime)}</div>
+        <div class="pp-kpi-meta">since ${_htmlEsc(p.firstSeen) || '—'}</div>
+      </div>
+      <div class="pp-kpi">
+        <div class="pp-kpi-label">Best lap</div>
+        <div class="pp-kpi-value">${_fmtLapMs(k.bestMs)}</div>
+        <div class="pp-kpi-meta">${k.bestDate ? `on ${_htmlEsc(k.bestDate)}` : '—'}</div>
+      </div>
+      <div class="pp-kpi">
+        <div class="pp-kpi-label">Server records</div>
+        <div class="pp-kpi-value">${k.recordsHeld}</div>
+        <div class="pp-kpi-meta">${k.recordsHeld ? 'combos owned' : '—'}</div>
+      </div>
+    </div>
+
+    <div class="pp-card">
+      <div class="pp-card-header">
+        <svg class="pp-card-trophy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/>
+          <path d="M17 4h3v2a3 3 0 0 1-3 3M7 4H4v2a3 3 0 0 0 3 3"/>
+        </svg>
+        <div class="pp-card-title">Server records held</div>
+        <span class="pp-badge ${data.records.length ? 'pp-badge-record' : ''}">${data.records.length}</span>
+      </div>
+      <table class="pp-table">
+        <thead>
+          <tr>
+            <th>Track</th>
+            <th>Car</th>
+            <th style="width: 120px">Lap time</th>
+            <th style="width: 110px">Set on</th>
+          </tr>
+        </thead>
+        <tbody>${recordsRows}</tbody>
+      </table>
+    </div>
+
+    <div class="pp-card">
+      <div class="pp-card-header">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--text-muted)">
+          <polyline points="3 17 9 11 13 15 21 7"/>
+          <polyline points="14 7 21 7 21 14"/>
+        </svg>
+        <div class="pp-card-title">Personal bests</div>
+        <span class="pp-badge">${data.personalBests.length}</span>
+      </div>
+      <table class="pp-table">
+        <thead>
+          <tr>
+            <th>Track</th>
+            <th>Car</th>
+            <th style="width: 120px">Lap time</th>
+            <th style="width: 110px">Set on</th>
+          </tr>
+        </thead>
+        <tbody>${pbRows}</tbody>
+      </table>
+    </div>
+
+    <div class="pp-footer">
+      Powered by <a href="/">Assetto Server Panel</a>
+    </div>
+  </div>
+  <script src="/p/_theme.js"></script>
+</body>
+</html>`;
+}
+
+// Tiny client-side theme toggle for the public profile page. Lives at a fixed
+// URL so the page's <script src> is /-relative (CSP-friendly) and stays
+// cacheable. No template substitution, no React — just persists the
+// data-theme attribute through reloads via localStorage.
+const _PUBLIC_PROFILE_THEME_JS = `(function(){
+  try {
+    var saved = localStorage.getItem('ac-theme');
+    if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+  } catch (e) {}
+  var btn = document.getElementById('pp-theme-btn');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', cur);
+    try { localStorage.setItem('ac-theme', cur); } catch (e) {}
+  });
+})();`;
+
+function apiPublicPlayerPage(req, res, guid) {
+  if (!publicProfilesEnabled()) return respond(res, 404, 'text/plain; charset=utf-8', 'Public profiles disabled');
+  if (!/^\d{17}$/.test(guid))    return respond(res, 400, 'text/plain; charset=utf-8', 'Invalid Steam ID');
+  if (!checkRateLimit('public-player', clientIp(req), 120, 60 * 1000)) {
+    return respond(res, 429, 'text/plain; charset=utf-8', 'Too many requests');
+  }
+  const data = getPublicPlayerData(guid);
+  if (!data) return respond(res, 404, 'text/plain; charset=utf-8', 'Player not found');
+  // Origin for absolute OG URLs. Honours TRUST_PROXY if Cloudflare is in front
+  // — operators behind a tunnel get the public hostname instead of 127.0.0.1.
+  const proto = requestIsHttps(req) ? 'https' : 'http';
+  const host  = req.headers.host || 'localhost';
+  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`);
+  res.setHeader('Cache-Control', 'no-store');
+  respond(res, 200, 'text/html; charset=utf-8', html);
 }
 
 // Mtime-keyed memoization for the heavy content listings. /api/cars and /api/tracks
@@ -4298,11 +4853,12 @@ function apiPanelUserDelete(req, res, username) {
 
 // ── Panel settings (upload_max_mb, etc.) ──────────────────────────────────────
 function apiPanelSettingsGet(req, res) {
-  if (!db) return json(res, 200, { uploadMaxMb: 500, chunkedUpload: false, lang: 'en', discordWebhook: '' });
+  if (!db) return json(res, 200, { uploadMaxMb: 500, chunkedUpload: false, lang: 'en', discordWebhook: '', publicProfilesEnabled: true });
   const mbRow       = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
   const langRow     = db.prepare(`SELECT value FROM panel_settings WHERE key = 'lang'`).get();
   const chunkedRow  = db.prepare(`SELECT value FROM panel_settings WHERE key = 'chunked_upload'`).get();
   const webhookRow  = db.prepare(`SELECT value FROM panel_settings WHERE key = 'discord_webhook'`).get();
+  const publicRow   = db.prepare(`SELECT value FROM panel_settings WHERE key = 'public_profiles_enabled'`).get();
   // The webhook URL is effectively a secret (anyone with it can post to the
   // channel). Return the raw value only to admins or to users with the
   // discordWebhook permission. Everyone else just gets the configured flag so
@@ -4314,6 +4870,7 @@ function apiPanelSettingsGet(req, res) {
     chunkedUpload:  chunkedRow?.value === '1',
     discordWebhook: canSeeWebhook ? (webhookRow?.value || '') : '',
     discordConfigured: !!(webhookRow?.value),
+    publicProfilesEnabled: publicRow?.value !== '0',
   });
 }
 
@@ -4354,6 +4911,12 @@ async function apiPanelSettingsPut(req, res) {
       if (!isValidDiscordWebhook(url)) return json(res, 400, { error: 'Invalid Discord webhook URL' });
       db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('discord_webhook', ?)`).run(url);
       insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'panel.discord_webhook', '', url ? 'set' : 'cleared');
+    }
+    if (body.publicProfilesEnabled !== undefined) {
+      if (!isAdmin) return json(res, 403, { error: 'Forbidden (admin only)' });
+      const next = body.publicProfilesEnabled ? '1' : '0';
+      db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('public_profiles_enabled', ?)`).run(next);
+      insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'panel.public_profiles', '', next === '1' ? 'enabled' : 'disabled');
     }
     json(res, 200, { ok: true });
   } catch (e) { json(res, 500, { error: e.message }); }
@@ -5467,6 +6030,22 @@ function handler(req, res) {
       'User-agent: *\nDisallow: /\n');
   }
 
+  // Public player profile page — server-rendered HTML at /p/<guid>. Lives
+  // above the auth gate because the whole point is "share a link nobody
+  // needs a panel login to open". The toggle in panel_settings disables it
+  // server-side when an operator doesn't want the panel publicly visible.
+  const publicPlayerPageMatch = urlPath.match(/^\/p\/(\d{17})$/);
+  if (publicPlayerPageMatch && req.method === 'GET') {
+    return apiPublicPlayerPage(req, res, publicPlayerPageMatch[1]);
+  }
+  // Companion JS for the public profile page's theme toggle. Tiny static
+  // string; served unauthenticated so the page actually loads without a
+  // session cookie. Cached aggressively because the body is a constant.
+  if (urlPath === '/p/_theme.js' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    return respond(res, 200, 'application/javascript; charset=utf-8', _PUBLIC_PROFILE_THEME_JS);
+  }
+
   if (urlPath.startsWith('/api/')) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, { 'Allow': 'GET, PUT, POST, DELETE, OPTIONS' });
@@ -5486,6 +6065,12 @@ function handler(req, res) {
     // configuration banner before any login can succeed when AC_CFG_DIR is
     // wrong. No secrets leak — only the filesystem paths the operator chose.
     if (urlPath === '/api/setup/status' && req.method === 'GET') return apiSetupStatus(req, res);
+
+    // Public player profile JSON — same data as /p/<guid> but in machine form,
+    // for Discord bots, Twitch overlays and similar integrations that want the
+    // stats without scraping the HTML. Auth-less; rate-limited per IP.
+    const publicPlayerApiMatch = urlPath.match(/^\/api\/public\/players\/(\d{17})$/);
+    if (publicPlayerApiMatch && req.method === 'GET') return apiPublicPlayer(req, res, publicPlayerApiMatch[1]);
 
     // Auth
     if (urlPath === '/api/auth/me'              && req.method === 'GET')  return apiAuthMe(req, res);

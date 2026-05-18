@@ -2866,10 +2866,13 @@ function renderPublicPlayerHtml(data, origin, lang) {
   const flagUrl = _nationFlagUrl(p.nation, '20x15');
   const flagUrl2x = _nationFlagUrl(p.nation, '40x30');
 
-  // og:image points at the per-driver SVG card so a paste in Discord/Twitter
+  // og:image points at the per-driver PNG card so a paste in Discord/Twitter
   // gets a rich preview with the avatar + KPIs instead of a text-only embed.
+  // PNG instead of SVG because Discord's parser doesn't render SVG and bails
+  // with 'couldn't load image'. PNG is rendered server-side on demand from
+  // the same SVG template (see apiPublicPlayerOgPng).
   const ogUrl = `${origin}/p/${p.guid}`;
-  const ogImageUrl = `${origin}/p/${p.guid}/og.svg`;
+  const ogImageUrl = `${origin}/p/${p.guid}/og.png`;
 
   return `<!DOCTYPE html>
 <html lang="${_htmlEsc(lang)}" data-theme="dark">
@@ -2887,7 +2890,7 @@ function renderPublicPlayerHtml(data, origin, lang) {
   <meta property="og:image" content="${_htmlEsc(ogImageUrl)}"/>
   <meta property="og:image:width" content="1200"/>
   <meta property="og:image:height" content="630"/>
-  <meta property="og:image:type" content="image/svg+xml"/>
+  <meta property="og:image:type" content="image/png"/>
   <meta name="twitter:card" content="summary_large_image"/>
   <meta name="twitter:title" content="${_htmlEsc(displayName)}"/>
   <meta name="twitter:description" content="${_htmlEsc(desc)}"/>
@@ -3334,6 +3337,63 @@ function apiPublicPlayerOgImage(req, res, guid) {
   const svg  = renderPublicPlayerOgSvg(data, lang);
   res.setHeader('Cache-Control', 'public, max-age=300'); // 5 min — bots re-fetch on each link share
   respond(res, 200, 'image/svg+xml; charset=utf-8', svg);
+}
+
+// PNG version of the OG card. Discord, Slack and older Twitter parsers don't
+// render SVG as og:image — they fail outright with 'Couldn't load image'.
+// Rendering server-side via @resvg/resvg-js (pure WASM, no native binding,
+// no system fonts needed because the SVG uses fallback families) produces a
+// 1200×630 PNG every parser accepts. Lazy-loaded so the panel boot doesn't
+// pay the WASM init cost when the OG endpoint is never hit, and the import
+// failure (e.g. resvg-js not installed on a stale prod) doesn't crash the
+// process — falls back to the static panel-logo PNG instead.
+let _resvgLazy = null;
+function _loadResvg() {
+  if (_resvgLazy !== null) return _resvgLazy;
+  try { _resvgLazy = require('@resvg/resvg-js'); }
+  catch (e) { log.warn('[og-png] @resvg/resvg-js unavailable:', e.message); _resvgLazy = false; }
+  return _resvgLazy;
+}
+function _fallbackOgPng(res) {
+  // Static panel logo as the worst-case fallback — at least Discord shows
+  // SOMETHING instead of "couldn't load image".
+  const p = path.join(ROOT, 'src', 'assets', 'icon-512.png');
+  fs.readFile(p, (err, data) => {
+    if (err) return respond(res, 500, 'text/plain; charset=utf-8', 'OG fallback unavailable');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    respond(res, 200, 'image/png', data);
+  });
+}
+function apiPublicPlayerOgPng(req, res, guid) {
+  if (!publicProfilesEnabled()) return respond(res, 404, 'text/plain; charset=utf-8', 'Not Found');
+  if (!/^\d{17}$/.test(guid))    return respond(res, 400, 'text/plain; charset=utf-8', 'Invalid Steam ID');
+  if (!checkRateLimit('public-player', clientIp(req), 120, 60 * 1000)) {
+    return respond(res, 429, 'text/plain; charset=utf-8', 'Too many requests');
+  }
+  const data = getPublicPlayerData(guid);
+  if (!data) return respond(res, 404, 'text/plain; charset=utf-8', 'Player not found');
+
+  const resvg = _loadResvg();
+  if (!resvg) return _fallbackOgPng(res);
+  try {
+    const lang = resolvePublicLang(req);
+    const svg  = renderPublicPlayerOgSvg(data, lang);
+    // fitTo width:1200 matches the SVG's intrinsic viewBox so the output
+    // is the exact 1200×630 Discord/Twitter expect for summary_large_image
+    // cards. No font fitting needed because the SVG only references generic
+    // families (Inter / system-ui / monospace) — resvg substitutes them
+    // with bundled fallback faces; metrics may vary slightly across hosts
+    // but the layout has enough slack to absorb it.
+    const png = new resvg.Resvg(svg, {
+      fitTo: { mode: 'width', value: 1200 },
+      font:  { loadSystemFonts: false },
+    }).render().asPng();
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    respond(res, 200, 'image/png', png);
+  } catch (e) {
+    log.warn('[og-png] render failed for', guid, ':', e.message);
+    _fallbackOgPng(res);
+  }
 }
 
 function apiPublicPlayerPage(req, res, guid) {
@@ -6751,12 +6811,16 @@ function handler(req, res) {
   if (publicPlayerPageMatch && (req.method === 'GET' || req.method === 'HEAD')) {
     return apiPublicPlayerPage(req, res, publicPlayerPageMatch[1]);
   }
-  // OpenGraph card image for the same driver — served as SVG so we don't
-  // need to bundle a raster image library. Discord/Twitter/Mastodon hit
-  // this when a /p/<guid> link is pasted into a chat.
-  const publicPlayerOgMatch = urlPath.match(/^\/p\/(\d{17})\/og\.svg$/);
-  if (publicPlayerOgMatch && (req.method === 'GET' || req.method === 'HEAD')) {
-    return apiPublicPlayerOgImage(req, res, publicPlayerOgMatch[1]);
+  // OpenGraph card image for the same driver. PNG is the canonical version
+  // (Discord / Slack / Twitter render it), SVG endpoint kept around for the
+  // few clients that prefer vector + direct human browsing.
+  const publicPlayerOgPngMatch = urlPath.match(/^\/p\/(\d{17})\/og\.png$/);
+  if (publicPlayerOgPngMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    return apiPublicPlayerOgPng(req, res, publicPlayerOgPngMatch[1]);
+  }
+  const publicPlayerOgSvgMatch = urlPath.match(/^\/p\/(\d{17})\/og\.svg$/);
+  if (publicPlayerOgSvgMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    return apiPublicPlayerOgImage(req, res, publicPlayerOgSvgMatch[1]);
   }
   // Companion JS for the public profile page's theme toggle. Tiny static
   // string; served unauthenticated so the page actually loads without a

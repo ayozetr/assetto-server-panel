@@ -3380,13 +3380,25 @@ function apiPublicPlayerOgPng(req, res, guid) {
     const svg  = renderPublicPlayerOgSvg(data, lang);
     // fitTo width:1200 matches the SVG's intrinsic viewBox so the output
     // is the exact 1200×630 Discord/Twitter expect for summary_large_image
-    // cards. No font fitting needed because the SVG only references generic
-    // families (Inter / system-ui / monospace) — resvg substitutes them
-    // with bundled fallback faces; metrics may vary slightly across hosts
-    // but the layout has enough slack to absorb it.
+    // cards. Font config: resvg ships no fonts of its own, so it MUST load
+    // them from somewhere or every <text> element renders invisibly.
+    // loadSystemFonts:true scans the host font directories (on a typical
+    // Linux box that's /usr/share/fonts → DejaVu Sans / DejaVu Sans Mono);
+    // the default* families below tell resvg what to substitute for the
+    // generic CSS families the SVG references (Inter, JetBrains Mono, etc.)
+    // when the exact face isn't installed. Pinning to DejaVu specifically
+    // keeps rendering deterministic across the dev/prod boxes and the
+    // operator doesn't need to install custom fonts for the OG card to
+    // work — DejaVu ships with the systemd / fonts-dejavu Debian/Arch
+    // packages by default.
     const png = new resvg.Resvg(svg, {
       fitTo: { mode: 'width', value: 1200 },
-      font:  { loadSystemFonts: false },
+      font: {
+        loadSystemFonts:  true,
+        defaultFontFamily: 'DejaVu Sans',
+        sansSerifFamily:   'DejaVu Sans',
+        monospaceFamily:   'DejaVu Sans Mono',
+      },
     }).render().asPng();
     res.setHeader('Cache-Control', 'public, max-age=300');
     respond(res, 200, 'image/png', png);

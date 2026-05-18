@@ -765,23 +765,32 @@ input, select, textarea { font-family: inherit; color: inherit; }
 [data-theme="dark"] .live-map-img {
   filter: brightness(1.15) contrast(1.05);
 }
+/* The dot anchor is a zero-sized point positioned at the projected world
+   coords; the marker and label are absolutely positioned relative to it.
+   Earlier the parent had display:flex + translate(-50%, -50%) which
+   centred the WHOLE row (marker + gap + label) on the position, so the
+   marker drifted left of where the car actually was while the label
+   landed roughly over the trail — confusing because the visible label
+   tracked the road and the dot didn't. Now the marker is the thing
+   centred on (left, top); the label floats up-right of it. */
 .live-map-dot {
   position: absolute;
-  transform: translate(-50%, -50%);
   pointer-events: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
   transition: top 220ms linear, left 220ms linear;
 }
 .live-map-dot-marker {
+  position: absolute;
+  top: 0; left: 0;
+  transform: translate(-50%, -50%);
   width: 10px; height: 10px;
   border-radius: 50%;
   background: var(--red);
   box-shadow: 0 0 0 2px var(--surface), 0 1px 3px rgba(0,0,0,0.35);
-  flex-shrink: 0;
 }
 .live-map-dot-label {
+  position: absolute;
+  left: 8px;
+  top: -8px;
   font-size: 10.5px;
   font-weight: 600;
   color: var(--text);

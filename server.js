@@ -6585,7 +6585,7 @@ function handler(req, res) {
       data = Buffer.from(
         data.toString('utf8').replace(
           /(src="(?:[^"]*\/)?dist\/[^"]+\.js)"/g,
-          `$1?v=${BUILD_VERSION}"`
+          `$1?v=${getBuildVersion()}"`
         ),
         'utf8'
       );
@@ -6594,18 +6594,30 @@ function handler(req, res) {
   });
 }
 
-// Build identity used to invalidate bundle URLs after every redeploy. mtime of
-// dist/app.js is stable across restarts of the same build (a `node build.js`
-// touches everything, so a fresh deploy refreshes BUILD_VERSION automatically)
-// and rolls forward on each restart of an updated tree.
-const BUILD_VERSION = (() => {
+// Build identity used to invalidate bundle URLs after every redeploy. Re-read
+// from dist/app.js's mtime on each call, with a 5-second memoization to avoid
+// stat-ing on every static request. Previously this was computed once at
+// module load, which left `?v=…` frozen at the boot-time value — a deploy
+// that ran `git pull && npm run build` without a node restart kept serving
+// the old query string, so Cloudflare's edge happily replayed the previous
+// bundle under that URL until the next node restart. With this, every
+// rebuild reaches browsers on the next /index.html fetch (the cache is at
+// most 5s stale; well below the 'visit panel after deploy' latency).
+const _BUILD_VERSION_TTL_MS = 5000;
+let _buildVersionCached = null;
+let _buildVersionStaleAt = 0;
+function getBuildVersion() {
+  const now = Date.now();
+  if (_buildVersionCached && now < _buildVersionStaleAt) return _buildVersionCached;
   try {
     const st = fs.statSync(path.join(ROOT, 'dist', 'app.js'));
-    return String(Math.floor(st.mtimeMs));
+    _buildVersionCached = String(Math.floor(st.mtimeMs));
   } catch {
-    return String(Date.now());
+    _buildVersionCached = String(now);
   }
-})();
+  _buildVersionStaleAt = now + _BUILD_VERSION_TTL_MS;
+  return _buildVersionCached;
+}
 
 // Rotate up to N timestamped backups of server_cfg.ini before each save. Without
 // rotation, a single .bak file is overwritten on every save — two bad saves in

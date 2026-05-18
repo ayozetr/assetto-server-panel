@@ -4041,19 +4041,33 @@ function udpStartListener(listenHostPort, sendCommandsToPort) {
     // unknown-car_id fallback in udpParseEvent which requests CAR_INFO for
     // that slot on demand, so we still recover — without seeding phantoms.
 
-    // Subscribe to 10Hz CAR_UPDATE packets so the Live position telemetry
-    // widget on the Dashboard can render moving dots over each track's
-    // map.png. Payload is uint16 little-endian = interval in ms; 100ms is
-    // the same cadence Content Manager / CSP request for their minimaps,
-    // good balance between visual fluidity and UDP traffic. acServer keeps
-    // this enabled for the rest of the session, so we only ever send it
-    // once per listener boot. Cost: 36 bytes per car per packet × 20 cars
-    // × 10Hz ≈ 7 KB/s of UDP localhost — negligible.
-    const intervalMs = 100;
-    const realtimeBuf = Buffer.alloc(2);
-    realtimeBuf.writeUInt16LE(intervalMs, 0);
-    udpSendCommand(ACSP.REALTIMEPOS_INTERVAL, realtimeBuf);
+    // Subscribe to CAR_UPDATE position stream. See udpEnableRealtimePos for
+    // the per-restart re-subscription logic — the boot-time send here only
+    // covers the case where acServer is already up when the panel starts.
+    udpEnableRealtimePos();
   });
+}
+
+// Tells acServer to start broadcasting CAR_UPDATE packets at 10Hz (100ms
+// interval), the cadence Content Manager / CSP use for their minimaps. The
+// subscription is per-process: every time acServer is killed and respawned
+// (which happens on every panel restart because of the systemd-cgroup issue
+// in KillMode=process, and on every /api/server/{start,restart}), the new
+// acServer process has no record of the previous subscription. We re-send
+// from three places:
+//   1. udpStartListener — covers "acServer up before panel".
+//   2. NEW_SESSION handler — acServer emits this on its own startup, so a
+//      stand-alone acServer restart caught by the panel triggers a re-sub.
+//   3. apiPositionsStream — last-resort idempotent send when the Dashboard
+//      widget opens its EventSource (zero downside: acServer accepts repeat
+//      subscriptions, the payload is 3 bytes, ignored if redundant).
+// Without this re-sub, CAR_UPDATE silently stops arriving after any
+// acServer restart and the live-map dots get stuck on the last known frame.
+const _REALTIME_POS_INTERVAL_MS = 100;
+function udpEnableRealtimePos() {
+  const buf = Buffer.alloc(2);
+  buf.writeUInt16LE(_REALTIME_POS_INTERVAL_MS, 0);
+  return udpSendCommand(ACSP.REALTIMEPOS_INTERVAL, buf);
 }
 
 function udpSendCommand(cmd, payload = Buffer.alloc(0)) {
@@ -4103,6 +4117,12 @@ function udpParseEvent(buf) {
       log.info(`[UDP] ${ev === ACSP.NEW_SESSION ? 'NEW_SESSION' : 'SESSION_INFO'} ${sessName.value} (${udpTypeName(type)}) track=${track.value}${trackConfig.value ? '/' + trackConfig.value : ''}`);
       // Reset per-session counters but keep the connected-cars map intact.
       for (const c of udpState.cars.values()) { c.bestLap = 0; c.lastLap = 0; c.lapsCount = 0; }
+      // Re-subscribe to CAR_UPDATE every time acServer announces a session.
+      // acServer emits NEW_SESSION on its own boot, so this covers the case
+      // where the panel was started BEFORE acServer (boot-time REALTIMEPOS
+      // packet went into the void because port 12000 had no listener yet),
+      // and also handles operator-initiated restarts via /api/server/start.
+      udpEnableRealtimePos();
       break;
     }
 
@@ -4409,6 +4429,12 @@ function apiPositionsStream(req, res) {
   if (userSet.size >= SSE_PER_USER_CAP) {
     return json(res, 429, { error: 'Too many concurrent streams for this user — close other tabs and retry' });
   }
+  // Idempotent re-subscribe: ensures the running acServer is emitting
+  // CAR_UPDATE before the first frame is requested. Cheap (3-byte UDP
+  // packet to localhost) and harmless if the subscription was already
+  // active. Catches the case where the panel started before acServer
+  // OR acServer was restarted while no SSE client was open.
+  udpEnableRealtimePos();
   res.writeHead(200, {
     'Content-Type':      'text/event-stream',
     'Cache-Control':     'no-cache',

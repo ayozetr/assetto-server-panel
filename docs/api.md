@@ -298,6 +298,96 @@ Set or clear the admin-defined nickname for a player. Persisted in the `players.
 
 ---
 
+## Public driver profiles
+
+The two endpoints below are **unauthenticated** — they are the data layer behind the shareable `/p/<steam-id>` page (HTML, also unauthenticated, server-rendered). Both are rate-limited at **120 requests per minute per IP** under the `public-player` bucket and return `404` server-wide when the `publicProfilesEnabled` toggle in [`/api/panel/settings`](#put-apipanelsettings) is disabled.
+
+### `GET /api/public/players/:guid`
+Aggregated stats for a single driver. Same shape as the data the SSR `/p/<guid>` page renders. Useful for Discord bots, Twitch overlays, league standings boards — anything that wants the data without scraping HTML.
+
+**Auth required:** no
+
+**URL:** `:guid` must be a 17-digit Steam GUID. Anything else returns `400 { "error": "Invalid Steam ID" }`.
+
+**Response 200:**
+
+```jsonc
+{
+  "player": {
+    "guid":      "76561198000000001",
+    "name":      "Driver",              // in-game name
+    "nickname":  "Sample Driver",       // admin-set, may be empty
+    "nation":    "ESP",                // ISO-3 country code or empty
+    "firstSeen": "2026-05-12",
+    "lastSeen":  "2026-05-18",
+    "lastCar":   "ks_toyota_ae86",
+    "lastTrack": "ks_red_bull_ring"
+  },
+  "kpis": {
+    "sessions":    4,
+    "laps":        41,
+    "totalMs":     10399664,
+    "totalTime":   "2h 53m",            // pretty-printed totalMs
+    "bestMs":      238997,
+    "bestDate":    "2026-05-13",        // date the bestMs lap was set, not first valid lap
+    "recordsHeld": 10                   // count of records[] below
+  },
+  "records": [                          // combos where this driver has the panel-wide MIN(ms) valid lap
+    {
+      "track":       "ks_red_bull_ring",
+      "trackName":   "Red Bull Ring",   // from ui_track.json with prefix-stripping
+      "trackConfig": "layout_gp",   // raw slug, kept for clients
+      "layoutName":  "Grand Prix",   // short name (track prefix stripped)
+      "car":         "ks_toyota_ae86",
+      "carName":     "EK Civic EF9",    // from ui_car.json or formatted slug
+      "ms":          238997,
+      "date":        "2026-05-13",
+      "tiedOthers":  0                  // count of OTHER drivers tied on this exact ms
+    }
+  ],
+  "personalBests": [                    // every (track, layout, car) combo this driver has driven, with their best
+    {
+      "track":       "ks_red_bull_ring",
+      "trackName":   "Red Bull Ring",
+      "trackConfig": "layout_gp",
+      "layoutName":  "Grand Prix",
+      "car":         "ks_toyota_ae86",
+      "carName":     "EK Civic EF9",
+      "ms":          238997,
+      "date":        "2026-05-13"
+    }
+  ]
+}
+```
+
+**Response 404:** `{ "error": "Player not found" }` — the GUID has no row in `players`. Players are inserted on first `NEW_CONNECTION` from the UDP listener or on first valid lap imported from a results JSON.
+
+**Response 400:** `{ "error": "Invalid Steam ID" }` — the path segment didn't match the 17-digit shape.
+
+**Response 429:** `{ "error": "Rate limit" }` — more than 120 requests in the trailing 60 seconds from the requesting IP. Honours `TRUST_PROXY` so Cloudflare-fronted deployments see real client IPs through `CF-Connecting-IP`.
+
+**Response 404 (toggle off):** `{ "error": "Not Found" }` — `publicProfilesEnabled` is `false`. The same response shape as a missing endpoint so an operator who turns the feature off doesn't leak that it exists.
+
+---
+
+### `GET /p/:guid`
+The same data, but rendered as an HTML page using `/src/styles.css` for visual continuity with the panel. Lives outside `/api/` so the URL is short and shareable. OpenGraph + Twitter card meta tags ship the driver's name and headline stats so a paste in Discord renders a proper preview. The page links to `/p/_theme.js` for the in-page light/dark toggle.
+
+**Auth required:** no
+
+**URL:** `:guid` must be a 17-digit Steam GUID. Other shapes 404 at the static-file fallback.
+
+**Methods:** `GET`, `HEAD`. `HEAD` returns the same status code and headers as `GET` with an empty body — Discord/Twitter scrape with `GET` but `curl -I` and Cloudflare healthchecks use `HEAD`.
+
+**Response:** `200 text/html; charset=utf-8`, ~12–20 KB depending on records and personal-bests volume. Headers include `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` (the page is share-able but never search-engine indexed) and `Cache-Control: no-store` (stats change live as drivers set laps).
+
+**Response 404:**
+- player has no row in `players`, OR
+- `publicProfilesEnabled` is `false`, OR
+- the GUID didn't match the 17-digit shape.
+
+---
+
 ## Content
 
 ### `GET /api/cars`
@@ -464,12 +554,14 @@ Clear all upload history.
 ## Panel settings
 
 ### `GET /api/panel/settings`
-Read panel settings (`upload_max_mb`, `chunked_upload`, `lang`, `discord_webhook`).
+Read panel settings (`upload_max_mb`, `chunked_upload`, `lang`, `discord_webhook`, `public_profiles_enabled`).
 
 The `discordWebhook` field is only returned to admins; non-admins get an empty
 string plus a `discordConfigured` boolean so the UI can disable the field.
 
 **Auth required:** yes
+
+**Response:** `{ "uploadMaxMb": 500, "lang": "en", "chunkedUpload": false, "discordWebhook": "", "discordConfigured": false, "publicProfilesEnabled": true }`
 
 ---
 
@@ -478,12 +570,14 @@ Update one or more panel settings.
 
 **Auth required:** yes (admin)
 
-**Body:** `{ "uploadMaxMb": 1000, "chunkedUpload": true, "lang": "en", "discordWebhook": "https://discord.com/api/webhooks/..." }`
+**Body:** `{ "uploadMaxMb": 1000, "chunkedUpload": true, "lang": "en", "discordWebhook": "https://discord.com/api/webhooks/...", "publicProfilesEnabled": true }`
 
 `discordWebhook` must match a Discord webhook URL or be an empty string to
 clear the setting. When set, the server posts a record notification to that
 webhook every time a driver beats the previous best lap for a (track, layout,
 car) combination via live UDP. The message language follows the stored `lang`.
+
+`publicProfilesEnabled` toggles the unauthenticated [`/p/<steam-id>`](#get-pguid) page and its JSON counterpart [`/api/public/players/:guid`](#get-apipublicplayersguid). Defaults to `true`; flipping to `false` makes both endpoints return `404` server-wide. Admin-only; the change is audited as `panel.public_profiles` with detail `enabled` / `disabled`.
 
 ---
 

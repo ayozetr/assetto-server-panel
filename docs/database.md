@@ -48,6 +48,7 @@ Key-value store for panel configuration.
 | `chunked_upload` | `0` | `1` = chunked upload enabled |
 | `lang` | `en` | Interface language (`en`, `es`, `it`) |
 | `discord_webhook` | _empty_ | Discord webhook URL. When set, the server POSTs a localized record-notification message every time a driver beats the previous best lap for a `(track, layout, car)` combination on the live UDP path. Only readable by admins or users with the `discordWebhook` permission. |
+| `public_profiles_enabled` | `1` | `1` = unauthenticated [`/p/<steam-id>`](api.md#get-pguid) page + [`/api/public/players/:guid`](api.md#get-apipublicplayersguid) JSON endpoint are reachable. `0` = both return `404` server-wide. Admin-only PUT; changes audited as `panel.public_profiles`. |
 | `role_permissions_user` | _JSON_ | Effective permissions for the `user` role, stored as JSON. Seeded with `{ "serverControl": true, "sessionEdit": true, "modUpload": true, ... }` (rest `false`). Edited by admins via the **Users** → Permissions card or `PUT /api/permissions/role`. Admin role always passes every permission check regardless of this value. Unknown keys are dropped; missing keys become `false`. |
 
 ---

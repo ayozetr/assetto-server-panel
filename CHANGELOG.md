@@ -22,16 +22,26 @@ the change matters; the commit log is the source of truth for *what* changed.
   Twitter card meta tags so Discord previews show name + headline stats,
   a small unicode-flag (ISO-3166 codepoint pair, no SVG asset), a hero
   card with avatar + nickname/in-game/GUID, four KPI cards, and the two
-  records / personal-bests tables. A companion `/api/public/players/<id>`
-  endpoint returns the same data as JSON for Discord bots / Twitch overlays.
-  Both endpoints validate the 17-digit Steam GUID shape, rate-limit at
-  120/min/IP, and respect a new `public_profiles_enabled` toggle in
-  Configuración (admin-only PUT, default on, audited as
-  `panel.public_profiles`). A share-link button (`IconLink`) joined the
-  Players page's history table next to the edit-nickname pencil so an
-  admin can copy the public URL with one click. Four cheap SQL queries
-  against the existing `players` + `laps` tables; no schema migration.
-  Closes ROADMAP item "#1 Public player profile pages".
+  records / personal-bests tables. Track and layout names resolved through
+  `ui_track.json` so a combo reads as "Red Bull Ring / Grand Prix"
+  (matching the **Sesión activa** card) instead of the raw
+  `ks_red_bull_ring / layout_gp` slug; car names resolved through
+  `ui_car.json` the same way. The hero's GUID chip is the Steam link
+  itself — the entire pill clicks through to `steamcommunity.com/profiles/<guid>`
+  with the Steam logo on the left and the GUID text after it (no
+  external-link icon needed, the destination is self-evident). A
+  companion `/api/public/players/<id>` endpoint returns the same data as
+  JSON for Discord bots / Twitch overlays — both raw `trackConfig`
+  slug and pretty `layoutName` ship in the response so machine
+  consumers don't need to guess. Both endpoints validate the 17-digit
+  Steam GUID shape, accept `GET` and `HEAD`, rate-limit at 120/min/IP,
+  and respect a new `public_profiles_enabled` toggle in Configuración
+  (admin-only PUT, default on, audited as `panel.public_profiles`). A
+  share-link button (`IconLink`) joined the Players page's history table
+  next to the edit-nickname pencil so an admin can copy the public URL
+  with one click. Four cheap SQL queries against the existing `players`
+  + `laps` tables; no schema migration. Closes ROADMAP item "#1 Public
+  player profile pages".
 
 ### Fixed
 

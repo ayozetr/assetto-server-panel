@@ -147,6 +147,86 @@ function UploadLimitCard({ isAdmin }) {
   );
 }
 
+// ── Public driver profiles toggle ────────────────────────────────────────────
+// Single-switch card that controls visibility of /p/<guid> + /api/public/players/<guid>.
+// Lives next to the Mod Upload card on the Configuración page so privacy /
+// visibility settings sit together rather than getting buried inside the
+// server_cfg.ini form. Admin-only PUT; non-admins see the toggle disabled.
+function PublicProfilesCard({ isAdmin }) {
+  const t     = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k) => k;
+  const toast = window.AppShell.useToast();
+  const [enabled, setEnabled] = useStateC(true);
+  const [saving,  setSaving]  = useStateC(false);
+  const [loaded,  setLoaded]  = useStateC(false);
+
+  useEffectC(() => {
+    fetch('/api/panel/settings')
+      .then(r => r.json())
+      .then(d => {
+        // Default to enabled if the field is absent (older server response).
+        setEnabled(d.publicProfilesEnabled !== false);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const toggle = async (v) => {
+    setEnabled(v);
+    setSaving(true);
+    try {
+      const r = await fetch('/api/panel/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicProfilesEnabled: v }),
+      });
+      const d = await r.json();
+      if (d.ok) toast.push(t('config.public_profiles_saved'), 'success');
+      else {
+        toast.push(d.error || t('common.error'), 'error');
+        setEnabled(!v); // revert optimistic flip
+      }
+    } catch {
+      toast.push(t('common.net_error'), 'error');
+      setEnabled(!v);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <I4.IconLink size={14} style={{color: 'var(--red)'}}/>
+        <div className="card-title">{t('config.public_profiles_title')}</div>
+      </div>
+      <div className="card-body col" style={{gap: 14}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+          <div style={{display:'flex', flexDirection:'column', gap:3}}>
+            <span className="field-label">{t('config.public_profiles')}</span>
+            <span className="field-hint">{t('config.public_profiles_hint')}</span>
+          </div>
+          <window.AppShell.Switch
+            on={enabled}
+            disabled={!isAdmin || !loaded || saving}
+            ariaLabel={t('config.public_profiles') || 'Public profiles'}
+            style={{flexShrink:0}}
+            onChange={toggle}
+          />
+        </div>
+        <div style={{
+          padding: '8px 12px', borderRadius: 'var(--radius)',
+          background: 'var(--bg-3)', fontSize: 12, color: 'var(--text-muted)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <I4.IconShield size={13}/>
+          {/* Static security note (panel ships with `noindex` headers across
+              every response, so a profile page is sharable but never reaches
+              Google) — kept in English alongside upload_security_note. */}
+          Pages are reachable only by URL · No search-engine indexing · No login data exposed
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WhitelistEditor({ canManage }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell.useToast();
@@ -606,6 +686,8 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
         </div>
 
         <UploadLimitCard isAdmin={isAdmin}/>
+
+        <PublicProfilesCard isAdmin={isAdmin}/>
       </div>
 
       {canEdit && (

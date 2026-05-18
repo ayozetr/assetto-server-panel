@@ -88,6 +88,37 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
     return m;
   }, [pastPlayers]);
 
+  // Public-profile share: prefer the modern async clipboard, fall back to a
+  // temporary textarea + execCommand so the button keeps working in non-HTTPS
+  // dev contexts (clipboard API requires a secure context). Always opens the
+  // page in a new tab so the share-button second-clicks to "preview the
+  // public view" without disrupting the panel session.
+  const sharePublicProfile = async (player) => {
+    if (!player.steam) {
+      toast.push(t('pl.no_guid') || 'Player has no Steam GUID', 'warn');
+      return;
+    }
+    const url = `${window.location.origin}/p/${player.steam}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (!ok) throw new Error('execCommand returned false');
+      }
+      toast.push(t('pl.share_copied'), 'success');
+    } catch (e) {
+      toast.push(t('pl.share_copy_fail') || `${t('common.error')}: ${e.message}`, 'error');
+    }
+  };
+
   const saveNickname = async (nickname) => {
     if (!editingNick) return;
     try {
@@ -182,7 +213,11 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
               <th style={{width: 110}}>{t('pl.col.best_lap')}</th>
               <th style={{width: 100}}>{t('pl.col.time')}</th>
               <th style={{width: 160}}>{t('pl.hist_col.date')}</th>
-              {canModerate && <th style={{width: 80}}></th>}
+              {/* Actions column is always rendered — the share button is
+                  visible to every panel user; the edit-nickname pencil is
+                  layered on top only for moderators. Keeps the table header
+                  stable across roles. */}
+              <th style={{width: canModerate ? 92 : 56}}></th>
             </tr>
           </thead>
           <tbody>
@@ -219,18 +254,31 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                 <td className="mono">{fmtMs(p.bestMs)}</td>
                 <td className="mono muted">{p.totalTime}</td>
                 <td className="mono muted" style={{fontSize: 12}}>{p.lastSeen}</td>
-                {canModerate && (
-                  <td>
+                <td>
+                  <div className="row" style={{gap: 4}}>
                     <button
                       className="icon-btn"
-                      title={t('pl.nick.edit_tip')}
-                      onClick={() => setEditingNick(p)}
+                      title={t('pl.share_tip')}
+                      aria-label={t('pl.share_tip')}
+                      onClick={() => sharePublicProfile(p)}
+                      disabled={!p.steam}
                       style={{width: 26, height: 26}}
                     >
-                      <I2P.IconEdit size={12}/>
+                      <I2P.IconLink size={12}/>
                     </button>
-                  </td>
-                )}
+                    {canModerate && (
+                      <button
+                        className="icon-btn"
+                        title={t('pl.nick.edit_tip')}
+                        aria-label={t('pl.nick.edit_tip')}
+                        onClick={() => setEditingNick(p)}
+                        style={{width: 26, height: 26}}
+                      >
+                        <I2P.IconEdit size={12}/>
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
               );
             })}

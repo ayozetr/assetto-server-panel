@@ -6068,9 +6068,14 @@ function handler(req, res) {
 
     // Public player profile JSON — same data as /p/<guid> but in machine form,
     // for Discord bots, Twitch overlays and similar integrations that want the
-    // stats without scraping the HTML. Auth-less; rate-limited per IP.
-    const publicPlayerApiMatch = urlPath.match(/^\/api\/public\/players\/(\d{17})$/);
-    if (publicPlayerApiMatch && req.method === 'GET') return apiPublicPlayer(req, res, publicPlayerApiMatch[1]);
+    // stats without scraping the HTML. Auth-less; rate-limited per IP. Match
+    // on the prefix (not the strict 17-digit shape) so an invalid Steam ID
+    // produces a 400 from the handler instead of a confusing 401 from the
+    // auth gate below.
+    if (urlPath.startsWith('/api/public/players/') && req.method === 'GET') {
+      const guid = urlPath.slice('/api/public/players/'.length);
+      return apiPublicPlayer(req, res, guid);
+    }
 
     // Auth
     if (urlPath === '/api/auth/me'              && req.method === 'GET')  return apiAuthMe(req, res);

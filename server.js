@@ -4040,6 +4040,19 @@ function udpStartListener(listenHostPort, sendCommandsToPort) {
     // fall back to 0..63: any active driver's next LAP_COMPLETED hits the
     // unknown-car_id fallback in udpParseEvent which requests CAR_INFO for
     // that slot on demand, so we still recover — without seeding phantoms.
+
+    // Subscribe to 10Hz CAR_UPDATE packets so the Live position telemetry
+    // widget on the Dashboard can render moving dots over each track's
+    // map.png. Payload is uint16 little-endian = interval in ms; 100ms is
+    // the same cadence Content Manager / CSP request for their minimaps,
+    // good balance between visual fluidity and UDP traffic. acServer keeps
+    // this enabled for the rest of the session, so we only ever send it
+    // once per listener boot. Cost: 36 bytes per car per packet × 20 cars
+    // × 10Hz ≈ 7 KB/s of UDP localhost — negligible.
+    const intervalMs = 100;
+    const realtimeBuf = Buffer.alloc(2);
+    realtimeBuf.writeUInt16LE(intervalMs, 0);
+    udpSendCommand(ACSP.REALTIMEPOS_INTERVAL, realtimeBuf);
   });
 }
 
@@ -4271,12 +4284,51 @@ function udpParseEvent(buf) {
       break;
     }
 
+    case ACSP.CAR_UPDATE: {
+      // 10Hz position stream from acServer. Layout verified against this Go
+      // build via hex capture:
+      //   car_id (1) → pos.x (f32) → pos.y (f32) → pos.z (f32) →
+      //   vel.x (f32) → vel.y (f32) → vel.z (f32) →
+      //   gear (1) → engine_rpm (u16 LE) → normalized_spline_pos (f32)
+      // Total payload after the event byte = 32 bytes. acServer's Y axis is
+      // altitude (vertical), so we only need (x, z) for the top-down minimap.
+      // Speed is the horizontal magnitude of the velocity vector.
+      const carId = buf[off++];
+      const car   = udpState.cars.get(carId);
+      // Drop updates for unknown cars — the slot is mid-assignment or the
+      // NEW_CONNECTION packet was lost. The next LAP_COMPLETED-on-unknown
+      // fallback will request CAR_INFO and rehydrate the entry.
+      if (!car) break;
+      const px = buf.readFloatLE(off); off += 4;
+      const py = buf.readFloatLE(off); off += 4; void py;
+      const pz = buf.readFloatLE(off); off += 4;
+      const vx = buf.readFloatLE(off); off += 4;
+      const vy = buf.readFloatLE(off); off += 4; void vy;
+      const vz = buf.readFloatLE(off); off += 4;
+      const gear = buf[off++];
+      const rpm  = buf.readUInt16LE(off); off += 2;
+      const spl  = buf.readFloatLE(off);  off += 4;
+      // 3.6 = m/s → km/h. We don't sqrt vy because the minimap is top-down;
+      // a car going uphill at 100 km/h reads the same as one going on the
+      // flat. Cosmetic difference, mostly invisible at AC's lateral scales.
+      const velKmh = Math.sqrt(vx*vx + vz*vz) * 3.6;
+      car.pos = {
+        x:          px,
+        z:          pz,
+        velKmh:     velKmh,
+        gear:       gear,
+        rpm:        rpm,
+        splinePos:  spl,
+        updatedAt:  Date.now(),
+      };
+      break;
+    }
+
     case ACSP.CHAT:
     case ACSP.CLIENT_LOADED:
     case ACSP.CLIENT_EVENT:
     case ACSP.END_SESSION:
     case ACSP.ERROR:
-    case ACSP.CAR_UPDATE:
       // Acknowledged. Not on the critical path for lap persistence.
       break;
 
@@ -4307,6 +4359,95 @@ function udpGetLivePlayers() {
 // if the command was sent (the server's response goes back as NEW_SESSION).
 function udpNextSession() {
   return udpSendCommand(ACSP.NEXT_SESSION);
+}
+
+// ── Live position telemetry (SSE) ────────────────────────────────────────────
+// Broadcasts the current position of every connected car to subscribers of
+// /api/positions/stream at 4Hz. Even though acServer emits CAR_UPDATE at 10Hz,
+// 4Hz on the wire is enough fluidity for top-down dots on a static map and
+// roughly halves the per-client bandwidth.
+//
+// The broadcast timer is ref-counted on the subscriber set: it only ticks
+// while at least one EventSource is open, so an empty Dashboard tab on the
+// other side of Cloudflare doesn't drain CPU or push useless bytes.
+
+const _positionSseClients = new Set();
+let _positionBroadcastTimer = null;
+const POSITION_BROADCAST_INTERVAL_MS = 250;
+
+function _broadcastPositions() {
+  if (_positionSseClients.size === 0) {
+    clearInterval(_positionBroadcastTimer);
+    _positionBroadcastTimer = null;
+    return;
+  }
+  // Snapshot what's currently live. udpState.cars is keyed by car_id, but the
+  // wire format collapses to a flat array — the frontend doesn't care about
+  // the map ordering, and JSON.stringify(Map) is empty by default.
+  const positions = [];
+  for (const c of udpState.cars.values()) {
+    if (!c.pos) continue; // car connected but no CAR_UPDATE seen yet
+    positions.push({
+      id:        c.carId,
+      name:      c.name,
+      car:       c.model,
+      x:         c.pos.x,
+      z:         c.pos.z,
+      velKmh:    Math.round(c.pos.velKmh),
+      splinePos: c.pos.splinePos,
+    });
+  }
+  const data = `data: ${JSON.stringify({ positions, ts: Date.now() })}\n\n`;
+  for (const res of [..._positionSseClients]) {
+    try { res.write(data); } catch { _positionSseClients.delete(res); }
+  }
+}
+
+function apiPositionsStream(req, res) {
+  const user = getSession(req)?.username || '';
+  const userSet = _sseByUser.get(user) || new Set();
+  if (userSet.size >= SSE_PER_USER_CAP) {
+    return json(res, 429, { error: 'Too many concurrent streams for this user — close other tabs and retry' });
+  }
+  res.writeHead(200, {
+    'Content-Type':      'text/event-stream',
+    'Cache-Control':     'no-cache',
+    'Connection':        'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  // Initial snapshot so the client doesn't have to wait up to 250ms for the
+  // first frame after connecting — feels noticeably snappier on dashboard load.
+  _positionSseClients.add(res);
+  userSet.add(res);
+  _sseByUser.set(user, userSet);
+  _broadcastPositions();
+
+  // Kick off the broadcast timer if this is the first subscriber. Subsequent
+  // subscribers just join the existing tick.
+  if (!_positionBroadcastTimer) {
+    _positionBroadcastTimer = setInterval(_broadcastPositions, POSITION_BROADCAST_INTERVAL_MS);
+  }
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    clearInterval(heartbeat);
+    _positionSseClients.delete(res);
+    const set = _sseByUser.get(user);
+    if (set) {
+      set.delete(res);
+      if (set.size === 0) _sseByUser.delete(user);
+    }
+    // The broadcast timer stops itself on the next tick when the set is empty.
+  };
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch { cleanup(); try { res.destroy(); } catch {} }
+  }, 25000);
+  req.on('close', cleanup);
+  req.on('error', cleanup);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
 }
 
 // ── Server control ────────────────────────────────────────────────────────────
@@ -6374,6 +6515,7 @@ function handler(req, res) {
     if (urlPath === '/api/logs'            && req.method === 'GET') return apiLogs(req, res);
     if (urlPath === '/api/logs/clear'      && req.method === 'POST') return apiLogsClear(req, res);
     if (urlPath === '/api/logs/stream'     && req.method === 'GET') return apiLogsStream(req, res);
+    if (urlPath === '/api/positions/stream' && req.method === 'GET') return apiPositionsStream(req, res);
     if (urlPath === '/api/config'          && req.method === 'GET') return apiConfig(req, res);
     if (urlPath === '/api/config'          && req.method === 'PUT') return apiConfigUpdate(req, res);
     if (urlPath === '/api/players'         && req.method === 'GET') return apiPlayers(res);

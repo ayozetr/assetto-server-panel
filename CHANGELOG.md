@@ -10,6 +10,12 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-05-18
+
+Public-facing release: every driver the panel has seen now has a
+shareable, login-less profile page, plus a couple of UDP live-driver
+fixes that landed in the same session.
+
 ### Added
 
 - **Public driver profile pages.** Every driver the panel has seen gets a

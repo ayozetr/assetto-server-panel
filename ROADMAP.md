@@ -141,12 +141,18 @@ swap them all in one focused release.
 Everything in this list is shipped in a tagged release and verified in
 production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
 
-### [Unreleased]
+### [1.5.0] — 2026-05-18
 
 - **Public driver profile pages** at `/p/<steam-id>` — totals, server
   records held, personal bests, OpenGraph previews for Discord shares.
   Companion `/api/public/players/<id>` for bots. Admin-toggleable from
   Configuración; on by default. ROADMAP-doing-next #1 closed.
+- **UDP live-driver fixes** — phantom drivers on dashboard boot are
+  gone (boot burst now gated on `/JSON|0`'s `IsConnected` flag rather
+  than blindly firing `GET_CAR_INFO` at 64 slots), and `players.nation`
+  is now persisted from `/JSON|0` so the connection-history flag
+  survives a disconnect even for drivers who have never closed a
+  session result.
 
 ### [1.4.0] — 2026-05-17
 

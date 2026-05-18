@@ -46,7 +46,7 @@ Both hosts run **the same `node` major version (20 LTS)** and the same lockfile,
 Resolved versions from `npm ls --depth=0` against the lockfile committed to the repo. Identical on both hosts.
 
 ```
-assetto-server-panel@1.4.1
+assetto-server-panel@1.5.0
 ├── 7zip-bin@5.2.0           — bundled 7z static binaries (mod extraction fallback)
 ├── better-sqlite3@12.10.0   — synchronous SQLite bindings (native)
 ├── dotenv@16.6.1            — .env loader

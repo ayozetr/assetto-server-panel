@@ -3233,7 +3233,7 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit, theme, themeEx
         <div class="brand-name">Assetto Server Panel</div>
         <div class="brand-sub">${_htmlEsc(T.driver_profile)}</div>
       </div>
-      <a class="pp-card-download" href="card.png${themeExplicit || langExplicit ? '?' : ''}${[
+      <a class="pp-card-download" href="/p/${encodeURIComponent(p.guid)}/card.png${themeExplicit || langExplicit ? '?' : ''}${[
         themeExplicit ? `theme=${encodeURIComponent(theme)}` : '',
         langExplicit  ? `lang=${encodeURIComponent(lang)}`   : '',
       ].filter(Boolean).join('&')}" download="${_htmlEsc((p.name || 'driver').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'driver')}-${_htmlEsc(p.guid)}.png" aria-label="${_htmlEsc(T.download_card)}" title="${_htmlEsc(T.download_card)}">

@@ -42,15 +42,19 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [meta,      setMeta]      = useState(null); // null=loading, false=no-map, {width,height,...}=ok
   const [positions, setPositions] = useState([]);
+  // Default state is collapsed — the live map is opt-in once the user
+  // clicks to expand. Persistence key is `ac-live-map-open` (positive
+  // semantic: '1' iff explicitly expanded). Key was renamed from the old
+  // `*-collapsed` so existing browser localStorage entries with the
+  // previous "expanded by default" convention don't bleed through.
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('ac-live-map-collapsed') === '1'; }
-    catch { return false; }
+    try { return localStorage.getItem('ac-live-map-open') !== '1'; }
+    catch { return true; }
   });
   const imgRef = useRefMon(null);
 
-  // Persist the collapse choice so refresh / page navigation keeps it.
   useEffect(() => {
-    try { localStorage.setItem('ac-live-map-collapsed', collapsed ? '1' : '0'); } catch {}
+    try { localStorage.setItem('ac-live-map-open', collapsed ? '0' : '1'); } catch {}
   }, [collapsed]);
 
   // Resolve a friendly base track name + layout name through the existing
@@ -194,15 +198,17 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const carsCount = (sessionCfg.slots || []).length;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: ()=>{} };
 
-  // Activity card collapse state, persisted in localStorage so refresh /
-  // page navigation keeps the user's choice. Same convention as the live-map
-  // collapse key, separate storage key so each card collapses independently.
+  // Activity card defaults collapsed (same convention as the live-map card —
+  // explicit opt-in via click). Persisted under `ac-activity-open`,
+  // positive semantic so the absence-of-key state is unambiguously
+  // collapsed. Renamed from `*-collapsed` to orphan prior localStorage
+  // values whose default was the opposite.
   const [activityCollapsed, setActivityCollapsed] = useState(() => {
-    try { return localStorage.getItem('ac-activity-collapsed') === '1'; }
-    catch { return false; }
+    try { return localStorage.getItem('ac-activity-open') !== '1'; }
+    catch { return true; }
   });
   useEffect(() => {
-    try { localStorage.setItem('ac-activity-collapsed', activityCollapsed ? '1' : '0'); } catch {}
+    try { localStorage.setItem('ac-activity-open', activityCollapsed ? '0' : '1'); } catch {}
   }, [activityCollapsed]);
 
   // Translate the raw acServer weather id (e.g. `7_heavy_clouds`) to the

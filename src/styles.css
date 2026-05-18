@@ -736,6 +736,75 @@ input, select, textarea { font-family: inherit; color: inherit; }
   text-align: center;
 }
 
+/* ───── Live track minimap (Dashboard widget) ───── */
+/* The image is the canvas; dots are absolutely positioned over it via
+   percentage offsets computed from the world→pixel calibration in map.ini.
+   Trick to keep the percentages honest: the wrapper has `width: 100%` and
+   the image has `width: 100%; height: auto`. The wrapper's height collapses
+   to exactly the image's rendered height — no letterbox, no object-fit
+   shenanigans — so a dot at "50% 50%" lands on the image's centre regardless
+   of viewport width. The map can be tall (a 2500×2600 EK track) but the
+   parent card is bounded by the dashboard column so it never explodes. */
+.live-map-wrap {
+  position: relative;
+  width: 100%;
+  background: var(--bg-3);
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.live-map-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: brightness(0.92) contrast(1.05);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+[data-theme="dark"] .live-map-img {
+  filter: brightness(1.15) contrast(1.05);
+}
+.live-map-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: top 220ms linear, left 220ms linear;
+}
+.live-map-dot-marker {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 2px var(--surface), 0 1px 3px rgba(0,0,0,0.35);
+  flex-shrink: 0;
+}
+.live-map-dot-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.live-map-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+  pointer-events: none;
+}
+
 /* Mobile UX: disable double-tap zoom on buttons/links so taps register instantly */
 button, .btn, .nav-item, a.btn, .icon-btn, .switch { touch-action: manipulation; }
 

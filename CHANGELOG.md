@@ -10,6 +10,33 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+### Added
+
+- **Live position telemetry on the Dashboard.** New widget renders the
+  current track's `map.png` as a top-down minimap with one absolute-positioned
+  dot per connected car, animated at ~4Hz from a new
+  `GET /api/positions/stream` SSE channel. The dots follow the world→pixel
+  projection encoded in each layout's `data/map.ini` (`WIDTH`, `HEIGHT`,
+  `X_OFFSET`, `Z_OFFSET`, `SCALE_FACTOR`, `MARGIN`) — same formula Content
+  Manager and CSP use, so the trail/dot alignment matches what drivers see
+  in-game. UDP `CAR_UPDATE` (event 53) is now parsed and stored on
+  `udpState.cars[carId].pos`; on listener boot the panel sends
+  `ACSP.REALTIMEPOS_INTERVAL` (event 200, 100ms) once to subscribe acServer's
+  10Hz position stream. The SSE timer is ref-counted on the subscriber set
+  so an empty Dashboard tab doesn't drain CPU. Two new content endpoints
+  expose the assets: `GET /api/content/tracks/:id/map?layout=…` serves the
+  PNG, `GET /api/content/tracks/:id/map-meta?layout=…` returns the parsed
+  INI as JSON. Helpers `_trackMapPngPath` / `_trackMapIniPath` resolve the
+  per-layout vs root-of-track file conventions and fall back to the bundled
+  Kunos assets directory. Graceful degradation: layouts without map data
+  (3 tracks at audit time — Red Bull Ring, Magione, Trento-Bondone, since
+  recovered) show a "live map not available for this layout" placeholder
+  instead of breaking the dashboard. Widget only mounts when the server is
+  running AND ≥1 player is connected AND the active track resolves to a
+  catalogue entry — the rest of the time the card is hidden, so the
+  Dashboard stays compact on an idle server. i18n keys
+  `dash.live_map` / `_unavailable` / `_waiting` in en/es/it.
+
 ## [1.5.0] — 2026-05-18
 
 Public-facing release: every driver the panel has seen now has a

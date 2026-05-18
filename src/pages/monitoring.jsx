@@ -2,8 +2,133 @@
 // `logs.jsx`); each pushes its component into the shared
 // `window.AppPagesMonitoring` namespace so app.jsx still consumes a single
 // destructure.
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef: useRefMon, useMemo: useMemoMon } = React;
 const I2 = window.AppIcons;
+
+// ── Live track minimap with car dots ─────────────────────────────────────────
+// Renders the current track's map.png as the canvas and animates one
+// absolute-positioned dot per connected car at the position acServer streams
+// over UDP (consumed by /api/positions/stream as SSE). The world→pixel
+// projection follows the same formula Content Manager / CSP use, so the dots
+// land on the trail like in CM's minimap. Self-contained: opens the SSE on
+// mount, fetches the calibration once per (trackId, layoutId) change, closes
+// everything on unmount. When the active combo has no map.png or map.ini the
+// card renders a one-line "no map for this layout" placeholder instead of
+// breaking the dashboard.
+function LiveMapCard({ trackId, layoutId, tracks }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const [meta,      setMeta]      = useState(null); // null=loading, false=no-map, {width,height,...}=ok
+  const [positions, setPositions] = useState([]);
+  const imgRef = useRefMon(null);
+
+  // Resolve a friendly base track name + layout name through the existing
+  // catalogue so the card title reads "Red Bull Ring — Grand Prix" instead
+  // of the raw slugs. Falls back to whatever data is available.
+  const trackObj = (tracks || []).find(t => t && t.id === trackId);
+  const trackName  = trackObj ? ((window.AppUtils?.trackBaseName?.(trackObj)) || trackObj.name) : trackId;
+  const layoutName = (layoutId && trackObj) ? (window.AppUtils?.layoutShortName?.(trackObj, layoutId)) : '';
+
+  // Load the calibration on every (track, layout) change. 404 = no map.ini
+  // shipped for this combo (3 stock Kunos tracks lacked it before the manual
+  // file copy); state falls to `false` and the card explains the situation
+  // instead of rendering a broken `<img>`.
+  useEffect(() => {
+    if (!trackId) return;
+    let cancelled = false;
+    setMeta(null);
+    setPositions([]);
+    const qs = layoutId ? `?layout=${encodeURIComponent(layoutId)}` : '';
+    fetch(`/api/content/tracks/${encodeURIComponent(trackId)}/map-meta${qs}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled) setMeta(d && d.width > 0 ? d : false); })
+      .catch(() => { if (!cancelled) setMeta(false); });
+    return () => { cancelled = true; };
+  }, [trackId, layoutId]);
+
+  // Open the SSE stream for live positions. Re-mount the EventSource when the
+  // active combo changes so a session apply doesn't keep streaming positions
+  // against an outdated map. EventSource handles reconnection on its own
+  // when the network blips, so we don't need a manual reconnect loop here.
+  useEffect(() => {
+    if (!trackId || meta === null || meta === false) return;
+    const es = new EventSource('/api/positions/stream');
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d && Array.isArray(d.positions)) setPositions(d.positions);
+      } catch {}
+    };
+    es.onerror = () => { /* browser auto-reconnects; nothing to do */ };
+    return () => { try { es.close(); } catch {} };
+  }, [trackId, layoutId, meta]);
+
+  // Project a (world_x, world_z) onto the PNG as a percentage of width/height.
+  // The PNG natural dimensions are (WIDTH + 2*MARGIN) × (HEIGHT + 2*MARGIN);
+  // expressing the dot position as a percentage means the image can be
+  // scaled by CSS (max-width: 100%) without re-doing the math.
+  const project = useMemoMon(() => {
+    if (!meta) return () => null;
+    const pngW = meta.width  + 2 * meta.margin;
+    const pngH = meta.height + 2 * meta.margin;
+    const sf   = meta.scaleFactor || 1;
+    return (worldX, worldZ) => {
+      const px = (worldX + meta.xOffset) / sf + meta.margin;
+      const py = (worldZ + meta.zOffset) / sf + meta.margin;
+      return { left: `${(px / pngW) * 100}%`, top: `${(py / pngH) * 100}%` };
+    };
+  }, [meta]);
+
+  // Render-state branches:
+  //   meta === null  → endpoint still loading (avoid flashing the "no map" copy)
+  //   meta === false → confirmed no map.ini for this combo
+  //   meta is object → render image + dots
+  return (
+    <div className="card" style={{marginTop: 16}}>
+      <div className="card-header">
+        <I2.IconTrack size={14} style={{color:'var(--red)'}}/>
+        <div className="card-title">{t('dash.live_map') || 'Live track'}</div>
+        <span className="muted" style={{fontSize: 11.5, marginLeft: 8}}>
+          {trackName}{layoutName ? ` · ${layoutName}` : ''}
+        </span>
+        {meta && positions.length > 0 && (
+          <span className="badge badge-green right">{positions.length}</span>
+        )}
+      </div>
+      <div className="card-body" style={{padding: 0}}>
+        {meta === null ? (
+          <div className="loading-row" style={{padding: '32px 18px'}}>{t('common.loading') || 'Loading…'}</div>
+        ) : meta === false ? (
+          <div className="empty" style={{padding: '24px 18px'}}>
+            {t('dash.live_map_unavailable') || 'Live map not available for this layout.'}
+          </div>
+        ) : (
+          <div className="live-map-wrap">
+            <img
+              ref={imgRef}
+              className="live-map-img"
+              src={`/api/content/tracks/${encodeURIComponent(trackId)}/map${layoutId ? `?layout=${encodeURIComponent(layoutId)}` : ''}`}
+              alt=""
+              draggable={false}
+            />
+            {positions.map(p => {
+              const pos = project(p.x, p.z);
+              if (!pos) return null;
+              return (
+                <div key={p.id} className="live-map-dot" style={pos}>
+                  <span className="live-map-dot-marker" aria-hidden="true"></span>
+                  <span className="live-map-dot-label">{p.name}</span>
+                </div>
+              );
+            })}
+            {positions.length === 0 && (
+              <div className="live-map-empty">{t('dash.live_map_waiting') || 'Waiting for position updates…'}</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Dashboard
 function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
@@ -285,6 +410,10 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           )}
         </div>
       </div>
+
+      {server.status === 'running' && players.length > 0 && liveTrackId && (
+        <LiveMapCard trackId={liveTrackId} layoutId={sessionCfg.layout} tracks={tracks}/>
+      )}
 
       <div style={{marginTop: 16}}>
         <div className="card">

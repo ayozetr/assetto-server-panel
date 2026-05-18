@@ -10,6 +10,32 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Phantom player on dashboard boot.** The UDP listener used to fire
+  `GET_CAR_INFO` at every slot 0..63 on startup to rehydrate the live
+  driver map after a panel restart. This particular Go `acServer` build
+  replies `isConnected=1` for slots that held a driver in a past
+  session, so the burst seeded `udpState.cars` with phantom entries
+  that surfaced on `/api/players` until the real driver rejoined —
+  often onto a different slot, producing a duplicate row with the same
+  name. The boot burst is now gated on `/JSON|0`'s `IsConnected` flag
+  (which tracks the live socket state, not stale slot metadata), so we
+  only ask about slots a real client currently occupies. If `/JSON|0`
+  is unreachable the burst is skipped; the existing
+  unknown-car_id-on-LAP_COMPLETED fallback already requests CAR_INFO on
+  demand, so active drivers still recover without seeding phantoms.
+- **Nation flag disappearing from connection history on disconnect.**
+  `apiPlayers` enriches connected drivers with `DriverNation` from
+  `/JSON|0` at request time, but nation was only ever *written* to the
+  `players` table by the post-session results JSON importer. Players
+  who had never closed a session with a result containing their nation
+  stayed at `nation=''` in the DB, so the flag vanished from the
+  history view the moment they disconnected. `apiPlayers` now persists
+  any nation it learns from `/JSON|0` with an `UPDATE … WHERE guid=?
+  AND nation=''` — gated so we never overwrite an admin-curated value
+  and the write runs at most once per player.
+
 ## [1.4.1] — 2026-05-17
 
 Quality-of-life polish on the 2FA flow, plus the repo rename that was

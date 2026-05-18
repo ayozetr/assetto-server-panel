@@ -2076,6 +2076,23 @@ async function apiPlayers(res) {
         }
       }
     }
+    // Persist any nation we just learned so the connection-history view still
+    // shows the flag after the player disconnects. UDP NEW_CONNECTION can't
+    // carry nation (the protocol omits it) and the post-session results JSON
+    // is the only other writer — for players who have never had a result
+    // imported (or whose result lacked Nation) the players row stays at
+    // nation='' indefinitely without this. Update is gated on nation='' so
+    // we never overwrite an admin-curated value and the write runs at most
+    // once per player.
+    if (db) {
+      for (const p of enriched) {
+        if (p.nation && /^\d{17}$/.test(p.steam)) {
+          try {
+            db.prepare(`UPDATE players SET nation = ? WHERE guid = ? AND (nation IS NULL OR nation = '')`).run(p.nation, p.steam);
+          } catch {}
+        }
+      }
+    }
     return json(res, 200, enriched);
   }
 
@@ -3243,19 +3260,32 @@ function udpStartListener(listenHostPort, sendCommandsToPort) {
     try { udpParseEvent(msg); }
     catch (e) { log.warn('[UDP] parse error:', e.message, 'first_byte=' + (msg[0] ?? 'nil') + ' length=' + msg.length); }
   });
-  sock.bind(listenPort, listenHost, () => {
+  sock.bind(listenPort, listenHost, async () => {
     udpState.socket = sock;
     udpState.startedAt = Date.now();
     log.info(`[UDP] listening on ${listenHost}:${listenPort}, commands → 127.0.0.1:${sendCommandsToPort}`);
     // Pull a snapshot in case acServer was already running when we booted.
     udpSendCommand(ACSP.GET_SESSION_INFO, Buffer.from([0xFF, 0xFF]));
-    // Repopulate the cars map for every slot — important after a dashboard
-    // restart while drivers are still connected (acServer does not re-emit
-    // NEW_CONNECTION for them, so without this burst their next LAP_COMPLETED
-    // would arrive for an unknown car_id and get dropped). 64 covers every
-    // possible MAX_CLIENTS value; empty slots return CAR_INFO with
-    // isConnected=0 and are ignored by the parser.
-    for (let i = 0; i < 64; i++) udpSendCommand(ACSP.GET_CAR_INFO, Buffer.from([i]));
+    // Repopulate the cars map for slots that are actually occupied — needed
+    // when the dashboard restarts while drivers are still connected (acServer
+    // does not re-emit NEW_CONNECTION for them, so their next LAP_COMPLETED
+    // would arrive for an unknown car_id and get dropped). We used to fire
+    // GET_CAR_INFO at every slot 0..63 blindly, but this Go acServer build
+    // replies isConnected=1 for slots that held a driver in a past session,
+    // leaving phantom entries until the real driver rejoins (often onto a
+    // different slot, producing a duplicate). Gate the burst on /JSON|0 —
+    // its IsConnected flag tracks the live socket state — so we only ask
+    // about slots a real client currently occupies.
+    const list = await acFetchJson('/JSON%7C0');
+    if (list && Array.isArray(list.Cars)) {
+      for (let i = 0; i < list.Cars.length; i++) {
+        if (list.Cars[i] && list.Cars[i].IsConnected) udpSendCommand(ACSP.GET_CAR_INFO, Buffer.from([i]));
+      }
+    }
+    // If /JSON|0 was unreachable we deliberately skip the burst rather than
+    // fall back to 0..63: any active driver's next LAP_COMPLETED hits the
+    // unknown-car_id fallback in udpParseEvent which requests CAR_INFO for
+    // that slot on demand, so we still recover — without seeding phantoms.
   });
 }
 

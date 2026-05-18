@@ -2781,6 +2781,21 @@ function _panelDefaultLang() {
   } catch { return 'en'; }
 }
 
+// Returns { theme, explicit }. Mirrors resolvePublicLang(): explicit URL
+// override wins (so a shared link respects the sharer's chosen theme),
+// otherwise default to dark — that's the design the SSR page was built
+// against and matches the panel's own default. No Accept-Color-Scheme /
+// prefers-color-scheme inspection here because (a) HTTP doesn't carry it
+// natively and (b) the panel doesn't auto-detect system theme elsewhere.
+function resolvePublicTheme(req) {
+  try {
+    const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
+    const t = (qs.get('theme') || '').toLowerCase();
+    if (t === 'light' || t === 'dark') return { theme: t, explicit: true };
+  } catch {}
+  return { theme: 'dark', explicit: false };
+}
+
 // Returns { lang, explicit } so the caller can decide whether to propagate
 // the lang through to the OG image URL — when the visitor passed ?lang=
 // explicitly, we want every downstream image fetch to honour that choice
@@ -2801,7 +2816,7 @@ function resolvePublicLang(req) {
   return { lang: _panelDefaultLang(), explicit: false };
 }
 
-function renderPublicPlayerHtml(data, origin, lang, langExplicit) {
+function renderPublicPlayerHtml(data, origin, lang, langExplicit, theme, themeExplicit) {
   const T = _PUBLIC_PROFILE_I18N[lang] || _PUBLIC_PROFILE_I18N.en;
   const p = data.player;
   const k = data.kpis;
@@ -2892,10 +2907,22 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit) {
   // page the visitor sees.
   const ogUrl = `${origin}/p/${p.guid}`;
   const ogCacheBust = `${getBuildVersion()}-${(p.lastSeen || '').replace(/-/g, '')}`;
-  const ogImageUrl = `${origin}/p/${p.guid}/og.png?v=${encodeURIComponent(ogCacheBust)}${langExplicit ? `&lang=${encodeURIComponent(lang)}` : ''}`;
+  const ogImageUrl = `${origin}/p/${p.guid}/og.png?v=${encodeURIComponent(ogCacheBust)}${langExplicit ? `&lang=${encodeURIComponent(lang)}` : ''}${themeExplicit ? `&theme=${encodeURIComponent(theme)}` : ''}`;
+
+  // The theme toggle is an <a> that links to the current URL with ?theme=
+  // flipped to the opposite. Existing ?lang= (when explicit) is preserved
+  // so toggling theme doesn't accidentally reset the language. Anchor +
+  // full reload (instead of inline JS toggling document.documentElement)
+  // means the URL is the source of truth — refreshing or sharing the new
+  // URL renders in that theme deterministically and the OG card follows.
+  const oppositeTheme = theme === 'dark' ? 'light' : 'dark';
+  const toggleQs = new URLSearchParams();
+  if (langExplicit) toggleQs.set('lang', lang);
+  toggleQs.set('theme', oppositeTheme);
+  const themeToggleHref = `?${toggleQs.toString()}`;
 
   return `<!DOCTYPE html>
-<html lang="${_htmlEsc(lang)}" data-theme="dark">
+<html lang="${_htmlEsc(lang)}" data-theme="${_htmlEsc(theme)}">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -2960,9 +2987,15 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit) {
       display: grid; place-items: center; color: var(--text-muted);
       background: transparent; border: 1px solid var(--border);
       cursor: pointer; transition: background 120ms ease, color 120ms ease;
+      text-decoration: none;
     }
     .pp-theme-toggle:hover { background: var(--bg-3); color: var(--text); }
     .pp-theme-toggle svg { width: 14px; height: 14px; }
+    /* Show sun when on dark theme (click → go light), moon when on light
+       theme (click → go dark). Matches the panel-wide Topbar convention:
+       icon represents the DESTINATION, not the current state. */
+    [data-theme="dark"]  .pp-theme-icon-moon { display: none; }
+    [data-theme="light"] .pp-theme-icon-sun  { display: none; }
 
     .pp-hero {
       background: var(--surface);
@@ -3149,16 +3182,24 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit) {
         ${['en','es','it'].map(code => {
           const flag = code === 'en' ? 'gb' : (code === 'es' ? 'es' : 'it');
           const active = code === lang;
-          return `<a class="pp-lang-btn${active ? ' active' : ''}" href="?lang=${code}" aria-current="${active ? 'true' : 'false'}" aria-label="${_htmlEsc(code.toUpperCase())}">
+          // Preserve any explicit theme on lang change so toggling language
+          // doesn't accidentally reset the visitor's chosen colour scheme.
+          const qs = new URLSearchParams();
+          qs.set('lang', code);
+          if (themeExplicit) qs.set('theme', theme);
+          return `<a class="pp-lang-btn${active ? ' active' : ''}" href="?${qs.toString()}" aria-current="${active ? 'true' : 'false'}" aria-label="${_htmlEsc(code.toUpperCase())}">
             <img src="https://flagcdn.com/16x12/${flag}.png" srcset="https://flagcdn.com/16x12/${flag}.png 1x, https://flagcdn.com/32x24/${flag}.png 2x" alt="" width="16" height="12"/>
           </a>`;
         }).join('')}
       </div>
-      <button class="pp-theme-toggle" type="button" id="pp-theme-btn" aria-label="${_htmlEsc(T.toggle_theme)}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <a class="pp-theme-toggle" href="${_htmlEsc(themeToggleHref)}" aria-label="${_htmlEsc(T.toggle_theme)}" title="${_htmlEsc(T.toggle_theme)}">
+        <svg class="pp-theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
         </svg>
-      </button>
+        <svg class="pp-theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </a>
     </div>
 
     <div class="pp-hero">
@@ -3273,7 +3314,10 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit) {
       ${_htmlEsc(T.powered_by)} <a href="/">Assetto Server Panel</a>
     </div>
   </div>
-  <script src="/p/_theme.js"></script>
+<!-- Theme is now URL-controlled (?theme=light|dark); no client-side JS
+       toggle needed. The /p/_theme.js endpoint is still served for
+       backwards-compat with bookmarked pages that pre-date this change,
+       but new HTML responses don't reference it. -->
 </body>
 </html>`;
 }
@@ -3303,8 +3347,33 @@ const _PUBLIC_PROFILE_THEME_JS = `(function(){
 // fall back to text-only embed which is what we had before anyway. Cached
 // 5 minutes at the edge so a popular profile doesn't re-render the SVG on
 // every preview-bot fetch.
-function renderPublicPlayerOgSvg(data, lang) {
+// Colour palettes for the OG card. Kept inline because the dark variant is
+// what the SVG was originally designed with and the light variant just
+// inverts the surface/text tokens — same red accent, same glow alpha
+// behaviour just dampened on light bg. Adding a third theme later is a
+// matter of dropping in a new entry here.
+const _PUBLIC_PROFILE_OG_THEMES = {
+  dark: {
+    bgStart:    '#0b0b0d', bgEnd:    '#17171b',
+    glowColor:  '#dc2626', glowAlpha: '0.35',
+    brand:      '#a1a1aa', brandSub: '#71717a',
+    name:       '#f4f4f5', aka:      '#a1a1aa', guid: '#71717a',
+    cardBg:     '#131318', cardBorder:'#26262c',
+    kpiLabel:   '#a1a1aa', kpiValue: '#f4f4f5', kpiMeta:'#71717a',
+  },
+  light: {
+    bgStart:    '#ffffff', bgEnd:    '#f4f4f5',
+    glowColor:  '#dc2626', glowAlpha: '0.12',
+    brand:      '#52525b', brandSub: '#71717a',
+    name:       '#18181b', aka:      '#52525b', guid: '#71717a',
+    cardBg:     '#ffffff', cardBorder:'#e4e4e7',
+    kpiLabel:   '#71717a', kpiValue: '#18181b', kpiMeta:'#a1a1aa',
+  },
+};
+
+function renderPublicPlayerOgSvg(data, lang, theme) {
   const T = _PUBLIC_PROFILE_I18N[lang] || _PUBLIC_PROFILE_I18N.en;
+  const C = _PUBLIC_PROFILE_OG_THEMES[theme] || _PUBLIC_PROFILE_OG_THEMES.dark;
   const p = data.player;
   const k = data.kpis;
   const initial = (p.nickname || p.name || '?').slice(0, 1).toUpperCase();
@@ -3323,29 +3392,29 @@ function renderPublicPlayerOgSvg(data, lang) {
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0b0b0d"/>
-      <stop offset="100%" stop-color="#17171b"/>
+      <stop offset="0%" stop-color="${C.bgStart}"/>
+      <stop offset="100%" stop-color="${C.bgEnd}"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#dc2626" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+      <stop offset="0%" stop-color="${C.glowColor}" stop-opacity="${C.glowAlpha}"/>
+      <stop offset="100%" stop-color="${C.glowColor}" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
   <circle cx="200" cy="240" r="320" fill="url(#glow)"/>
 
   <!-- Brand strip top -->
-  <text x="60" y="80" fill="#a1a1aa" font-size="22" font-weight="600" letter-spacing="2">ASSETTO SERVER PANEL</text>
-  <text x="60" y="110" fill="#71717a" font-size="18">${_xmlEsc(T.driver_profile.toUpperCase())}</text>
+  <text x="60" y="80" fill="${C.brand}" font-size="22" font-weight="600" letter-spacing="2">ASSETTO SERVER PANEL</text>
+  <text x="60" y="110" fill="${C.brandSub}" font-size="18">${_xmlEsc(T.driver_profile.toUpperCase())}</text>
 
-  <!-- Avatar -->
+  <!-- Avatar — same red across themes; the brand accent stays constant -->
   <circle cx="180" cy="320" r="100" fill="#dc2626"/>
   <text x="180" y="356" text-anchor="middle" fill="#fff" font-size="92" font-weight="700">${_xmlEsc(initial)}</text>
 
   <!-- Name + in-game line -->
-  <text x="320" y="290" fill="#f4f4f5" font-size="64" font-weight="700">${nameTxt}</text>
-  ${igTxt ? `<text x="320" y="340" fill="#a1a1aa" font-size="26" font-weight="400">${igTxt}</text>` : ''}
-  <text x="320" y="${igTxt ? '390' : '350'}" fill="#71717a" font-size="20" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
+  <text x="320" y="290" fill="${C.name}" font-size="64" font-weight="700">${nameTxt}</text>
+  ${igTxt ? `<text x="320" y="340" fill="${C.aka}" font-size="26" font-weight="400">${igTxt}</text>` : ''}
+  <text x="320" y="${igTxt ? '390' : '350'}" fill="${C.guid}" font-size="20" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
 
   <!-- KPI strip -->
   <g transform="translate(60, 460)">
@@ -3356,10 +3425,10 @@ function renderPublicPlayerOgSvg(data, lang) {
       [T.server_records, String(k.recordsHeld),k.recordsHeld ? T.combos_owned : ''],
     ].map((kpi, i) => `
       <g transform="translate(${i * 270}, 0)">
-        <rect x="0" y="0" width="250" height="120" rx="12" fill="#131318" stroke="#26262c" stroke-width="1"/>
-        <text x="20" y="30" fill="#a1a1aa" font-size="14" font-weight="600" letter-spacing="1">${_xmlEsc(kpi[0].toUpperCase())}</text>
-        <text x="20" y="80" fill="#f4f4f5" font-size="40" font-weight="700" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(kpi[1])}</text>
-        <text x="20" y="105" fill="#71717a" font-size="14">${_xmlEsc(kpi[2])}</text>
+        <rect x="0" y="0" width="250" height="120" rx="12" fill="${C.cardBg}" stroke="${C.cardBorder}" stroke-width="1"/>
+        <text x="20" y="30" fill="${C.kpiLabel}" font-size="14" font-weight="600" letter-spacing="1">${_xmlEsc(kpi[0].toUpperCase())}</text>
+        <text x="20" y="80" fill="${C.kpiValue}" font-size="40" font-weight="700" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(kpi[1])}</text>
+        <text x="20" y="105" fill="${C.kpiMeta}" font-size="14">${_xmlEsc(kpi[2])}</text>
       </g>`).join('')}
   </g>
 </svg>`;
@@ -3425,8 +3494,9 @@ function apiPublicPlayerOgPng(req, res, guid) {
   const resvg = _loadResvg();
   if (!resvg) return _fallbackOgPng(res);
   try {
-    const { lang } = resolvePublicLang(req);
-    const svg  = renderPublicPlayerOgSvg(data, lang);
+    const { lang }  = resolvePublicLang(req);
+    const { theme } = resolvePublicTheme(req);
+    const svg  = renderPublicPlayerOgSvg(data, lang, theme);
     // fitTo width:1200 matches the SVG's intrinsic viewBox so the output
     // is the exact 1200×630 Discord/Twitter expect for summary_large_image
     // cards. Font config: resvg ships no fonts of its own, so it MUST load
@@ -3469,8 +3539,9 @@ function apiPublicPlayerPage(req, res, guid) {
   // — operators behind a tunnel get the public hostname instead of 127.0.0.1.
   const proto = requestIsHttps(req) ? 'https' : 'http';
   const host  = req.headers.host || 'localhost';
-  const { lang, explicit: langExplicit } = resolvePublicLang(req);
-  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`, lang, langExplicit);
+  const { lang,  explicit: langExplicit  } = resolvePublicLang(req);
+  const { theme, explicit: themeExplicit } = resolvePublicTheme(req);
+  const html  = renderPublicPlayerHtml(data, `${proto}://${host}`, lang, langExplicit, theme, themeExplicit);
   res.setHeader('Cache-Control', 'no-store');
   respond(res, 200, 'text/html; charset=utf-8', html);
 }

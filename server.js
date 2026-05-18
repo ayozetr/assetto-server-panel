@@ -3337,6 +3337,101 @@ function apiTrackLayoutThumb(trackId, layout, res) {
   ]);
 }
 
+// ── Track minimap (Live position telemetry) ──────────────────────────────────
+// AC ships a `map.png` (top-down silhouette of the trail) and a `data/map.ini`
+// with the world→pixel calibration inside every track folder. Single-layout
+// tracks (Monza, Spa, …) put both at the track root; multi-layout tracks
+// (Red Bull Ring, Nordschleife, Silverstone, …) put one pair per layout dir.
+// The same projection is what Content Manager + CSP use for their minimaps,
+// so we don't have to invent geometry — we just expose what's already there.
+//
+// Cache strategy: paths and parsed INI are memoized for process lifetime
+// because acServer can't repaint these files without an `apiServerRestart`
+// (which respawns this node too). Image bytes themselves are served with a
+// long Cache-Control because /api/session/apply already restarts the panel
+// to pick up new content.
+
+function _trackMapPngPath(trackId, layout) {
+  if (!isValidContentId(trackId)) return null;
+  if (layout && !isValidContentId(layout)) return null;
+  const candidates = [];
+  if (layout) {
+    candidates.push(path.join(AC_TRACKS_DIR, trackId, layout, 'map.png'));
+    candidates.push(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, layout, 'map.png'));
+  }
+  // Single-layout tracks put the file at the track root; this also acts as a
+  // fallback for multi-layout tracks that share one map across variants.
+  candidates.push(path.join(AC_TRACKS_DIR, trackId, 'map.png'));
+  candidates.push(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'map.png'));
+  for (const c of candidates) {
+    try { if (fs.statSync(c).isFile()) return c; } catch {}
+  }
+  return null;
+}
+
+function _trackMapIniPath(trackId, layout) {
+  if (!isValidContentId(trackId)) return null;
+  if (layout && !isValidContentId(layout)) return null;
+  const candidates = [];
+  if (layout) {
+    candidates.push(path.join(AC_TRACKS_DIR, trackId, layout, 'data', 'map.ini'));
+    candidates.push(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, layout, 'data', 'map.ini'));
+  }
+  candidates.push(path.join(AC_TRACKS_DIR, trackId, 'data', 'map.ini'));
+  candidates.push(path.join(KUNOS_ASSETS_DIR, 'tracks', trackId, 'data', 'map.ini'));
+  for (const c of candidates) {
+    try { if (fs.statSync(c).isFile()) return c; } catch {}
+  }
+  return null;
+}
+
+const _trackMapMetaCache = new Map();
+function getTrackMapMeta(trackId, layout) {
+  const key = `${trackId}|${layout || ''}`;
+  if (_trackMapMetaCache.has(key)) return _trackMapMetaCache.get(key);
+  const iniPath = _trackMapIniPath(trackId, layout);
+  if (!iniPath) { _trackMapMetaCache.set(key, null); return null; }
+  try {
+    const ini = parseINI(fs.readFileSync(iniPath, 'utf8'));
+    const p = ini.PARAMETERS || {};
+    const meta = {
+      width:        parseFloat(p.WIDTH)        || 0,
+      height:       parseFloat(p.HEIGHT)       || 0,
+      xOffset:      parseFloat(p.X_OFFSET)     || 0,
+      zOffset:      parseFloat(p.Z_OFFSET)     || 0,
+      scaleFactor:  parseFloat(p.SCALE_FACTOR) || 1,
+      margin:       parseFloat(p.MARGIN)       || 0,
+      drawingSize:  parseFloat(p.DRAWING_SIZE) || 10,
+    };
+    _trackMapMetaCache.set(key, meta);
+    return meta;
+  } catch { _trackMapMetaCache.set(key, null); return null; }
+}
+
+function apiTrackMap(req, res, trackId) {
+  if (!isValidContentId(trackId)) return respond(res, 400, 'text/plain', 'Invalid ID');
+  const qs = new URLSearchParams(req.url.split('?')[1] || '');
+  const layout = qs.get('layout') || '';
+  if (layout && !isValidContentId(layout)) return respond(res, 400, 'text/plain', 'Invalid layout');
+  const png = _trackMapPngPath(trackId, layout);
+  if (!png) return respond(res, 404, 'text/plain', 'No map.png for this track/layout');
+  fs.readFile(png, (err, data) => {
+    if (err) return respond(res, err.code === 'ENOENT' ? 404 : 500, 'text/plain', err.code || err.message);
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    respond(res, 200, 'image/png', data);
+  });
+}
+
+function apiTrackMapMeta(req, res, trackId) {
+  if (!isValidContentId(trackId)) return json(res, 400, { error: 'Invalid ID' });
+  const qs = new URLSearchParams(req.url.split('?')[1] || '');
+  const layout = qs.get('layout') || '';
+  if (layout && !isValidContentId(layout)) return json(res, 400, { error: 'Invalid layout' });
+  const meta = getTrackMapMeta(trackId, layout);
+  if (!meta) return json(res, 404, { error: 'No map.ini for this track/layout' });
+  json(res, 200, meta);
+}
+
 // ── Player kick / ban ─────────────────────────────────────────────────────────
 async function apiPlayerKick(req, res) {
   if (!checkPermission(req, 'playerModeration')) return json(res, 403, { error: 'Forbidden' });
@@ -6265,6 +6360,14 @@ function handler(req, res) {
     if (carThumbMatch        && req.method === 'GET') return apiCarThumb(decodeURIComponent(carThumbMatch[1]), res);
     if (trackLayoutThumbMatch && req.method === 'GET') return apiTrackLayoutThumb(decodeURIComponent(trackLayoutThumbMatch[1]), decodeURIComponent(trackLayoutThumbMatch[2]), res);
     if (trackThumbMatch      && req.method === 'GET') return apiTrackThumb(decodeURIComponent(trackThumbMatch[1]), res);
+    // Minimap PNG + INI calibration for the Live position telemetry widget.
+    // Layout selection is via ?layout=... query string (single-layout tracks
+    // can omit it and the helper falls back to the track root). Both
+    // endpoints accept HEAD so Cloudflare healthchecks don't trip the auth.
+    const trackMapMatch     = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/map$/);
+    const trackMapMetaMatch = urlPath.match(/^\/api\/content\/tracks\/([^/]+)\/map-meta$/);
+    if (trackMapMatch     && (req.method === 'GET' || req.method === 'HEAD')) return apiTrackMap(req, res, decodeURIComponent(trackMapMatch[1]));
+    if (trackMapMetaMatch && (req.method === 'GET' || req.method === 'HEAD')) return apiTrackMapMeta(req, res, decodeURIComponent(trackMapMetaMatch[1]));
 
     // Data endpoints
     if (urlPath === '/api/metrics'         && req.method === 'GET') return apiMetrics(res);

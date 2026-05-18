@@ -42,7 +42,16 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [meta,      setMeta]      = useState(null); // null=loading, false=no-map, {width,height,...}=ok
   const [positions, setPositions] = useState([]);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('ac-live-map-collapsed') === '1'; }
+    catch { return false; }
+  });
   const imgRef = useRefMon(null);
+
+  // Persist the collapse choice so refresh / page navigation keeps it.
+  useEffect(() => {
+    try { localStorage.setItem('ac-live-map-collapsed', collapsed ? '1' : '0'); } catch {}
+  }, [collapsed]);
 
   // Resolve a friendly base track name + layout name through the existing
   // catalogue so the card title reads "Red Bull Ring — Grand Prix" instead
@@ -72,8 +81,11 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
   // active combo changes so a session apply doesn't keep streaming positions
   // against an outdated map. EventSource handles reconnection on its own
   // when the network blips, so we don't need a manual reconnect loop here.
+  // When the card is collapsed we tear the stream down — no point pushing
+  // 4Hz packets to a hidden widget. The SSE broadcaster on the server is
+  // ref-counted so the last subscriber closing stops the timer entirely.
   useEffect(() => {
-    if (!trackId || meta === null || meta === false) return;
+    if (!trackId || meta === null || meta === false || collapsed) return;
     const es = new EventSource('/api/positions/stream');
     es.onmessage = (e) => {
       try {
@@ -83,7 +95,7 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
     };
     es.onerror = () => { /* browser auto-reconnects; nothing to do */ };
     return () => { try { es.close(); } catch {} };
-  }, [trackId, layoutId, meta]);
+  }, [trackId, layoutId, meta, collapsed]);
 
   // Project a (world_x, world_z) onto the PNG as a percentage of width/height.
   // The PNG natural dimensions are (WIDTH + 2*MARGIN) × (HEIGHT + 2*MARGIN);
@@ -105,50 +117,68 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
   //   meta === null  → endpoint still loading (avoid flashing the "no map" copy)
   //   meta === false → confirmed no map.ini for this combo
   //   meta is object → render image + dots
+  // The whole card header doubles as the collapse toggle (button semantics
+  // via role="button" + tabIndex + key handler so it's keyboard-reachable).
+  const toggle = () => setCollapsed(c => !c);
+  const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
   return (
     <div className="card" style={{marginTop: 16}}>
-      <div className="card-header">
-        <I2.IconTrack size={14} style={{color:'var(--red)'}}/>
+      <div
+        className="card-header card-header-clickable"
+        onClick={toggle}
+        onKeyDown={onKey}
+        role="button"
+        tabIndex={0}
+        aria-expanded={!collapsed}
+      >
+        <I2.IconCircuit size={14} style={{color:'var(--red)'}}/>
         <div className="card-title">{t('dash.live_map') || 'Live track'}</div>
         <span className="muted" style={{fontSize: 11.5, marginLeft: 8}}>
           {trackName}{layoutName ? ` · ${layoutName}` : ''}
         </span>
-        {meta && positions.length > 0 && (
-          <span className="badge badge-green right">{positions.length}</span>
-        )}
+        <span style={{marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8}}>
+          {meta && !collapsed && positions.length > 0 && (
+            <span className="badge badge-green">{positions.length}</span>
+          )}
+          <span className={`live-map-chevron${collapsed ? ' collapsed' : ''}`} aria-hidden="true">
+            <I2.IconChevronDown size={14}/>
+          </span>
+        </span>
       </div>
-      <div className="card-body" style={{padding: 0}}>
-        {meta === null ? (
-          <div className="loading-row" style={{padding: '32px 18px'}}>{t('common.loading') || 'Loading…'}</div>
-        ) : meta === false ? (
-          <div className="empty" style={{padding: '24px 18px'}}>
-            {t('dash.live_map_unavailable') || 'Live map not available for this layout.'}
-          </div>
-        ) : (
-          <div className="live-map-wrap">
-            <img
-              ref={imgRef}
-              className="live-map-img"
-              src={`/api/content/tracks/${encodeURIComponent(trackId)}/map${layoutId ? `?layout=${encodeURIComponent(layoutId)}` : ''}`}
-              alt=""
-              draggable={false}
-            />
-            {positions.map(p => {
-              const pos = project(p.x, p.z);
-              if (!pos) return null;
-              return (
-                <div key={p.id} className="live-map-dot" style={pos}>
-                  <span className="live-map-dot-marker" aria-hidden="true"></span>
-                  <span className="live-map-dot-label">{p.name}</span>
-                </div>
-              );
-            })}
-            {positions.length === 0 && (
-              <div className="live-map-empty">{t('dash.live_map_waiting') || 'Waiting for position updates…'}</div>
-            )}
-          </div>
-        )}
-      </div>
+      {!collapsed && (
+        <div className="card-body" style={{padding: 0}}>
+          {meta === null ? (
+            <div className="loading-row" style={{padding: '32px 18px'}}>{t('common.loading') || 'Loading…'}</div>
+          ) : meta === false ? (
+            <div className="empty" style={{padding: '24px 18px'}}>
+              {t('dash.live_map_unavailable') || 'Live map not available for this layout.'}
+            </div>
+          ) : (
+            <div className="live-map-wrap">
+              <img
+                ref={imgRef}
+                className="live-map-img"
+                src={`/api/content/tracks/${encodeURIComponent(trackId)}/map${layoutId ? `?layout=${encodeURIComponent(layoutId)}` : ''}`}
+                alt=""
+                draggable={false}
+              />
+              {positions.map(p => {
+                const pos = project(p.x, p.z);
+                if (!pos) return null;
+                return (
+                  <div key={p.id} className="live-map-dot" style={pos}>
+                    <span className="live-map-dot-marker" aria-hidden="true"></span>
+                    <span className="live-map-dot-label">{p.name}</span>
+                  </div>
+                );
+              })}
+              {positions.length === 0 && (
+                <div className="live-map-empty">{t('dash.live_map_waiting') || 'Waiting for position updates…'}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

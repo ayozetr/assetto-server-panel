@@ -736,6 +736,28 @@ input, select, textarea { font-family: inherit; color: inherit; }
   text-align: center;
 }
 
+/* Clickable card headers (collapse toggles). Same look as a regular
+   card-header but with a hover affordance + pointer cursor so it reads as
+   a button. Applied via class so existing non-clickable headers stay
+   visually identical. */
+.card-header-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+}
+.card-header-clickable:hover { background: var(--bg-2); }
+.card-header-clickable:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+.live-map-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: transform 200ms ease;
+}
+.live-map-chevron.collapsed { transform: rotate(-90deg); }
+
 /* ───── Live track minimap (Dashboard widget) ───── */
 /* The image is the canvas; dots are absolutely positioned over it via
    percentage offsets computed from the world→pixel calibration in map.ini.

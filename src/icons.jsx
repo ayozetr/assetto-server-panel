@@ -18,6 +18,11 @@ const Icon = ({ children, size = 16, ...rest }) => (
 const IconDashboard = (p) => <Icon {...p}><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></Icon>;
 const IconCar = (p) => <Icon {...p}><path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1.5a1.5 1.5 0 0 1-1.5-1.5V16H7v.5A1.5 1.5 0 0 1 5.5 18H4a1 1 0 0 1-1-1z"/><circle cx="7" cy="15.5" r="0.5"/><circle cx="17" cy="15.5" r="0.5"/></Icon>;
 const IconTrack = (p) => <Icon {...p}><path d="M4 12a8 4 0 0 1 16 0 8 4 0 0 1-16 0z"/><path d="M8 10.8a4 1.6 0 0 1 8 0 4 1.6 0 0 1-8 0z"/></Icon>;
+// Closed irregular loop that reads as "race circuit silhouette from above"
+// — same single-stroke language as the rest of the icon set, but with
+// asymmetric curves so it doesn't look like an athletics oval (the
+// existing IconTrack already covers that flatter motif).
+const IconCircuit = (p) => <Icon {...p}><path d="M4 12 C 4 7, 9 5, 12 7 C 15 9, 17 6, 20 9 C 22 11, 21 16, 17 17 C 13 18, 11 14, 8 16 C 5 18, 3 15, 4 12 Z"/></Icon>;
 const IconFlag = (p) => <Icon {...p}><path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/></Icon>;
 const IconSettings = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Icon>;
 const IconUsers = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
@@ -66,7 +71,7 @@ const IconDiscord = (p) => <Icon {...p} fill="currentColor" stroke="none" viewBo
 const IconMenu    = (p) => <Icon {...p}><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></Icon>;
 
 window.AppIcons = {
-  IconDashboard, IconCar, IconTrack, IconFlag, IconSettings, IconUsers, IconPlayers,
+  IconDashboard, IconCar, IconTrack, IconCircuit, IconFlag, IconSettings, IconUsers, IconPlayers,
   IconTerminal, IconSearch, IconBell, IconAlertTriangle, IconSun, IconMoon, IconPlay, IconStop, IconRefresh,
   IconCheck, IconX, IconPlus, IconEdit, IconTrash, IconLogout, IconDownload, IconShield,
   IconKick, IconClock, IconCloud, IconChevronDown, IconUser, IconLock,

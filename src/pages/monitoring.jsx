@@ -140,7 +140,7 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
           {meta && !collapsed && positions.length > 0 && (
             <span className="badge badge-green">{positions.length}</span>
           )}
-          <span className={`live-map-chevron${collapsed ? ' collapsed' : ''}`} aria-hidden="true">
+          <span className={`card-collapse-chevron${collapsed ? ' collapsed' : ''}`} aria-hidden="true">
             <I2.IconChevronDown size={14}/>
           </span>
         </span>
@@ -193,6 +193,17 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const configuredTrack = configDiffers ? (tracks.find(t => t.id === sessionCfg.trackId)?.name || sessionCfg.trackId) : null;
   const carsCount = (sessionCfg.slots || []).length;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: ()=>{} };
+
+  // Activity card collapse state, persisted in localStorage so refresh /
+  // page navigation keeps the user's choice. Same convention as the live-map
+  // collapse key, separate storage key so each card collapses independently.
+  const [activityCollapsed, setActivityCollapsed] = useState(() => {
+    try { return localStorage.getItem('ac-activity-collapsed') === '1'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('ac-activity-collapsed', activityCollapsed ? '1' : '0'); } catch {}
+  }, [activityCollapsed]);
 
   // Translate the raw acServer weather id (e.g. `7_heavy_clouds`) to the
   // localised label the Session page uses. Fall back to the raw id so an
@@ -481,11 +492,26 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
 
       <div style={{marginTop: 16}}>
         <div className="card">
-          <div className="card-header">
+          <div
+            className="card-header card-header-clickable"
+            onClick={() => setActivityCollapsed(c => !c)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActivityCollapsed(c => !c); } }}
+            role="button"
+            tabIndex={0}
+            aria-expanded={!activityCollapsed}
+          >
             <I2.IconClock size={14} style={{color:'var(--red)'}}/>
             <div className="card-title">{t('dash.activity')}</div>
+            <span style={{marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8}}>
+              {!activityCollapsed && activity.length > 0 && (
+                <span className="badge">{activity.length}</span>
+              )}
+              <span className={`card-collapse-chevron${activityCollapsed ? ' collapsed' : ''}`} aria-hidden="true">
+                <I2.IconChevronDown size={14}/>
+              </span>
+            </span>
           </div>
-          {activity.length === 0 ? (
+          {!activityCollapsed && (activity.length === 0 ? (
             <div className="empty" style={{padding: '28px 20px'}}>{t('common.not_found')}</div>
           ) : (
             <div style={{padding: '4px 0'}}>
@@ -508,7 +534,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                 );
               })}
             </div>
-          )}
+          ))}
         </div>
       </div>
     </>

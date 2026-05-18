@@ -750,13 +750,15 @@ input, select, textarea { font-family: inherit; color: inherit; }
   outline: 2px solid var(--red);
   outline-offset: -2px;
 }
-.live-map-chevron {
+/* Generic chevron used by any collapsible card header. Rotates -90° when
+   the body is hidden so the affordance reads as "this opens / closes". */
+.card-collapse-chevron {
   display: inline-grid;
   place-items: center;
   color: var(--text-muted);
   transition: transform 200ms ease;
 }
-.live-map-chevron.collapsed { transform: rotate(-90deg); }
+.card-collapse-chevron.collapsed { transform: rotate(-90deg); }
 
 /* ───── Live track minimap (Dashboard widget) ───── */
 /* The image is the canvas; dots are absolutely positioned over it via

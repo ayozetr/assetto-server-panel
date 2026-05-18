@@ -2524,6 +2524,19 @@ function getPublicPlayerData(guid) {
     GROUP BY track, track_config ORDER BY n DESC LIMIT 1
   `).get(guid);
 
+  // Driver's personal best valid lap on their most-played combo, regardless
+  // of car. Surfaces as a card KPI ("récord en este tramo") so the visitor
+  // can answer 'how fast does Driver usually go round here?' without
+  // scanning the records / personal-bests tables. Null when the driver has
+  // played the combo only with cuts (no valid lap) — the tile then shows
+  // an em-dash like the other KPIs do for missing values.
+  const bestOnMostPlayed = mostPlayedTrack ? db.prepare(`
+    SELECT ms, car, session_date
+    FROM laps
+    WHERE driver_guid = ? AND track = ? AND track_config = ? AND valid = 1
+    ORDER BY ms ASC LIMIT 1
+  `).get(guid, mostPlayedTrack.track, mostPlayedTrack.track_config) : null;
+
   // Server records this player holds. A combo's record is the min(ms) across
   // every valid lap; the player owns the record when their min lap on that
   // combo equals the server-wide min. Tied lap times (rare but possible)
@@ -2590,6 +2603,12 @@ function getPublicPlayerData(guid) {
           laps:        mostPlayedTrack.n,
         };
       })() : null,
+      bestOnMostPlayed: bestOnMostPlayed ? {
+        ms:      bestOnMostPlayed.ms,
+        car:     bestOnMostPlayed.car,
+        carName: carDisplayName(bestOnMostPlayed.car),
+        date:    bestOnMostPlayed.session_date,
+      } : null,
     },
     records: records.map(r => {
       const td = _trackLayoutDisplay(r.track, r.track_config);
@@ -2710,6 +2729,7 @@ const _PUBLIC_PROFILE_I18N = {
     download_card:       'Download stat card',
     most_used_car:       'Most-used car',
     most_played_track:   'Most-played track',
+    best_on_this_track:  'Best on this track',
     open_steam:          'Open Steam profile',
     in_game:             'in-game:',
     total_laps:          'Total laps',
@@ -2746,6 +2766,7 @@ const _PUBLIC_PROFILE_I18N = {
     download_card:       'Descargar tarjeta',
     most_used_car:       'Coche más usado',
     most_played_track:   'Tramo más jugado',
+    best_on_this_track:  'Récord en este tramo',
     open_steam:          'Abrir perfil de Steam',
     in_game:             'en juego:',
     total_laps:          'Vueltas totales',
@@ -2782,6 +2803,7 @@ const _PUBLIC_PROFILE_I18N = {
     download_card:       'Scarica scheda',
     most_used_car:       'Auto più usata',
     most_played_track:   'Tracciato più giocato',
+    best_on_this_track:  'Record su questo tracciato',
     open_steam:          'Apri profilo Steam',
     in_game:             'in-game:',
     total_laps:          'Giri totali',
@@ -3591,16 +3613,20 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   // so 5*210 + 4*24 = 1146 — leaves 27px margin on each side at canvas 1200.
   // Each tile carries an `isText` flag — text values (car/track names)
   // render at smaller font sizes than the numeric ones because at 32px a
-  // 16-char car name like 'Toyota AE86' clips out of the tile, while
-  // a numeric '5' or '17m' looks ridiculous at any other size.
+  // 16-char car name clips out of the tile, while a numeric '5' or '17m'
+  // looks ridiculous at any other size. The "most-played track" tile was
+  // replaced with "best lap here" because the same info is already covered
+  // by the map silhouette + caption in the upper-right hero block — the
+  // KPI slot now adds genuinely-new data (driver's PB on that combo, any
+  // car) instead of restating what's visually there.
   const lapsWord = lang === 'es' ? 'vueltas' : lang === 'it' ? 'giri' : 'laps';
   const lapWord  = lang === 'es' ? 'vuelta'  : lang === 'it' ? 'giro' : 'lap';
   const kpis = [
-    { label: T.total_laps,        value: String(k.laps),               meta: k.sessions ? `${k.sessions} ${k.sessions === 1 ? T.session_one : T.session_many}` : '',  isText: false },
-    { label: T.time_on_track,     value: k.totalTime,                  meta: p.firstSeen ? `${T.since} ${p.firstSeen}` : '',                                       isText: false },
-    { label: T.most_used_car,     value: truncate(carName, 16),        meta: k.mostUsedCar ? `${k.mostUsedCar.laps} ${k.mostUsedCar.laps === 1 ? lapWord : lapsWord}` : '', isText: true  },
-    { label: T.most_played_track, value: truncate(trackName, 16),      meta: trackLayout || (k.mostPlayedTrack ? `${k.mostPlayedTrack.laps} ${lapsWord}` : ''),         isText: true  },
-    { label: T.server_records,    value: String(k.recordsHeld),        meta: k.recordsHeld ? T.combos_owned : '',                                                  isText: false },
+    { label: T.total_laps,        value: String(k.laps),               meta: k.sessions ? `${k.sessions} ${k.sessions === 1 ? T.session_one : T.session_many}` : '',                       isText: false },
+    { label: T.time_on_track,     value: k.totalTime,                  meta: p.firstSeen ? `${T.since} ${p.firstSeen}` : '',                                                            isText: false },
+    { label: T.most_used_car,     value: truncate(carName, 14),        meta: k.mostUsedCar ? `${k.mostUsedCar.laps} ${k.mostUsedCar.laps === 1 ? lapWord : lapsWord}` : '',                  isText: true  },
+    { label: T.best_on_this_track,value: k.bestOnMostPlayed ? _fmtLapMs(k.bestOnMostPlayed.ms) : '—', meta: k.bestOnMostPlayed ? truncate(k.bestOnMostPlayed.carName, 22) : '',           isText: false },
+    { label: T.server_records,    value: String(k.recordsHeld),        meta: k.recordsHeld ? T.combos_owned : '',                                                                       isText: false },
   ];
 
   const logo = _getPanelIconDataUrl();
@@ -3639,10 +3665,13 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   <rect width="1200" height="630" fill="url(#bg)"/>
   <circle cx="200" cy="240" r="320" fill="url(#glow)"/>
 
-  <!-- Brand strip with embedded logo -->
-  ${logo ? `<image href="${logo}" x="60" y="48" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>` : ''}
-  <text x="${logo ? 120 : 60}" y="76" fill="${C.brand}" font-size="22" font-weight="600" letter-spacing="2">ASSETTO SERVER PANEL</text>
-  <text x="${logo ? 120 : 60}" y="100" fill="${C.brandSub}" font-size="16">${_xmlEsc(T.driver_profile.toUpperCase())}</text>
+  <!-- Brand strip with embedded logo. Logo positioned so its vertical
+       midpoint lines up with the midpoint of the two text lines (centre
+       around y=82); 44px logo at y=60 puts the centre at y=82. Previously
+       at y=48 the logo sat too high relative to the text. -->
+  ${logo ? `<image href="${logo}" x="60" y="60" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>` : ''}
+  <text x="${logo ? 120 : 60}" y="80" fill="${C.brand}" font-size="22" font-weight="600" letter-spacing="2">ASSETTO SERVER PANEL</text>
+  <text x="${logo ? 120 : 60}" y="104" fill="${C.brandSub}" font-size="16">${_xmlEsc(T.driver_profile.toUpperCase())}</text>
 
   <!-- Avatar -->
   <circle cx="180" cy="280" r="92" fill="#dc2626"/>
@@ -3664,16 +3693,19 @@ function renderPublicPlayerCardSvg(data, lang, theme, origin) {
   ${trackLayout ? `<text x="1075" y="290" text-anchor="middle" fill="${C.kpiMeta}" font-size="12">${_xmlEsc(trackLayout)}</text>` : ''}
   ` : ''}
 
-  <!-- KPI row (5 tiles). Text-valued tiles (car / track names) get a
-       smaller value font + sans-serif family so the typical mod-id like
-       'Toyota AE86' fits inside the 210px tile width. -->
+  <!-- KPI row (5 tiles). Text-valued tiles (car names) get a smaller font
+       + sans-serif. textLength + lengthAdjust='spacingAndGlyphs' on both
+       the value and the meta line tell SVG to squeeze a long string into
+       the available 178px (210 tile width - 16 padding × 2) instead of
+       overflowing the box — catches edge cases like 'Toyota CRX'
+       that the truncate(14) heuristic alone can't always handle. -->
   <g transform="translate(27, 414)">
     ${kpis.map((kpi, i) => `
       <g transform="translate(${i * 234}, 0)">
         <rect x="0" y="0" width="210" height="140" rx="12" fill="${C.cardBg}" stroke="${C.cardBorder}" stroke-width="1"/>
-        <text x="16" y="28" fill="${C.kpiLabel}" font-size="11" font-weight="600" letter-spacing="1">${_xmlEsc(kpi.label.toUpperCase())}</text>
-        <text x="16" y="${kpi.isText ? 76 : 82}" fill="${C.kpiValue}" font-size="${kpi.isText ? 22 : 32}" font-weight="700" ${kpi.isText ? '' : 'font-family="JetBrains Mono, ui-monospace, monospace"'}>${_xmlEsc(kpi.value)}</text>
-        <text x="16" y="118" fill="${C.kpiMeta}" font-size="13">${_xmlEsc(kpi.meta)}</text>
+        <text x="16" y="28" fill="${C.kpiLabel}" font-size="11" font-weight="600" letter-spacing="1" textLength="178" lengthAdjust="spacingAndGlyphs">${_xmlEsc(kpi.label.toUpperCase())}</text>
+        <text x="16" y="${kpi.isText ? 76 : 82}" fill="${C.kpiValue}" font-size="${kpi.isText ? 22 : 32}" font-weight="700" ${kpi.isText ? '' : 'font-family="JetBrains Mono, ui-monospace, monospace"'} ${kpi.isText ? 'textLength="178" lengthAdjust="spacingAndGlyphs"' : ''}>${_xmlEsc(kpi.value)}</text>
+        <text x="16" y="118" fill="${C.kpiMeta}" font-size="13" textLength="${Math.min(178, kpi.meta.length * 8)}" lengthAdjust="spacingAndGlyphs">${_xmlEsc(kpi.meta)}</text>
       </g>`).join('')}
   </g>
 

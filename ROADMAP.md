@@ -63,7 +63,7 @@ admin panel; its scope is narrower than ACSM.
 | PWA / offline read-only | ✅ | ❌ | ❌ |
 | Multi-server (manage several acServer instances) | ❌ | ✅ | ❌ |
 | Race events / championships with standings | ❌ | ✅ | ❌ |
-| Public player profile pages | ❌ | ✅ | ✅ |
+| Public player profile pages | ✅ | ✅ | ✅ |
 | Live position telemetry on a track map | ❌ | partial | ❌ |
 | ELO / Glicko rating per driver | ❌ | ❌ | ❌ |
 | Stints heatmap (consistency over a session) | ❌ | ❌ | partial |
@@ -92,11 +92,10 @@ estimate: **S** ≤ 1 day · **M** 1-3 days · **L** 3-7 days · **XL** weeks.
 
 | # | Feature | Effort | Why it's high-ROI |
 |---|---|:-:|---|
-| 1 | **Public player profile pages** | M | Both ACSM and Stracker have them, and they materially change how players perceive "their" stats. Route `/players/<guid>` reading the existing `players` + `laps` tables. No schema changes; one new endpoint + one new page component. |
-| 2 | **Race events / championships** | XL | The single biggest reason a league organiser picks ACSM over a generic panel. New tables (`championships`, `championship_rounds`, `championship_entries`), a calendar UI, a points-system editor, a standings page that updates as result files land. This is what would push the panel from "good admin tool" to "league platform". |
-| 3 | **Session presets / templates** | M | Save "Practice 30m + Qualy 15m + Race 12 laps at Spa with GT3 grid" as a single click. Quality-of-life that operators flip to ACSM for. Lightweight table + one new card in the Session page. |
-| 4 | **Stints heatmap** | M | Visual of how a driver's lap times evolve through a session. Chart.js or plain SVG; the data is already in `laps` (by `session_date` + `lap_timestamp`). |
-| 5 | **Multi-server support** | XL | Refactor: `AC_BIN`, `AC_CFG_DIR`, `AC_CONTENT_DIR` stop being globals and become entries in a `servers` table. Sidebar gets a server picker; every existing endpoint scoped by `?server=N`. Big change, breaks the "single file server.js" feel; worth it only if you actually run several `acServer` instances. |
+| 1 | **Race events / championships** | XL | The single biggest reason a league organiser picks ACSM over a generic panel. New tables (`championships`, `championship_rounds`, `championship_entries`), a calendar UI, a points-system editor, a standings page that updates as result files land. This is what would push the panel from "good admin tool" to "league platform". |
+| 2 | **Session presets / templates** | M | Save "Practice 30m + Qualy 15m + Race 12 laps at Spa with GT3 grid" as a single click. Quality-of-life that operators flip to ACSM for. Lightweight table + one new card in the Session page. |
+| 3 | **Stints heatmap** | M | Visual of how a driver's lap times evolve through a session. Chart.js or plain SVG; the data is already in `laps` (by `session_date` + `lap_timestamp`). |
+| 4 | **Multi-server support** | XL | Refactor: `AC_BIN`, `AC_CFG_DIR`, `AC_CONTENT_DIR` stop being globals and become entries in a `servers` table. Sidebar gets a server picker; every existing endpoint scoped by `?server=N`. Big change, breaks the "single file server.js" feel; worth it only if you actually run several `acServer` instances. |
 
 ### Maybe later (lower-ROI or higher-risk)
 
@@ -141,6 +140,13 @@ swap them all in one focused release.
 
 Everything in this list is shipped in a tagged release and verified in
 production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
+
+### [Unreleased]
+
+- **Public driver profile pages** at `/p/<steam-id>` — totals, server
+  records held, personal bests, OpenGraph previews for Discord shares.
+  Companion `/api/public/players/<id>` for bots. Admin-toggleable from
+  Configuración; on by default. ROADMAP-doing-next #1 closed.
 
 ### [1.4.0] — 2026-05-17
 

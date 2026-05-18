@@ -10,6 +10,29 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+### Added
+
+- **Public driver profile pages.** Every driver the panel has seen gets a
+  shareable URL at `/p/<steam-id>` rendering a server-side page with their
+  totals (laps, time on track, sessions), best lap, server records held
+  (combos where they own the per-(track, layout, car) MIN(ms)) and personal
+  bests across every combo they've driven. No login required, no scraping
+  of the SPA — the page is plain HTML with the panel's `src/styles.css`
+  for visual continuity, an Inter + JetBrains Mono `<link>`, OpenGraph +
+  Twitter card meta tags so Discord previews show name + headline stats,
+  a small unicode-flag (ISO-3166 codepoint pair, no SVG asset), a hero
+  card with avatar + nickname/in-game/GUID, four KPI cards, and the two
+  records / personal-bests tables. A companion `/api/public/players/<id>`
+  endpoint returns the same data as JSON for Discord bots / Twitch overlays.
+  Both endpoints validate the 17-digit Steam GUID shape, rate-limit at
+  120/min/IP, and respect a new `public_profiles_enabled` toggle in
+  Configuración (admin-only PUT, default on, audited as
+  `panel.public_profiles`). A share-link button (`IconLink`) joined the
+  Players page's history table next to the edit-nickname pencil so an
+  admin can copy the public URL with one click. Four cheap SQL queries
+  against the existing `players` + `laps` tables; no schema migration.
+  Closes ROADMAP item "#1 Public player profile pages".
+
 ### Fixed
 
 - **Phantom player on dashboard boot.** The UDP listener used to fire

@@ -2507,6 +2507,23 @@ function getPublicPlayerData(guid) {
     LIMIT 10
   `).all(guid);
 
+  // Most-used car + most-played track, by raw lap count. Computed here so
+  // the download-card endpoint doesn't need its own DB roundtrip, and so
+  // the JSON shape surfaces them for Discord bots / external dashboards.
+  // Counts laps (not sessions) — a driver who did 200 laps on one combo
+  // and 50 on another reads more authentically as "Toyota AE86" than
+  // sessions where they only joined briefly.
+  const mostUsedCar = db.prepare(`
+    SELECT car, COUNT(*) AS n
+    FROM laps WHERE driver_guid = ?
+    GROUP BY car ORDER BY n DESC LIMIT 1
+  `).get(guid);
+  const mostPlayedTrack = db.prepare(`
+    SELECT track, track_config, COUNT(*) AS n
+    FROM laps WHERE driver_guid = ?
+    GROUP BY track, track_config ORDER BY n DESC LIMIT 1
+  `).get(guid);
+
   // Server records this player holds. A combo's record is the min(ms) across
   // every valid lap; the player owns the record when their min lap on that
   // combo equals the server-wide min. Tied lap times (rare but possible)
@@ -2558,6 +2575,21 @@ function getPublicPlayerData(guid) {
       bestMs:     kpis.best_ms    || null,
       bestDate:   bestDate,
       recordsHeld: records.length,
+      mostUsedCar: mostUsedCar ? {
+        car:      mostUsedCar.car,
+        carName:  carDisplayName(mostUsedCar.car),
+        laps:     mostUsedCar.n,
+      } : null,
+      mostPlayedTrack: mostPlayedTrack ? (() => {
+        const td = _trackLayoutDisplay(mostPlayedTrack.track, mostPlayedTrack.track_config);
+        return {
+          track:       mostPlayedTrack.track,
+          trackName:   td.trackName,
+          trackConfig: mostPlayedTrack.track_config || '',
+          layoutName:  td.layoutName,
+          laps:        mostPlayedTrack.n,
+        };
+      })() : null,
     },
     records: records.map(r => {
       const td = _trackLayoutDisplay(r.track, r.track_config);
@@ -2675,6 +2707,9 @@ const _PUBLIC_PROFILE_I18N = {
   en: {
     driver_profile:      'Driver profile',
     toggle_theme:        'Toggle theme',
+    download_card:       'Download stat card',
+    most_used_car:       'Most-used car',
+    most_played_track:   'Most-played track',
     open_steam:          'Open Steam profile',
     in_game:             'in-game:',
     total_laps:          'Total laps',
@@ -2708,6 +2743,9 @@ const _PUBLIC_PROFILE_I18N = {
   es: {
     driver_profile:      'Perfil de piloto',
     toggle_theme:        'Cambiar tema',
+    download_card:       'Descargar tarjeta',
+    most_used_car:       'Coche más usado',
+    most_played_track:   'Tramo más jugado',
     open_steam:          'Abrir perfil de Steam',
     in_game:             'en juego:',
     total_laps:          'Vueltas totales',
@@ -2741,6 +2779,9 @@ const _PUBLIC_PROFILE_I18N = {
   it: {
     driver_profile:      'Profilo pilota',
     toggle_theme:        'Cambia tema',
+    download_card:       'Scarica scheda',
+    most_used_car:       'Auto più usata',
+    most_played_track:   'Tracciato più giocato',
     open_steam:          'Apri profilo Steam',
     in_game:             'in-game:',
     total_laps:          'Giri totali',
@@ -2961,13 +3002,27 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit, theme, themeEx
     .pp-topbar .brand-mark { width: 28px; height: 28px; border-radius: 6px; }
     .pp-topbar .brand-name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
     .pp-topbar .brand-sub  { font-size: 11.5px; color: var(--text-muted); }
+    /* Download button — same square chip pattern as the theme toggle so
+       the three controls (download, lang, theme) read as a coherent group
+       on the right edge. Auto-margin sits on this one so it pushes
+       everything after it to the right. */
+    .pp-card-download {
+      margin-left: auto;
+      width: 32px; height: 32px; border-radius: var(--radius-sm);
+      display: grid; place-items: center; color: var(--text-muted);
+      background: transparent; border: 1px solid var(--border);
+      cursor: pointer; text-decoration: none;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .pp-card-download:hover { background: var(--bg-3); color: var(--text); }
+    .pp-card-download svg { width: 14px; height: 14px; }
+
     /* Lang switcher: 3 flag chips on the right of the topbar, just before
        the theme toggle. The active language is outlined with the panel
        accent so the visitor sees which one is in effect; the others are
        muted until hovered. Click navigates with ?lang=xx; the server picks
        up the override (resolvePublicLang) and re-renders. */
     .pp-lang-switch {
-      margin-left: auto;
       display: inline-flex; align-items: center; gap: 4px;
       padding: 4px; border-radius: 999px;
       background: var(--bg-3); border: 1px solid var(--border);
@@ -3178,6 +3233,16 @@ function renderPublicPlayerHtml(data, origin, lang, langExplicit, theme, themeEx
         <div class="brand-name">Assetto Server Panel</div>
         <div class="brand-sub">${_htmlEsc(T.driver_profile)}</div>
       </div>
+      <a class="pp-card-download" href="card.png${themeExplicit || langExplicit ? '?' : ''}${[
+        themeExplicit ? `theme=${encodeURIComponent(theme)}` : '',
+        langExplicit  ? `lang=${encodeURIComponent(lang)}`   : '',
+      ].filter(Boolean).join('&')}" download="${_htmlEsc((p.name || 'driver').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'driver')}-${_htmlEsc(p.guid)}.png" aria-label="${_htmlEsc(T.download_card)}" title="${_htmlEsc(T.download_card)}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </a>
       <div class="pp-lang-switch" role="group" aria-label="Language">
         ${['en','es','it'].map(code => {
           const flag = code === 'en' ? 'gb' : (code === 'es' ? 'es' : 'it');
@@ -3455,6 +3520,206 @@ function apiPublicPlayerOgImage(req, res, guid) {
   const svg  = renderPublicPlayerOgSvg(data, lang);
   res.setHeader('Cache-Control', 'public, max-age=300'); // 5 min — bots re-fetch on each link share
   respond(res, 200, 'image/svg+xml; charset=utf-8', svg);
+}
+
+// Read the panel icon once and cache it as a base64 data URL. Used to embed
+// the logo inside the SVG card (resvg-js renders data:image/png from <image>
+// elements). Falls back to empty string when the file isn't there so the
+// card still renders without the logo block instead of erroring.
+let _panelIconDataUrl = null;
+function _getPanelIconDataUrl() {
+  if (_panelIconDataUrl !== null) return _panelIconDataUrl;
+  try {
+    const p = path.join(ROOT, 'src', 'assets', 'icon-192.png');
+    _panelIconDataUrl = `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
+  } catch (e) {
+    log.warn('[card-png] panel icon unavailable:', e.message);
+    _panelIconDataUrl = '';
+  }
+  return _panelIconDataUrl;
+}
+
+// Same dance for track map.png — read the file the live-map feature already
+// knows how to locate (single-layout root or per-layout subdir, Kunos asset
+// fallback) and inline it as base64 so resvg can rasterize the embedded
+// reference. Cached per (trackId, layoutId) for process lifetime; the file
+// can't change without an apiServerStop/Start sequence which respawns the
+// node process and clears the cache.
+const _trackMapDataUrlCache = new Map();
+function _getTrackMapDataUrl(trackId, layoutId) {
+  const key = `${trackId}|${layoutId || ''}`;
+  if (_trackMapDataUrlCache.has(key)) return _trackMapDataUrlCache.get(key);
+  const p = _trackMapPngPath(trackId, layoutId);
+  if (!p) { _trackMapDataUrlCache.set(key, ''); return ''; }
+  try {
+    const url = `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
+    _trackMapDataUrlCache.set(key, url);
+    return url;
+  } catch (e) {
+    log.warn('[card-png] track map read failed for', trackId, layoutId || '(root)', ':', e.message);
+    _trackMapDataUrlCache.set(key, '');
+    return '';
+  }
+}
+
+// Downloadable stat card: a slightly richer / shareable variant of the OG
+// preview. Same 1200×630 canvas (Discord-friendly aspect, also fine for a
+// fullsize export), same theme palette table, but with five KPI tiles
+// instead of four and a row showing the most-used car + most-played track
+// — data the OG card doesn't surface. Includes the panel logo embedded as
+// a data: image and a small footer hint with the public profile URL so a
+// downloaded image still tells the recipient where to look.
+function renderPublicPlayerCardSvg(data, lang, theme, origin) {
+  const T = _PUBLIC_PROFILE_I18N[lang] || _PUBLIC_PROFILE_I18N.en;
+  const C = _PUBLIC_PROFILE_OG_THEMES[theme] || _PUBLIC_PROFILE_OG_THEMES.dark;
+  const p = data.player;
+  const k = data.kpis;
+  const initial = (p.nickname || p.name || '?').slice(0, 1).toUpperCase();
+  const bestLap = _fmtLapMs(k.bestMs);
+  const displayName = p.nickname || p.name || '—';
+  const inGameLine  = p.nickname && p.name ? `${T.in_game} ${p.name}` : '';
+  const truncate = (s, max) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
+  const nameTxt = _xmlEsc(truncate(displayName, 22));
+  const igTxt   = _xmlEsc(truncate(inGameLine, 30));
+
+  const carName    = k.mostUsedCar     ? truncate(k.mostUsedCar.carName,   14) : '—';
+  const trackName  = k.mostPlayedTrack ? truncate(k.mostPlayedTrack.trackName, 14) : '—';
+  const trackLayout = k.mostPlayedTrack && k.mostPlayedTrack.layoutName
+    ? truncate(k.mostPlayedTrack.layoutName, 18) : '';
+
+  // 5 KPI tiles in a single row at the bottom. ~210px wide each, 24px gaps,
+  // so 5*210 + 4*24 = 1146 — leaves 27px margin on each side at canvas 1200.
+  // Each tile carries an `isText` flag — text values (car/track names)
+  // render at smaller font sizes than the numeric ones because at 32px a
+  // 16-char car name like 'Toyota AE86' clips out of the tile, while
+  // a numeric '5' or '17m' looks ridiculous at any other size.
+  const lapsWord = lang === 'es' ? 'vueltas' : lang === 'it' ? 'giri' : 'laps';
+  const lapWord  = lang === 'es' ? 'vuelta'  : lang === 'it' ? 'giro' : 'lap';
+  const kpis = [
+    { label: T.total_laps,        value: String(k.laps),               meta: k.sessions ? `${k.sessions} ${k.sessions === 1 ? T.session_one : T.session_many}` : '',  isText: false },
+    { label: T.time_on_track,     value: k.totalTime,                  meta: p.firstSeen ? `${T.since} ${p.firstSeen}` : '',                                       isText: false },
+    { label: T.most_used_car,     value: truncate(carName, 16),        meta: k.mostUsedCar ? `${k.mostUsedCar.laps} ${k.mostUsedCar.laps === 1 ? lapWord : lapsWord}` : '', isText: true  },
+    { label: T.most_played_track, value: truncate(trackName, 16),      meta: trackLayout || (k.mostPlayedTrack ? `${k.mostPlayedTrack.laps} ${lapsWord}` : ''),         isText: true  },
+    { label: T.server_records,    value: String(k.recordsHeld),        meta: k.recordsHeld ? T.combos_owned : '',                                                  isText: false },
+  ];
+
+  const logo = _getPanelIconDataUrl();
+  const profileShortUrl = `${origin.replace(/^https?:\/\//, '')}/p/${p.guid}`;
+
+  // Map thumbnail for the most-played combo, when the track has a map.png
+  // and a calibration ini on disk (covers ~all mod + Kunos tracks after
+  // the 'copy missing map files to prod' pass earlier today). Inverted on
+  // dark theme so the typical white-bg + dark-trail map.png reads against
+  // the slate gradient; left as-is on light theme. preserveAspectRatio
+  // keeps non-square tracks (touge hill climbs etc.) from squishing.
+  const mapDataUrl = k.mostPlayedTrack
+    ? _getTrackMapDataUrl(k.mostPlayedTrack.track, k.mostPlayedTrack.trackConfig)
+    : '';
+  const mapInvertFilter = theme === 'dark' ? 'filter="url(#mapInvert)"' : '';
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${C.bgStart}"/>
+      <stop offset="100%" stop-color="${C.bgEnd}"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${C.glowColor}" stop-opacity="${C.glowAlpha}"/>
+      <stop offset="100%" stop-color="${C.glowColor}" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Colour-matrix invert used to flip the AC track silhouette PNG
+         from its native white-bg/dark-trail layout to a dark-bg/light-trail
+         visual matching the card's dark theme. Alpha row left at identity
+         so transparent pixels in the source stay transparent. -->
+    <filter id="mapInvert" x="0%" y="0%" width="100%" height="100%">
+      <feColorMatrix type="matrix" values="-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="200" cy="240" r="320" fill="url(#glow)"/>
+
+  <!-- Brand strip with embedded logo -->
+  ${logo ? `<image href="${logo}" x="60" y="48" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>` : ''}
+  <text x="${logo ? 120 : 60}" y="76" fill="${C.brand}" font-size="22" font-weight="600" letter-spacing="2">ASSETTO SERVER PANEL</text>
+  <text x="${logo ? 120 : 60}" y="100" fill="${C.brandSub}" font-size="16">${_xmlEsc(T.driver_profile.toUpperCase())}</text>
+
+  <!-- Avatar -->
+  <circle cx="180" cy="280" r="92" fill="#dc2626"/>
+  <text x="180" y="314" text-anchor="middle" fill="#fff" font-size="84" font-weight="700">${_xmlEsc(initial)}</text>
+
+  <!-- Name + in-game + GUID -->
+  <text x="310" y="252" fill="${C.name}" font-size="56" font-weight="700">${nameTxt}</text>
+  ${igTxt ? `<text x="310" y="296" fill="${C.aka}" font-size="22" font-weight="400">${igTxt}</text>` : ''}
+  <text x="310" y="${igTxt ? '336' : '294'}" fill="${C.guid}" font-size="18" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(p.guid)}</text>
+
+  ${mapDataUrl ? `
+  <!-- Most-played track silhouette, upper-right corner -->
+  <g transform="translate(990, 60)">
+    <rect x="0" y="0" width="170" height="170" rx="14" fill="${C.cardBg}" stroke="${C.cardBorder}" stroke-width="1"/>
+    <image href="${mapDataUrl}" x="12" y="12" width="146" height="146" preserveAspectRatio="xMidYMid meet" ${mapInvertFilter}/>
+  </g>
+  <text x="1075" y="252" text-anchor="middle" fill="${C.brandSub}" font-size="12" font-weight="600" letter-spacing="1">${_xmlEsc(T.most_played_track.toUpperCase())}</text>
+  <text x="1075" y="272" text-anchor="middle" fill="${C.name}" font-size="15" font-weight="600">${_xmlEsc(trackName)}</text>
+  ${trackLayout ? `<text x="1075" y="290" text-anchor="middle" fill="${C.kpiMeta}" font-size="12">${_xmlEsc(trackLayout)}</text>` : ''}
+  ` : ''}
+
+  <!-- KPI row (5 tiles). Text-valued tiles (car / track names) get a
+       smaller value font + sans-serif family so the typical mod-id like
+       'Toyota AE86' fits inside the 210px tile width. -->
+  <g transform="translate(27, 414)">
+    ${kpis.map((kpi, i) => `
+      <g transform="translate(${i * 234}, 0)">
+        <rect x="0" y="0" width="210" height="140" rx="12" fill="${C.cardBg}" stroke="${C.cardBorder}" stroke-width="1"/>
+        <text x="16" y="28" fill="${C.kpiLabel}" font-size="11" font-weight="600" letter-spacing="1">${_xmlEsc(kpi.label.toUpperCase())}</text>
+        <text x="16" y="${kpi.isText ? 76 : 82}" fill="${C.kpiValue}" font-size="${kpi.isText ? 22 : 32}" font-weight="700" ${kpi.isText ? '' : 'font-family="JetBrains Mono, ui-monospace, monospace"'}>${_xmlEsc(kpi.value)}</text>
+        <text x="16" y="118" fill="${C.kpiMeta}" font-size="13">${_xmlEsc(kpi.meta)}</text>
+      </g>`).join('')}
+  </g>
+
+  <!-- Footer with public URL — gives anyone who sees the saved PNG a way back -->
+  <text x="1140" y="600" text-anchor="end" fill="${C.kpiMeta}" font-size="14" font-family="JetBrains Mono, ui-monospace, monospace">${_xmlEsc(profileShortUrl)}</text>
+</svg>`;
+}
+
+function apiPublicPlayerCardPng(req, res, guid) {
+  if (!publicProfilesEnabled()) return respond(res, 404, 'text/plain; charset=utf-8', 'Not Found');
+  if (!/^\d{17}$/.test(guid))    return respond(res, 400, 'text/plain; charset=utf-8', 'Invalid Steam ID');
+  if (!checkRateLimit('public-player', clientIp(req), 120, 60 * 1000)) {
+    return respond(res, 429, 'text/plain; charset=utf-8', 'Too many requests');
+  }
+  const data = getPublicPlayerData(guid);
+  if (!data) return respond(res, 404, 'text/plain; charset=utf-8', 'Player not found');
+  const resvg = _loadResvg();
+  if (!resvg) return _fallbackOgPng(res);
+  try {
+    const { lang }  = resolvePublicLang(req);
+    const { theme } = resolvePublicTheme(req);
+    const proto = requestIsHttps(req) ? 'https' : 'http';
+    const host  = req.headers.host || 'localhost';
+    const svg   = renderPublicPlayerCardSvg(data, lang, theme, `${proto}://${host}`);
+    const png   = new resvg.Resvg(svg, {
+      fitTo: { mode: 'width', value: 1200 },
+      font: {
+        loadSystemFonts:  true,
+        defaultFontFamily: 'DejaVu Sans',
+        sansSerifFamily:   'DejaVu Sans',
+        monospaceFamily:   'DejaVu Sans Mono',
+      },
+    }).render().asPng();
+    // No edge cache: this is the download endpoint, the user explicitly
+    // requested a fresh copy. Sub-100ms render is fine on every hit.
+    res.setHeader('Cache-Control', 'no-store');
+    // Suggest a filename so the browser saves it cleanly. Slug the in-game
+    // name + first chunk of GUID; sanitise to ASCII / safe punctuation so
+    // every OS accepts the resulting download.
+    const slug = (data.player.name || 'driver').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'driver';
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}-${guid}.png"`);
+    respond(res, 200, 'image/png', png);
+  } catch (e) {
+    log.warn('[card-png] render failed for', guid, ':', e.message);
+    _fallbackOgPng(res);
+  }
 }
 
 // PNG version of the OG card. Discord, Slack and older Twitter parsers don't
@@ -6953,6 +7218,13 @@ function handler(req, res) {
   const publicPlayerOgSvgMatch = urlPath.match(/^\/p\/(\d{17})\/og\.svg$/);
   if (publicPlayerOgSvgMatch && (req.method === 'GET' || req.method === 'HEAD')) {
     return apiPublicPlayerOgImage(req, res, publicPlayerOgSvgMatch[1]);
+  }
+  // Downloadable stat card (5 KPIs + map of most-played track + footer URL).
+  // Same machinery as the OG PNG but a richer layout meant for sharing on
+  // Discord/Twitter as an attachment rather than a link preview.
+  const publicPlayerCardPngMatch = urlPath.match(/^\/p\/(\d{17})\/card\.png$/);
+  if (publicPlayerCardPngMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    return apiPublicPlayerCardPng(req, res, publicPlayerCardPngMatch[1]);
   }
   // Companion JS for the public profile page's theme toggle. Tiny static
   // string; served unauthenticated so the page actually loads without a

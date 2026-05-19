@@ -40,8 +40,33 @@ the change matters; the commit log is the source of truth for *what* changed.
   Session → Apply", with mod installation at the end where it belongs
   (it's a content-management action, not part of the running-config
   flow).
+- **Full preset editor.** The edit (pencil) button on a preset card now
+  opens the same builder modal as "New preset", pre-filled with the
+  loaded config — track, layout, every slot, session toggles +
+  durations, weather, time-of-day, air temp, penalties and maxClients.
+  Submitting PUTs by id instead of POSTing a new row. The old
+  rename-only modal is gone; the same field is editable inline through
+  the full editor. Adds a new i18n key `presets.build_modal.edit_title`
+  in EN/ES/IT and renames `presets.card.rename` → `presets.card.edit`.
+- **`presetManage` permission.** Granular permission gating the Presets
+  page and the "Save as preset" button on the Session page. Replaces
+  the previous double-up where these features required `serverConfig`,
+  so a user account that should only manage saved presets no longer
+  has to also be granted the right to edit `server_cfg.ini`. Listed in
+  the Users → Role permissions card directly below "Edit server
+  configuration". Default `true` for the `user` role; the backend
+  backfills the key into pre-existing `role_permissions_user` rows so
+  upgrades grant it automatically rather than silently denying it.
 
 ### Fixed
+
+- **Edit / delete icon buttons on preset cards were left-aligned
+  inside the 32×32 box** instead of centred. `.btn` is
+  `display: inline-flex` with the default `justify-content: flex-start`,
+  and the prior `.btn.icon-btn { padding: 0; gap: 0; }` reset left
+  that alignment in place, so the 13px SVG drew against the left edge
+  of the box. CSS now also forces `justify-content: center` on the
+  combined selector, snapping the icon to the middle.
 
 - **`dist/` served stale UI after deployments that invoke `node server.js`
   directly.** The `prestart` hook in `package.json` only fires under

@@ -199,6 +199,7 @@ const PERMISSION_DEFS = [
   { key: 'serverControl',    label: 'perm.serverControl',    hint: 'perm.serverControl_hint' },
   { key: 'sessionEdit',      label: 'perm.sessionEdit',      hint: 'perm.sessionEdit_hint' },
   { key: 'serverConfig',     label: 'perm.serverConfig',     hint: 'perm.serverConfig_hint' },
+  { key: 'presetManage',     label: 'perm.presetManage',     hint: 'perm.presetManage_hint' },
   { key: 'whitelistManage',  label: 'perm.whitelistManage',  hint: 'perm.whitelistManage_hint' },
   { key: 'playerModeration', label: 'perm.playerModeration', hint: 'perm.playerModeration_hint' },
   { key: 'modUpload',        label: 'perm.modUpload',        hint: 'perm.modUpload_hint' },

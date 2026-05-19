@@ -363,7 +363,7 @@ function userMustChangePassword(username) {
 // permission referenced in route guards must appear here so the UI surfaces
 // it and the defaults block above seeds a value for it.
 const ROLE_PERMISSIONS = [
-  'serverControl', 'sessionEdit', 'serverConfig', 'whitelistManage',
+  'serverControl', 'sessionEdit', 'serverConfig', 'presetManage', 'whitelistManage',
   'playerModeration', 'modUpload', 'discordWebhook', 'auditView', 'dbBackup',
 ];
 
@@ -614,18 +614,40 @@ try {
   // before this granular-permissions feature shipped (server control, session
   // edit and mod upload were already open to users), so an upgrade in place
   // doesn't yank capabilities away from existing accounts.
+  const DEFAULT_USER_PERMS = {
+    serverControl:    true,
+    sessionEdit:      true,
+    modUpload:        true,
+    presetManage:     true,
+    serverConfig:     false,
+    whitelistManage:  false,
+    playerModeration: false,
+    discordWebhook:   false,
+    auditView:        false,
+    dbBackup:         false,
+  };
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('role_permissions_user', ?)`)
-    .run(JSON.stringify({
-      serverControl:    true,
-      sessionEdit:      true,
-      modUpload:        true,
-      serverConfig:     false,
-      whitelistManage:  false,
-      playerModeration: false,
-      discordWebhook:   false,
-      auditView:        false,
-      dbBackup:         false,
-    }));
+    .run(JSON.stringify(DEFAULT_USER_PERMS));
+  // Backfill: for installs predating a release that introduced a new
+  // permission key, the stored row won't have an entry for it and
+  // getUserRolePermissions() will report it as false. Re-insert any missing
+  // key with its intended default so "granted by default" actually applies
+  // to existing user accounts, not just fresh installs. Only ADDS missing
+  // keys — never overwrites a value the admin has already set.
+  try {
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'role_permissions_user'`).get();
+    if (row?.value) {
+      const parsed = JSON.parse(row.value);
+      let changed = false;
+      for (const [k, v] of Object.entries(DEFAULT_USER_PERMS)) {
+        if (!(k in parsed)) { parsed[k] = v; changed = true; }
+      }
+      if (changed) {
+        db.prepare(`UPDATE panel_settings SET value = ? WHERE key = 'role_permissions_user'`)
+          .run(JSON.stringify(parsed));
+      }
+    }
+  } catch {}
   console.log('  Database ready:', DB_PATH);
 } catch (e) {
   console.error('  Database init failed:', e.message);
@@ -4684,7 +4706,7 @@ function _validatePresetPayload(body, { requireName = true } = {}) {
 }
 
 function apiSessionPresetsList(req, res) {
-  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 200, []);
   try {
     const rows = db.prepare(`
@@ -4697,7 +4719,7 @@ function apiSessionPresetsList(req, res) {
 }
 
 function apiSessionPresetGet(req, res, id) {
-  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 404, { error: 'Not found' });
   try {
     const row = db.prepare(`
@@ -4710,7 +4732,7 @@ function apiSessionPresetGet(req, res, id) {
 }
 
 async function apiSessionPresetCreate(req, res) {
-  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 500, { error: 'DB not ready' });
   try {
     const body = await readBody(req);
@@ -4736,7 +4758,7 @@ async function apiSessionPresetCreate(req, res) {
 }
 
 async function apiSessionPresetUpdate(req, res, id) {
-  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 500, { error: 'DB not ready' });
   try {
     const body = await readBody(req);
@@ -4767,7 +4789,7 @@ async function apiSessionPresetUpdate(req, res, id) {
 }
 
 function apiSessionPresetDelete(req, res, id) {
-  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 500, { error: 'DB not ready' });
   try {
     const row = db.prepare('SELECT id, name FROM session_presets WHERE id = ?').get(id);

@@ -182,11 +182,13 @@ input, select, textarea { font-family: inherit; color: inherit; }
 }
 .icon-btn:hover { background: var(--bg-3); color: var(--text); }
 
-/* Bordered icon-only button (e.g. preset-card rename/delete): keep the .btn
+/* Bordered icon-only button (e.g. preset-card edit/delete): keep the .btn
  * surface + border + hover treatment but drop the horizontal padding/gap so
  * the SVG actually fits inside the 32×32 box instead of being squeezed out
- * by .btn's `padding: 7px 14px`. */
-.btn.icon-btn { padding: 0; gap: 0; }
+ * by .btn's `padding: 7px 14px`. Also force-center the SVG — .btn is
+ * `display: inline-flex` with default `justify-content: flex-start`, which
+ * otherwise pins the icon to the left edge of the box. */
+.btn.icon-btn { padding: 0; gap: 0; justify-content: center; }
 
 .server-pill {
   display: inline-flex;

@@ -515,20 +515,26 @@ function AppInner(props) {
   // Presets page that lets the operator compose a preset from scratch without
   // affecting the live sessionCfg.
   const [presetSaveOpen,  setPresetSaveOpen]  = React.useState(false);
-  const [presetBuildOpen, setPresetBuildOpen] = React.useState(false);
+  // BuildPresetModal state tracks both "is it open" and "is it editing an
+  // existing preset" — the edit button on a preset card opens the same modal
+  // but pre-filled with the loaded config, and submit then PUTs by id.
+  const [presetBuildState, setPresetBuildState] = React.useState({ open: false, editing: null });
 
-  // Shared persistence: the snapshot modal calls this with the current
-  // sessionCfg, the builder modal calls it with its own draft config.
-  const _postPreset = ({ name, description, config }) => {
-    return fetch('/api/session-presets', {
-      method: 'POST',
+  // Shared persistence: POST when there's no id (snapshot save or new build),
+  // PUT when editing. Toast wording flips between created / updated.
+  const _persistPreset = ({ id, name, description, config }) => {
+    const url    = id ? `/api/session-presets/${id}` : '/api/session-presets';
+    const method = id ? 'PUT' : 'POST';
+    return fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, description, config }),
     })
       .then(async r => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-        toast.push(t('presets.toast.created').replace('{name}', name), 'ok');
+        const msgKey = id ? 'presets.toast.updated' : 'presets.toast.created';
+        toast.push(t(msgKey).replace('{name}', name), 'ok');
         try { window.dispatchEvent(new Event('app:preset-saved')); } catch {}
       })
       .catch(e => {
@@ -541,10 +547,21 @@ function AppInner(props) {
   };
 
   const handleSavePreset = ({ name, description }) =>
-    _postPreset({ name, description, config: sessionCfg });
+    _persistPreset({ name, description, config: sessionCfg });
 
-  const handleBuildPreset = ({ name, description, config }) =>
-    _postPreset({ name, description, config });
+  const handleBuildPreset = ({ id, name, description, config }) =>
+    _persistPreset({ id, name, description, config });
+
+  // Edit flow: fetch the full preset (the list endpoint only returns the
+  // summary), then open the builder modal pre-filled. We open the modal only
+  // after the fetch resolves so the operator doesn't see an empty draft
+  // flicker before the data lands.
+  const handleAskEditPreset = (preset) => {
+    fetch(`/api/session-presets/${preset.id}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(full => setPresetBuildState({ open: true, editing: full }))
+      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
+  };
 
   // Drop a preset's saved config into the live sessionCfg state and navigate
   // to the Session page. We spread the preset over the existing sessionCfg so
@@ -694,8 +711,8 @@ function AppInner(props) {
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars} isAdmin={isAdmin} onDelete={handleDeleteCar}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks} isAdmin={isAdmin} onDelete={handleDeleteTrack}/>;
   else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} canUpload={can('modUpload')} refreshContent={refreshContent}/>;
-  else if (page === 'presets')   content = <PagePresets tracks={tracks} canEdit={can('serverConfig')} onAskBuild={() => setPresetBuildOpen(true)} onLoadPreset={handleLoadPreset}/>;
-  else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} canEdit={can('sessionEdit')} canSavePreset={can('serverConfig')} onApply={handleApplySession} onAskSaveAsPreset={() => setPresetSaveOpen(true)}/>;
+  else if (page === 'presets')   content = <PagePresets tracks={tracks} canEdit={can('presetManage')} onAskBuild={() => setPresetBuildState({ open: true, editing: null })} onAskEdit={handleAskEditPreset} onLoadPreset={handleLoadPreset}/>;
+  else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} canEdit={can('sessionEdit')} canSavePreset={can('presetManage')} onApply={handleApplySession} onAskSaveAsPreset={() => setPresetSaveOpen(true)}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} perms={perms} canEdit={can('serverConfig')} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
   else if (page === 'audit')     content = <PageAudit/>;
@@ -775,8 +792,9 @@ function AppInner(props) {
         )}
         {BuildPresetModal && (
           <BuildPresetModal
-            open={presetBuildOpen}
-            onClose={() => setPresetBuildOpen(false)}
+            open={presetBuildState.open}
+            editing={presetBuildState.editing}
+            onClose={() => setPresetBuildState({ open: false, editing: null })}
             onSave={handleBuildPreset}
             tracks={tracks}
             cars={cars}

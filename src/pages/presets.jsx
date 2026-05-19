@@ -42,12 +42,11 @@ function _trackLabel(tracks, summary) {
   return `${trackName} — ${layoutShort}`;
 }
 
-function PagePresets({ tracks, canEdit, onAskBuild, onLoadPreset }) {
+function PagePresets({ tracks, canEdit, onAskBuild, onAskEdit, onLoadPreset }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
   const [presets, setPresets] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [renameTarget, setRenameTarget] = React.useState(null); // { id, name }
   const [deleteTarget, setDeleteTarget] = React.useState(null); // { id, name }
 
   // Stable refs for `t` and `toast`. The originals are rebound on every render
@@ -88,29 +87,6 @@ function PagePresets({ tracks, canEdit, onAskBuild, onLoadPreset }) {
         toast.push(t('presets.toast.loaded').replace('{name}', full.name), 'ok');
       })
       .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
-  };
-
-  const handleRename = (newName) => {
-    if (!renameTarget) return;
-    fetch(`/api/session-presets/${renameTarget.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName }),
-    })
-      .then(async r => {
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-        toast.push(t('presets.toast.updated').replace('{name}', newName), 'ok');
-        setRenameTarget(null);
-        refresh();
-      })
-      .catch(e => {
-        // Special-case the unique-name conflict for a friendlier message.
-        const msg = /already exists/i.test(e.message)
-          ? t('presets.toast.duplicate_name')
-          : `${t('common.error')}: ${e.message}`;
-        toast.push(msg, 'error');
-      });
   };
 
   const handleDelete = () => {
@@ -166,20 +142,11 @@ function PagePresets({ tracks, canEdit, onAskBuild, onLoadPreset }) {
               tracks={tracks}
               canEdit={canEdit}
               onLoad={() => handleLoad(p)}
-              onRename={() => setRenameTarget({ id: p.id, name: p.name })}
+              onEdit={() => onAskEdit(p)}
               onDelete={() => setDeleteTarget({ id: p.id, name: p.name })}
             />
           ))}
         </div>
-      )}
-
-      {renameTarget && (
-        <RenamePresetModal
-          t={t}
-          initialName={renameTarget.name}
-          onCancel={() => setRenameTarget(null)}
-          onConfirm={handleRename}
-        />
       )}
 
       {deleteTarget && (
@@ -194,7 +161,7 @@ function PagePresets({ tracks, canEdit, onAskBuild, onLoadPreset }) {
   );
 }
 
-function PresetCard({ t, preset, tracks, canEdit, onLoad, onRename, onDelete }) {
+function PresetCard({ t, preset, tracks, canEdit, onLoad, onEdit, onDelete }) {
   const trackLabel = _trackLabel(tracks, preset.summary);
   return (
     <div className="card preset-card" style={{padding: 14, display:'flex', flexDirection:'column', gap: 10}}>
@@ -233,7 +200,7 @@ function PresetCard({ t, preset, tracks, canEdit, onLoad, onRename, onDelete }) 
         </button>
         {canEdit && (
           <>
-            <button className="btn icon-btn" title={t('presets.card.rename')} aria-label={t('presets.card.rename')} onClick={onRename}>
+            <button className="btn icon-btn" title={t('presets.card.edit')} aria-label={t('presets.card.edit')} onClick={onEdit}>
               <I.IconEdit size={13}/>
             </button>
             <button className="btn icon-btn" title={t('presets.card.delete')} aria-label={t('presets.card.delete')} onClick={onDelete} style={{color:'var(--red)'}}>
@@ -310,42 +277,6 @@ function SavePresetModal({ open, onClose, onSave }) {
   );
 }
 
-function RenamePresetModal({ t, initialName, onCancel, onConfirm }) {
-  const [name, setName] = React.useState(initialName);
-  const trapRef = window.AppShell?.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
-  React.useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
-  const submit = () => {
-    const trimmed = name.trim();
-    if (!trimmed || trimmed === initialName) return;
-    onConfirm(trimmed);
-  };
-  return (
-    <div className="modal-backdrop" onClick={onCancel} role="presentation">
-      <div ref={trapRef} className="modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t('presets.rename_modal.title')} tabIndex={-1}>
-        <div className="modal-header">
-          <I.IconEdit size={15}/>
-          <div className="modal-title">{t('presets.rename_modal.title')}</div>
-        </div>
-        <div className="modal-body">
-          <label className="field-label" htmlFor="preset-rename">{t('presets.rename_modal.name_label')}</label>
-          <input id="preset-rename" className="input" value={name} onChange={e=>setName(e.target.value)} maxLength={120} autoFocus
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(); }}/>
-        </div>
-        <div className="modal-footer">
-          <button className="btn" onClick={onCancel}>{t('common.cancel')}</button>
-          <button className="btn btn-primary" onClick={submit} disabled={!name.trim() || name.trim() === initialName}>
-            <I.IconCheck size={13}/> {t('presets.rename_modal.confirm')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ConfirmDeleteModal({ t, name, onCancel, onConfirm }) {
   const trapRef = window.AppShell?.useFocusTrap ? window.AppShell.useFocusTrap(true) : { current: null };
   React.useEffect(() => {
@@ -384,28 +315,55 @@ function ConfirmDeleteModal({ t, name, onCancel, onConfirm }) {
 //
 // We mirror the same sessionCfg shape the rest of the app uses so the saved
 // config is interchangeable with snapshot presets and with /api/session/apply.
-function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
+function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, editing }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const trapRef = window.AppShell?.useFocusTrap ? window.AppShell.useFocusTrap(open) : { current: null };
 
-  const makeDefaults = React.useCallback(() => ({
-    name: '',
-    description: '',
-    trackId: '',
-    layout: '',
-    slots: [],
-    maxClients: 24,
-    practiceEnabled: true,
-    qualifyEnabled:  true,
-    raceEnabled:     true,
-    practiceTime: 10,
-    qualifyTime:  15,
-    raceLaps:     10,
-    time:      14,
-    weather:   '3_clear',
-    airTemp:   22,
-    penalties: true,
-  }), []);
+  // When `editing` is supplied, hydrate the draft from the loaded preset so the
+  // modal opens pre-filled. Otherwise start from a sensible new-preset default.
+  // Memoised on `editing` so React.useEffect below picks up identity changes
+  // (open + editing flip together when the user clicks Edit on a card).
+  const makeDefaults = React.useCallback(() => {
+    if (editing) {
+      const c = editing.config || {};
+      return {
+        name:            editing.name || '',
+        description:     editing.description || '',
+        trackId:         c.trackId || '',
+        layout:          c.layout || '',
+        slots:           Array.isArray(c.slots) ? c.slots.map(s => ({ id: s.id, skin: s.skin || null })) : [],
+        maxClients:      c.maxClients ?? 24,
+        practiceEnabled: !!c.practiceEnabled,
+        qualifyEnabled:  !!c.qualifyEnabled,
+        raceEnabled:     !!c.raceEnabled,
+        practiceTime:    c.practiceTime ?? 10,
+        qualifyTime:     c.qualifyTime  ?? 15,
+        raceLaps:        c.raceLaps     ?? 10,
+        time:            c.time         ?? 14,
+        weather:         c.weather      || '3_clear',
+        airTemp:         c.airTemp      ?? 22,
+        penalties:       !!c.penalties,
+      };
+    }
+    return {
+      name: '',
+      description: '',
+      trackId: '',
+      layout: '',
+      slots: [],
+      maxClients: 24,
+      practiceEnabled: true,
+      qualifyEnabled:  true,
+      raceEnabled:     true,
+      practiceTime: 10,
+      qualifyTime:  15,
+      raceLaps:     10,
+      time:      14,
+      weather:   '3_clear',
+      airTemp:   22,
+      penalties: true,
+    };
+  }, [editing]);
 
   const [draft, setDraft] = React.useState(makeDefaults);
   const [busy, setBusy]   = React.useState(false);
@@ -506,9 +464,10 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
     setBusy(true);
     // Build the wire payload — drop the modal-only `name`/`description`
     // fields out of the `config` blob so they don't get round-tripped
-    // through the saved JSON.
+    // through the saved JSON. The `id` (when editing) tells the parent
+    // handler to PUT instead of POST.
     const { name: _n, description: _d, ...config } = draft;
-    Promise.resolve(onSave({ name, description: draft.description.trim(), config }))
+    Promise.resolve(onSave({ id: editing?.id, name, description: draft.description.trim(), config }))
       .then(() => { setBusy(false); onClose(); })
       .catch(() => setBusy(false));
   };
@@ -521,16 +480,18 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={t('presets.build_modal.title')}
+        aria-label={t(editing ? 'presets.build_modal.edit_title' : 'presets.build_modal.title')}
         tabIndex={-1}
         style={{ maxWidth: 760, maxHeight: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column' }}
       >
         <div className="modal-header">
           <I.IconFolder size={15}/>
-          <div className="modal-title">{t('presets.build_modal.title')}</div>
-          <button className="btn btn-sm" style={{marginLeft: 'auto'}} onClick={importFromSession} disabled={busy}>
-            <I.IconRefresh size={11}/> {t('presets.build_modal.from_session')}
-          </button>
+          <div className="modal-title">{t(editing ? 'presets.build_modal.edit_title' : 'presets.build_modal.title')}</div>
+          {!editing && (
+            <button className="btn btn-sm" style={{marginLeft: 'auto'}} onClick={importFromSession} disabled={busy}>
+              <I.IconRefresh size={11}/> {t('presets.build_modal.from_session')}
+            </button>
+          )}
         </div>
         <div className="modal-body" style={{ overflowY: 'auto', flex: 1, gap: 18 }}>
           {/* ── Name + description ─────────────────────────────────────── */}
@@ -637,8 +598,8 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
                 <div className="row" style={{gap: 10}}>
                   <input type="range" min="0" max="23" value={draft.time}
                     onChange={e => set('time', Number(e.target.value))}
-                    style={{flex: 1, accentColor: 'var(--red)'}}/>
-                  <div className="mono" style={{minWidth: 44, textAlign:'right'}}>{String(draft.time).padStart(2,'0')}:00</div>
+                    style={{flex: 1, accentColor: 'var(--red)', minWidth: 0}}/>
+                  <div className="mono" style={{minWidth: 48, textAlign:'right', fontSize: 12}}>{String(draft.time).padStart(2,'0')}:00</div>
                 </div>
               </div>
               <div className="field">
@@ -654,20 +615,23 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
                 </select>
               </div>
               <div className="field">
-                <label className="field-label">{t('sess.temp')}: {draft.airTemp}°C</label>
-                <input type="range" min="0" max="40" value={draft.airTemp}
-                  onChange={e => set('airTemp', Number(e.target.value))}
-                  style={{accentColor: 'var(--red)'}}/>
+                <label className="field-label">{t('sess.temp')}</label>
+                <div className="row" style={{gap: 10}}>
+                  <input type="range" min="0" max="40" value={draft.airTemp}
+                    onChange={e => set('airTemp', Number(e.target.value))}
+                    style={{flex: 1, accentColor: 'var(--red)', minWidth: 0}}/>
+                  <div className="mono" style={{minWidth: 48, textAlign:'right', fontSize: 12}}>{draft.airTemp}°C</div>
+                </div>
               </div>
               <div className="field">
                 <label className="field-label">{t('sess.penalties')}</label>
-                <div className="row" style={{gap: 10, alignItems:'center', minHeight: 24}}>
+                <div className="row" style={{gap: 10, alignItems:'center', minHeight: 34}}>
                   {window.AppShell?.Switch ? (
                     <window.AppShell.Switch on={draft.penalties} ariaLabel={t('sess.row.penalties') || 'Penalties'} onChange={v => set('penalties', v)}/>
                   ) : (
                     <div className={`switch ${draft.penalties ? 'on' : ''}`} onClick={() => set('penalties', !draft.penalties)}/>
                   )}
-                  <span className="muted" style={{fontSize: 12}}>{t('sess.penalties.hint')}</span>
+                  <span className="muted" style={{fontSize: 12, lineHeight: 1.35}}>{t('sess.penalties.hint')}</span>
                 </div>
               </div>
             </div>
@@ -681,9 +645,12 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
               <span className="badge right">{draft.slots.length} {t('sess.slots').toLowerCase?.() || 'slots'}</span>
             </div>
 
-            {/* Add-slot picker — inline so we don't stack a second modal */}
-            <div className="grid-2" style={{gridTemplateColumns: '2fr 1.4fr auto', gap: 8, alignItems:'end'}}>
-              <div className="field" style={{flex: 1}}>
+            {/* Add-slot picker — inline flex row so the Add button reliably
+                aligns with the bottom of the two selects regardless of label
+                wrapping, and wraps to the next line on narrow widths instead
+                of squeezing into an unreadable column. */}
+            <div style={{display:'flex', gap: 8, alignItems:'flex-end', flexWrap:'wrap'}}>
+              <div className="field" style={{flex: '2 1 220px', minWidth: 0}}>
                 <label className="field-label">{t('presets.build_modal.car_label')}</label>
                 <select className="select" value={carPicker.carId}
                   onChange={e => setCarPicker({ open: true, carId: e.target.value, skin: '' })}>
@@ -693,7 +660,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
                   ))}
                 </select>
               </div>
-              <div className="field" style={{flex: 1}}>
+              <div className="field" style={{flex: '1.4 1 160px', minWidth: 0}}>
                 <label className="field-label">{t('presets.build_modal.skin_label')}</label>
                 <select className="select" value={carPicker.skin}
                   onChange={e => setCarPicker(s => ({ ...s, skin: e.target.value }))}
@@ -704,7 +671,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
                   ))}
                 </select>
               </div>
-              <button className="btn btn-primary" onClick={addPickedSlot} disabled={!carPicker.carId} style={{height: 34}}>
+              <button className="btn btn-primary" onClick={addPickedSlot} disabled={!carPicker.carId} style={{whiteSpace:'nowrap'}}>
                 <I.IconPlus size={12}/> {t('presets.build_modal.add_slot')}
               </button>
             </div>

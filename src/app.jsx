@@ -375,7 +375,7 @@ function AppInner(props) {
   const { Sidebar, Topbar, useToast } = window.AppShell;
   const I = window.AppIcons;
   const { PageDashboard, PagePlayers, PageLogs } = window.AppPagesMonitoring;
-  const { PageCars, PageTracks, PageSession, PagePresets, SavePresetModal } = window.AppPagesContent;
+  const { PageCars, PageTracks, PageSession, PagePresets, SavePresetModal, BuildPresetModal } = window.AppPagesContent;
   const { PageConfig, PageUsers, PageProfile, PageAudit } = window.AppPagesSettings;
   const { PageTimes }                            = window.AppPagesLaptimes;
   const { PageMods }                             = window.AppPagesMods;
@@ -511,19 +511,24 @@ function AppInner(props) {
   // The "Save as preset" modal lives at the App level so both the Presets page
   // and the Session page can open it; sessionCfg is read at submit time so the
   // user always saves whatever is currently in the editor.
-  const [presetSaveOpen, setPresetSaveOpen] = React.useState(false);
+  // The "Build preset" modal is a separate, self-contained editor on the
+  // Presets page that lets the operator compose a preset from scratch without
+  // affecting the live sessionCfg.
+  const [presetSaveOpen,  setPresetSaveOpen]  = React.useState(false);
+  const [presetBuildOpen, setPresetBuildOpen] = React.useState(false);
 
-  const handleSavePreset = ({ name, description }) => {
+  // Shared persistence: the snapshot modal calls this with the current
+  // sessionCfg, the builder modal calls it with its own draft config.
+  const _postPreset = ({ name, description, config }) => {
     return fetch('/api/session-presets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description, config: sessionCfg }),
+      body: JSON.stringify({ name, description, config }),
     })
       .then(async r => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
         toast.push(t('presets.toast.created').replace('{name}', name), 'ok');
-        // Signal the Presets page so it refreshes its list without an F5.
         try { window.dispatchEvent(new Event('app:preset-saved')); } catch {}
       })
       .catch(e => {
@@ -534,6 +539,12 @@ function AppInner(props) {
         throw e;
       });
   };
+
+  const handleSavePreset = ({ name, description }) =>
+    _postPreset({ name, description, config: sessionCfg });
+
+  const handleBuildPreset = ({ name, description, config }) =>
+    _postPreset({ name, description, config });
 
   // Drop a preset's saved config into the live sessionCfg state and navigate
   // to the Session page. We spread the preset over the existing sessionCfg so
@@ -683,7 +694,7 @@ function AppInner(props) {
   else if (page === 'cars')      content = <PageCars cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} carsLoaded={dataLoaded.cars} isAdmin={isAdmin} onDelete={handleDeleteCar}/>;
   else if (page === 'tracks')    content = <PageTracks tracks={tracks} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} tracksLoaded={dataLoaded.tracks} isAdmin={isAdmin} onDelete={handleDeleteTrack}/>;
   else if (page === 'mods')      content = <PageMods isAdmin={isAdmin} canUpload={can('modUpload')} refreshContent={refreshContent}/>;
-  else if (page === 'presets')   content = <PagePresets tracks={tracks} sessionCfg={sessionCfg} canEdit={can('serverConfig')} onAskSaveAs={() => setPresetSaveOpen(true)} onLoadPreset={handleLoadPreset}/>;
+  else if (page === 'presets')   content = <PagePresets tracks={tracks} canEdit={can('serverConfig')} onAskBuild={() => setPresetBuildOpen(true)} onLoadPreset={handleLoadPreset}/>;
   else if (page === 'session')   content = <PageSession tracks={tracks} cars={cars} sessionCfg={sessionCfg} setSessionCfg={setSessionCfg} isAdmin={isAdmin} canEdit={can('sessionEdit')} canSavePreset={can('serverConfig')} onApply={handleApplySession} onAskSaveAsPreset={() => setPresetSaveOpen(true)}/>;
   else if (page === 'config')    content = <PageConfig config={config} setConfig={setConfig} isAdmin={isAdmin} perms={perms} canEdit={can('serverConfig')} onSave={handleSaveConfig}/>;
   else if (page === 'users')     content = <PageUsers users={users} setUsers={setUsers} isAdmin={isAdmin}/>;
@@ -760,6 +771,16 @@ function AppInner(props) {
             open={presetSaveOpen}
             onClose={() => setPresetSaveOpen(false)}
             onSave={handleSavePreset}
+          />
+        )}
+        {BuildPresetModal && (
+          <BuildPresetModal
+            open={presetBuildOpen}
+            onClose={() => setPresetBuildOpen(false)}
+            onSave={handleBuildPreset}
+            tracks={tracks}
+            cars={cars}
+            sessionCfg={sessionCfg}
           />
         )}
       </div>

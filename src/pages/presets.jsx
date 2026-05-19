@@ -42,7 +42,7 @@ function _trackLabel(tracks, summary) {
   return `${trackName} — ${layoutShort}`;
 }
 
-function PagePresets({ tracks, sessionCfg, canEdit, onAskSaveAs, onLoadPreset }) {
+function PagePresets({ tracks, canEdit, onAskBuild, onLoadPreset }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
   const [presets, setPresets] = React.useState([]);
@@ -139,7 +139,7 @@ function PagePresets({ tracks, sessionCfg, canEdit, onAskSaveAs, onLoadPreset })
             <I.IconRefresh size={13}/> {t('presets.refresh')}
           </button>
           {canEdit && (
-            <button className="btn btn-primary" onClick={onAskSaveAs} style={{whiteSpace:'nowrap'}}>
+            <button className="btn btn-primary" onClick={onAskBuild} style={{whiteSpace:'nowrap'}}>
               <I.IconPlus size={14}/> {t('presets.new')}
             </button>
           )}
@@ -376,6 +376,387 @@ function ConfirmDeleteModal({ t, name, onCancel, onConfirm }) {
   );
 }
 
+// Custom preset builder. Unlike SavePresetModal (which snapshots the current
+// sessionCfg from the Session page), this modal lets the operator compose a
+// preset from scratch: pick track + layout, build the grid by adding cars and
+// optional skins one slot at a time, toggle each session with its duration,
+// and pick weather/time/penalties — all without touching the live session.
+//
+// We mirror the same sessionCfg shape the rest of the app uses so the saved
+// config is interchangeable with snapshot presets and with /api/session/apply.
+function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
+  const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+  const trapRef = window.AppShell?.useFocusTrap ? window.AppShell.useFocusTrap(open) : { current: null };
+
+  const makeDefaults = React.useCallback(() => ({
+    name: '',
+    description: '',
+    trackId: '',
+    layout: '',
+    slots: [],
+    maxClients: 24,
+    practiceEnabled: true,
+    qualifyEnabled:  true,
+    raceEnabled:     true,
+    practiceTime: 10,
+    qualifyTime:  15,
+    raceLaps:     10,
+    time:      14,
+    weather:   '3_clear',
+    airTemp:   22,
+    penalties: true,
+  }), []);
+
+  const [draft, setDraft] = React.useState(makeDefaults);
+  const [busy, setBusy]   = React.useState(false);
+  const [carPicker, setCarPicker] = React.useState({ open: false, carId: '', skin: '' });
+
+  React.useEffect(() => {
+    if (open) { setDraft(makeDefaults()); setBusy(false); setCarPicker({ open: false, carId: '', skin: '' }); }
+  }, [open, makeDefaults]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, busy, onClose]);
+
+  if (!open) return null;
+
+  const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+  const anyEnabled = draft.practiceEnabled || draft.qualifyEnabled || draft.raceEnabled;
+
+  // Resolve the currently picked track so the layout dropdown can list its
+  // variants. Falls back to a stub when the trackId points at content that
+  // is no longer installed (preserves the id without crashing the modal).
+  const track = tracks.find(tr => tr.id === draft.trackId);
+
+  // Picker car (the one currently selected in the "Add slot" widget).
+  const pickerCar = cars.find(c => c.id === carPicker.carId);
+  const pickerSkins = pickerCar?.skins || [];
+
+  // Copies the current sessionCfg into the draft so the operator can start
+  // from "what's loaded in the editor" and tweak instead of from zero.
+  const importFromSession = () => {
+    if (!sessionCfg) return;
+    setDraft(d => ({
+      ...d,
+      trackId:         sessionCfg.trackId || '',
+      layout:          sessionCfg.layout || '',
+      slots:           Array.isArray(sessionCfg.slots) ? sessionCfg.slots.map(s => ({ id: s.id, skin: s.skin || null })) : [],
+      maxClients:      sessionCfg.maxClients ?? d.maxClients,
+      practiceEnabled: !!sessionCfg.practiceEnabled,
+      qualifyEnabled:  !!sessionCfg.qualifyEnabled,
+      raceEnabled:     !!sessionCfg.raceEnabled,
+      practiceTime:    sessionCfg.practiceTime ?? d.practiceTime,
+      qualifyTime:     sessionCfg.qualifyTime  ?? d.qualifyTime,
+      raceLaps:        sessionCfg.raceLaps     ?? d.raceLaps,
+      time:            sessionCfg.time         ?? d.time,
+      weather:         sessionCfg.weather      || d.weather,
+      airTemp:         sessionCfg.airTemp      ?? d.airTemp,
+      penalties:       !!sessionCfg.penalties,
+    }));
+  };
+
+  const onTrackChange = (newId) => {
+    const tr = tracks.find(x => x.id === newId);
+    // Reset the layout to the new track's first option — the previous value
+    // is meaningless under a different circuit and would otherwise leave the
+    // layout select showing a stale id.
+    const firstLayout = tr?.layouts?.[0] || '';
+    setDraft(d => ({ ...d, trackId: newId, layout: firstLayout }));
+  };
+
+  const addPickedSlot = () => {
+    if (!carPicker.carId) return;
+    setDraft(d => ({ ...d, slots: [...d.slots, { id: carPicker.carId, skin: carPicker.skin || null }] }));
+    // Keep the picker open so adding several copies of the same car (or
+    // different skins of the same car) only takes one click per slot.
+  };
+
+  const removeSlot = (idx) => setDraft(d => ({ ...d, slots: d.slots.filter((_, i) => i !== idx) }));
+  const clearSlots = ()    => setDraft(d => ({ ...d, slots: [] }));
+
+  const sessionRows = [
+    { key: 'Practice', flag: 'practiceEnabled', value: 'practiceTime', unit: 'min',  label: t('sess.row.practice') },
+    { key: 'Qualify',  flag: 'qualifyEnabled',  value: 'qualifyTime',  unit: 'min',  label: t('sess.row.qualify')  },
+    { key: 'Race',     flag: 'raceEnabled',     value: 'raceLaps',     unit: 'laps', label: t('sess.row.race')     },
+  ];
+
+  const submit = () => {
+    const name = draft.name.trim();
+    if (!name || busy) return;
+    if (!anyEnabled) return;
+    setBusy(true);
+    // Build the wire payload — drop the modal-only `name`/`description`
+    // fields out of the `config` blob so they don't get round-tripped
+    // through the saved JSON.
+    const { name: _n, description: _d, ...config } = draft;
+    Promise.resolve(onSave({ name, description: draft.description.trim(), config }))
+      .then(() => { setBusy(false); onClose(); })
+      .catch(() => setBusy(false));
+  };
+
+  // Sort cars alphabetically for the picker — `cars` from /api/cars comes in
+  // filesystem order which is not great for "I'm looking for X".
+  const sortedCars = React.useMemo(
+    () => [...cars].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
+    [cars]
+  );
+  const sortedTracks = React.useMemo(
+    () => [...tracks].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
+    [tracks]
+  );
+
+  return (
+    <div className="modal-backdrop" onClick={busy ? null : onClose} role="presentation">
+      <div
+        ref={trapRef}
+        className="modal"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('presets.build_modal.title')}
+        tabIndex={-1}
+        style={{ maxWidth: 760, maxHeight: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column' }}
+      >
+        <div className="modal-header">
+          <I.IconFolder size={15}/>
+          <div className="modal-title">{t('presets.build_modal.title')}</div>
+          <button className="btn btn-sm" style={{marginLeft: 'auto'}} onClick={importFromSession} disabled={busy}>
+            <I.IconRefresh size={11}/> {t('presets.build_modal.from_session')}
+          </button>
+        </div>
+        <div className="modal-body" style={{ overflowY: 'auto', flex: 1, gap: 18 }}>
+          {/* ── Name + description ─────────────────────────────────────── */}
+          <div className="grid-2" style={{gridTemplateColumns: '1fr 1.4fr'}}>
+            <div className="field">
+              <label className="field-label" htmlFor="bp-name">{t('presets.save_modal.name_label')}</label>
+              <input id="bp-name" className="input" autoFocus value={draft.name} maxLength={120}
+                onChange={e => set('name', e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(); }}/>
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="bp-desc">{t('presets.save_modal.desc_label')}</label>
+              <input id="bp-desc" className="input" value={draft.description} maxLength={500}
+                onChange={e => set('description', e.target.value)}/>
+            </div>
+          </div>
+
+          {/* ── Track + layout ─────────────────────────────────────────── */}
+          <div className="card" style={{padding: 14}}>
+            <div className="row" style={{marginBottom: 10}}>
+              <I.IconCircuit size={13} style={{color:'var(--red)'}}/>
+              <div className="card-title">{t('presets.build_modal.track_section')}</div>
+            </div>
+            <div className="grid-2">
+              <div className="field">
+                <label className="field-label">{t('presets.build_modal.track_label')}</label>
+                <select className="select" value={draft.trackId} onChange={e => onTrackChange(e.target.value)}>
+                  <option value="">{t('presets.build_modal.no_track_option')}</option>
+                  {sortedTracks.map(tr => (
+                    <option key={tr.id} value={tr.id}>{tr.name || tr.id}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label">{t('presets.build_modal.layout_label')}</label>
+                <select className="select" value={draft.layout} onChange={e => set('layout', e.target.value)} disabled={!track}>
+                  {track && track.layouts.length > 0
+                    ? track.layouts.map(l => (
+                      <option key={l} value={l}>
+                        {(window.AppUtils?.layoutShortName?.(track, l)) || track.layoutDetails?.[l]?.name || l || 'Default'}
+                      </option>
+                    ))
+                    : <option value="">—</option>
+                  }
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Sessions ───────────────────────────────────────────────── */}
+          <div className="card" style={{padding: 14}}>
+            <div className="row" style={{marginBottom: 10}}>
+              <I.IconFlag size={13} style={{color:'var(--red)'}}/>
+              <div className="card-title">{t('presets.build_modal.sessions_section')}</div>
+            </div>
+            <div className="col" style={{gap: 10}}>
+              {sessionRows.map(row => {
+                const enabled = !!draft[row.flag];
+                return (
+                  <div key={row.key} className="row" style={{gap: 12, alignItems:'center'}}>
+                    {window.AppShell?.Switch ? (
+                      <window.AppShell.Switch on={enabled} ariaLabel={row.label} onChange={v => set(row.flag, v)}/>
+                    ) : (
+                      <div className={`switch ${enabled ? 'on' : ''}`} onClick={() => set(row.flag, !enabled)}/>
+                    )}
+                    <div style={{flex: 1, fontSize: 13, fontWeight: 500, opacity: enabled ? 1 : 0.5}}>{row.label}</div>
+                    <input className="input" type="number" min="1" max="9999" style={{width: 90, opacity: enabled ? 1 : 0.5}}
+                      value={draft[row.value] ?? 0}
+                      onChange={e => {
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n)) set(row.value, Math.max(1, Math.min(9999, Math.round(n))));
+                      }}
+                      disabled={!enabled}/>
+                    <div className="muted" style={{fontSize: 11, width: 36, opacity: enabled ? 1 : 0.5}}>
+                      {row.unit === 'laps' ? t('sess.unit.laps') : t('sess.unit.min')}
+                    </div>
+                  </div>
+                );
+              })}
+              {!anyEnabled && (
+                <div className="muted" style={{fontSize: 11.5, color:'var(--red)'}}>{t('sess.no_session_enabled')}</div>
+              )}
+              <div className="field" style={{marginTop: 4}}>
+                <label className="field-label">{t('sess.slots')}</label>
+                <input className="input" type="number" min="2" max="64" style={{maxWidth: 120}}
+                  value={draft.maxClients}
+                  onChange={e => {
+                    const n = Number(e.target.value);
+                    if (Number.isFinite(n)) set('maxClients', Math.max(2, Math.min(64, Math.round(n))));
+                  }}/>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Conditions ─────────────────────────────────────────────── */}
+          <div className="card" style={{padding: 14}}>
+            <div className="row" style={{marginBottom: 10}}>
+              <I.IconCloud size={13} style={{color:'var(--red)'}}/>
+              <div className="card-title">{t('presets.build_modal.cond_section')}</div>
+            </div>
+            <div className="grid-2">
+              <div className="field">
+                <label className="field-label">{t('sess.time')}</label>
+                <div className="row" style={{gap: 10}}>
+                  <input type="range" min="0" max="23" value={draft.time}
+                    onChange={e => set('time', Number(e.target.value))}
+                    style={{flex: 1, accentColor: 'var(--red)'}}/>
+                  <div className="mono" style={{minWidth: 44, textAlign:'right'}}>{String(draft.time).padStart(2,'0')}:00</div>
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">{t('sess.weather')}</label>
+                <select className="select" value={draft.weather} onChange={e => set('weather', e.target.value)}>
+                  <option value="3_clear">{t('sess.weather.clear')}</option>
+                  <option value="4_mid_clear">{t('sess.weather.mid_clear')}</option>
+                  <option value="5_light_clouds">{t('sess.weather.light_clouds')}</option>
+                  <option value="6_mid_clouds">{t('sess.weather.mid_clouds')}</option>
+                  <option value="7_heavy_clouds">{t('sess.weather.heavy_clouds')}</option>
+                  <option value="2_light_fog">{t('sess.weather.light_fog')}</option>
+                  <option value="1_heavy_fog">{t('sess.weather.heavy_fog')}</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label">{t('sess.temp')}: {draft.airTemp}°C</label>
+                <input type="range" min="0" max="40" value={draft.airTemp}
+                  onChange={e => set('airTemp', Number(e.target.value))}
+                  style={{accentColor: 'var(--red)'}}/>
+              </div>
+              <div className="field">
+                <label className="field-label">{t('sess.penalties')}</label>
+                <div className="row" style={{gap: 10, alignItems:'center', minHeight: 24}}>
+                  {window.AppShell?.Switch ? (
+                    <window.AppShell.Switch on={draft.penalties} ariaLabel={t('sess.row.penalties') || 'Penalties'} onChange={v => set('penalties', v)}/>
+                  ) : (
+                    <div className={`switch ${draft.penalties ? 'on' : ''}`} onClick={() => set('penalties', !draft.penalties)}/>
+                  )}
+                  <span className="muted" style={{fontSize: 12}}>{t('sess.penalties.hint')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Cars (slots) ───────────────────────────────────────────── */}
+          <div className="card" style={{padding: 14}}>
+            <div className="row" style={{marginBottom: 10, alignItems:'center'}}>
+              <I.IconCar size={13} style={{color:'var(--red)'}}/>
+              <div className="card-title">{t('presets.build_modal.cars_section')}</div>
+              <span className="badge right">{draft.slots.length} {t('sess.slots').toLowerCase?.() || 'slots'}</span>
+            </div>
+
+            {/* Add-slot picker — inline so we don't stack a second modal */}
+            <div className="grid-2" style={{gridTemplateColumns: '2fr 1.4fr auto', gap: 8, alignItems:'end'}}>
+              <div className="field" style={{flex: 1}}>
+                <label className="field-label">{t('presets.build_modal.car_label')}</label>
+                <select className="select" value={carPicker.carId}
+                  onChange={e => setCarPicker({ open: true, carId: e.target.value, skin: '' })}>
+                  <option value="">{t('presets.build_modal.pick_car')}</option>
+                  {sortedCars.map(c => (
+                    <option key={c.id} value={c.id}>{c.brand ? `${c.brand} · ${c.name}` : c.name || c.id}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field" style={{flex: 1}}>
+                <label className="field-label">{t('presets.build_modal.skin_label')}</label>
+                <select className="select" value={carPicker.skin}
+                  onChange={e => setCarPicker(s => ({ ...s, skin: e.target.value }))}
+                  disabled={!pickerCar || pickerSkins.length === 0}>
+                  <option value="">{t('presets.build_modal.any_skin')}</option>
+                  {pickerSkins.map(sk => (
+                    <option key={sk} value={sk}>{sk}</option>
+                  ))}
+                </select>
+              </div>
+              <button className="btn btn-primary" onClick={addPickedSlot} disabled={!carPicker.carId} style={{height: 34}}>
+                <I.IconPlus size={12}/> {t('presets.build_modal.add_slot')}
+              </button>
+            </div>
+
+            {draft.slots.length > 0 && (
+              <>
+                <div className="row" style={{justifyContent:'flex-end', marginTop: 10}}>
+                  <button className="btn btn-sm" onClick={clearSlots}>
+                    <I.IconX size={11}/> {t('cars.btn_clear')}
+                  </button>
+                </div>
+                <div style={{
+                  marginTop: 8, maxHeight: 200, overflowY: 'auto',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                }}>
+                  {draft.slots.map((slot, idx) => {
+                    const c = cars.find(x => x.id === slot.id) || { id: slot.id, name: slot.id, brand: '' };
+                    return (
+                      <div key={idx} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)'}}>
+                        <div className="muted mono" style={{fontSize: 10, width: 22, textAlign:'right', flexShrink:0}}>{idx + 1}</div>
+                        <div style={{flex: 1, minWidth: 0}}>
+                          <div style={{fontSize: 12.5, fontWeight: 500, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{c.name || c.id}</div>
+                          <div className="muted" style={{fontSize: 11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            {slot.skin
+                              ? <>{c.brand} · <span style={{color:'var(--text)'}}>{t('sess.skin')}: {slot.skin}</span></>
+                              : c.brand}
+                          </div>
+                        </div>
+                        <button className="icon-btn" style={{width: 24, height: 24}}
+                          onClick={() => removeSlot(idx)}
+                          title={t('common.delete')}>
+                          <I.IconX size={12}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {draft.slots.length === 0 && (
+              <div className="muted" style={{fontSize: 12, marginTop: 10}}>{t('presets.build_modal.no_cars_hint')}</div>
+            )}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={submit} disabled={!draft.name.trim() || !anyEnabled || busy}>
+            <I.IconCheck size={13}/> {t('presets.save_modal.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 window.AppPagesContent = window.AppPagesContent || {};
 window.AppPagesContent.PagePresets       = PagePresets;
 window.AppPagesContent.SavePresetModal   = SavePresetModal;
+window.AppPagesContent.BuildPresetModal  = BuildPresetModal;

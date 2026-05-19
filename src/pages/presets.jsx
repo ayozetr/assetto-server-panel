@@ -50,19 +50,30 @@ function PagePresets({ tracks, sessionCfg, canEdit, onAskSaveAs, onLoadPreset })
   const [renameTarget, setRenameTarget] = React.useState(null); // { id, name }
   const [deleteTarget, setDeleteTarget] = React.useState(null); // { id, name }
 
+  // Stable refs for `t` and `toast`. The originals are rebound on every render
+  // (`AppI18n.t.bind(...)` returns a new function ref every time and useToast
+  // returns a fresh context value), so putting them in a useCallback dep array
+  // means refresh() identity flips each render — and any useEffect that depends
+  // on refresh() ends up firing in a tight loop ("loading…" never settles).
+  // Capturing them via refs lets `refresh` keep an empty dep array.
+  const tRef     = React.useRef(t);
+  const toastRef = React.useRef(toast);
+  tRef.current   = t;
+  toastRef.current = toast;
+
   const refresh = React.useCallback(() => {
     setLoading(true);
     fetch('/api/session-presets')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(rows => setPresets(Array.isArray(rows) ? rows : []))
-      .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'))
+      .catch(e => toastRef.current.push(`${tRef.current('common.error')}: ${e.message}`, 'error'))
       .finally(() => setLoading(false));
-  }, [toast, t]);
+  }, []);
 
+  // Mount-only fetch — manual refresh from now on (the button below) plus the
+  // window event fired by App.jsx after a successful save modal POST.
   React.useEffect(() => { refresh(); }, [refresh]);
 
-  // Listen for global "preset saved" event fired from App.jsx after a successful
-  // save modal POST, so the list refreshes without the user having to F5.
   React.useEffect(() => {
     const onSaved = () => refresh();
     window.addEventListener('app:preset-saved', onSaved);
@@ -123,11 +134,16 @@ function PagePresets({ tracks, sessionCfg, canEdit, onAskSaveAs, onLoadPreset })
           <h1 style={{margin: 0}}><I.IconFolder size={18}/> {t('presets.title')}</h1>
           <p className="page-sub" style={{margin: '6px 0 0', maxWidth: 720}}>{t('presets.sub')}</p>
         </div>
-        {canEdit && (
-          <button className="btn btn-primary" onClick={onAskSaveAs} style={{whiteSpace:'nowrap'}}>
-            <I.IconPlus size={14}/> {t('presets.new')}
+        <div style={{display:'flex', gap: 8, flexWrap:'wrap'}}>
+          <button className="btn" onClick={refresh} disabled={loading} title={t('presets.refresh')} aria-label={t('presets.refresh')} style={{whiteSpace:'nowrap'}}>
+            <I.IconRefresh size={13}/> {t('presets.refresh')}
           </button>
-        )}
+          {canEdit && (
+            <button className="btn btn-primary" onClick={onAskSaveAs} style={{whiteSpace:'nowrap'}}>
+              <I.IconPlus size={14}/> {t('presets.new')}
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (

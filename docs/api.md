@@ -575,6 +575,105 @@ Serve a per-layout track preview image.
 
 ---
 
+### `GET /api/content/tracks/:id/map`
+Serve the top-down `map.png` for a track, used by the Dashboard's live position minimap. Resolves per-layout first (`tracks/<id>/<layout>/map.png`), falls back to the track root (`tracks/<id>/map.png`), then to the bundled Kunos asset under `data/kunos-assets/tracks/<id>/`.
+
+**Auth required:** yes
+
+**Query parameters:**
+
+| name | type | required | notes |
+|---|---|:-:|---|
+| `layout` | string | no | Layout slug (`gp_a`, `national`, …). Omitted for single-layout tracks. Must satisfy `isValidContentId` or the request is rejected with `400 Invalid layout`. |
+
+**Responses:**
+
+- `200 OK` with `Content-Type: image/png` and `Cache-Control: public, max-age=86400, immutable`. The body is the raw PNG.
+- `400 Bad Request` — text body `Invalid ID` or `Invalid layout` when either fails the content-id charset check.
+- `404 Not Found` — text body `No map.png for this track/layout` when no `map.png` exists at any of the three candidate paths. The Dashboard widget falls back to a "live map not available for this layout" placeholder instead of breaking.
+
+---
+
+### `GET /api/content/tracks/:id/map-meta`
+Return the parsed `data/map.ini` calibration for a track layout — the same `[PARAMETERS]` block Content Manager and CSP use to project world coordinates onto the `map.png`. The Dashboard minimap fetches this once per layout change and caches it in component state.
+
+**Auth required:** yes
+
+**Query parameters:** same `layout` semantics as `/map` above.
+
+**Response (`200 OK`):**
+
+```json
+{
+  "width":         1600,
+  "height":        1200,
+  "xOffset":       457.32,
+  "zOffset":       302.18,
+  "scaleFactor":   1.0,
+  "margin":        20,
+  "drawingSize":   10
+}
+```
+
+| key | source INI line | fallback |
+|---|---|---|
+| `width`       | `WIDTH`        | `0` |
+| `height`      | `HEIGHT`       | `0` |
+| `xOffset`     | `X_OFFSET`     | `0` |
+| `zOffset`     | `Z_OFFSET`     | `0` |
+| `scaleFactor` | `SCALE_FACTOR` | `1` |
+| `margin`      | `MARGIN`       | `0` |
+| `drawingSize` | `DRAWING_SIZE` | `10` |
+
+The world→pixel formula is `px = (worldX + xOffset) * scaleFactor`, `py = (worldZ + zOffset) * scaleFactor`, then add `margin`. The result is cached process-wide in `_trackMapMetaCache` keyed by `<trackId>|<layout>`.
+
+**Errors:**
+
+- `400 Bad Request` `{ "error": "Invalid ID" }` / `{ "error": "Invalid layout" }`.
+- `404 Not Found` `{ "error": "No map.ini for this track/layout" }` when no `data/map.ini` exists for the layout (or its track-root / Kunos fallbacks).
+
+---
+
+### `GET /api/positions/stream`
+Server-Sent Events feed of every connected car's world position at ~4 Hz (`POSITION_BROADCAST_INTERVAL_MS = 250`). The Dashboard's `LiveMapCard` subscribes and renders one absolute-positioned dot per car on top of `/api/content/tracks/:id/map`.
+
+**Auth required:** yes
+
+**Per-user concurrency cap:** same 6-stream limit as `/api/logs/stream` — the 7th returns `429 { error: "Too many concurrent streams for this user — close other tabs and retry" }`.
+
+The underlying data comes from acServer's UDP plugin: each `apiPositionsStream` connection re-sends `ACSP.REALTIMEPOS_INTERVAL` (event 200, 100 ms) to acServer (idempotent — covers the case where the panel started before acServer, or acServer was restarted while no subscriber was open), and the latest `CAR_UPDATE` (event 53) per car is cached on `udpState.cars[carId].pos`. The 4 Hz emit timer is **ref-counted on the subscriber set** — it stops itself on the first tick where the set is empty, so an idle Dashboard tab does not drain CPU.
+
+The first frame is pushed immediately on connect so the minimap doesn't have to wait up to 250 ms for its initial render. There is no separate `init` event — every frame is a default `message`-event SSE chunk in the same shape:
+
+```
+data: {
+  "ts": 1747663200250,
+  "positions": [
+    { "id": 0, "name": "Driver 1", "car": "ks_toyota_ae86", "x": 142.7, "z": -83.4, "velKmh": 84, "splinePos": 0.412 },
+    { "id": 1, "name": "Driver 2", "car": "ks_toyota_ae86", "x": 156.1, "z": -71.9, "velKmh": 91, "splinePos": 0.398 }
+  ]
+}
+```
+
+Fields:
+
+| name | type | notes |
+|---|---|---|
+| `ts`                  | number | Server clock in ms — the moment this frame was assembled, not when each car reported. |
+| `positions[].id`      | number | `carId`: slot index in `entry_list.ini`. Same value the rest of the panel uses to key live drivers. |
+| `positions[].name`    | string | Driver display name as currently held by the slot. Kept in sync with `udpState.cars[id].name`. |
+| `positions[].car`     | string | Car model ID (`ks_toyota_ae86`, etc.). Lets the client render different dot colours / icons per car. |
+| `positions[].x`       | number | World X in metres. Project with `map-meta`'s `xOffset` + `scaleFactor` to land on the PNG. |
+| `positions[].z`       | number | World Z in metres. Pair with `zOffset` / `scaleFactor`. |
+| `positions[].velKmh`  | number | Speed rounded to integer km/h. Surface as a tooltip / a "fast = bright" colour ramp. |
+| `positions[].splinePos` | number | Position along the track spline in `[0, 1]`. Useful for ordering or sector colouring without a 2D layout. |
+
+Slots with no `CAR_UPDATE` received yet (driver connected but stationary on the pit, or just joined) are **skipped** rather than emitted with zeroed coordinates — the dot only appears once a real position has been seen.
+
+A keep-alive heartbeat (`: ping\n\n`) is written every 25 s so Cloudflare / reverse-proxies don't drop the long-lived connection mid-session.
+
+---
+
 ## Mod upload
 
 ### `POST /api/mods/upload`

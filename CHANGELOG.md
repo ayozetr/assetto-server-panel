@@ -8,11 +8,17 @@ The dates are in `YYYY-MM-DD`. Commits referenced as `[abc1234]` link to the
 authoritative diff — the changelog entry is a hand-curated summary of *why*
 the change matters; the commit log is the source of truth for *what* changed.
 
-## [Unreleased]
+## [1.6.0] — 2026-05-19
+
+The Dashboard finally answers the "where are they on the track right now?"
+question — a live minimap with a dot per car, driven by the UDP position
+stream. The release also fixes a long-standing operational paper-cut: every
+`systemctl restart assetto-dashboard` used to kick `acServer` along with the
+panel, dropping connected drivers mid-session. Panel restarts are now
+transparent to players.
 
 ### Added
 
-<!-- Live position telemetry kept under [Unreleased] for v1.6.0. -->
 - **Live position telemetry on the Dashboard.** New widget renders the
   current track's `map.png` as a top-down minimap with one absolute-positioned
   dot per connected car, animated at ~4Hz from a new
@@ -30,13 +36,35 @@ the change matters; the commit log is the source of truth for *what* changed.
   INI as JSON. Helpers `_trackMapPngPath` / `_trackMapIniPath` resolve the
   per-layout vs root-of-track file conventions and fall back to the bundled
   Kunos assets directory. Graceful degradation: layouts without map data
-  (3 tracks at audit time — Red Bull Ring, Magione, Trento-Bondone, since
-  recovered) show a "live map not available for this layout" placeholder
-  instead of breaking the dashboard. Widget only mounts when the server is
-  running AND ≥1 player is connected AND the active track resolves to a
-  catalogue entry — the rest of the time the card is hidden, so the
-  Dashboard stays compact on an idle server. i18n keys
-  `dash.live_map` / `_unavailable` / `_waiting` in en/es/it.
+  show a "live map not available for this layout" placeholder instead of
+  breaking the dashboard. The widget only mounts when the server is running
+  AND ≥1 player is connected AND the active track resolves to a catalogue
+  entry — the rest of the time the card is hidden, so the Dashboard stays
+  compact on an idle server. New i18n keys `dash.live_map`,
+  `dash.live_map_unavailable`, `dash.live_map_waiting` in en/es/it.
+
+### Fixed
+
+- **`acServer` no longer dies when the panel is restarted.** Previously
+  `systemctl restart assetto-dashboard` killed `acServer` along with the
+  panel — two reasons: (1) the child shared the panel's POSIX session, so
+  the panel's exit propagated `SIGHUP` to it via the session-leader rules,
+  and (2) `acServer`'s stdout/stderr were piped into the panel, so node
+  closing those pipes on exit gave the child `SIGPIPE` on its next write
+  regardless. Both are now addressed: `spawnAC()` passes `detached: true`
+  to `spawn()` (which calls `setsid(2)`, putting `acServer` in its own
+  session + process group), and its `stdio` is now `['ignore', fd, fd]`
+  with `fd` a write-append handle on `AC_LOG_FILE` that the panel closes
+  immediately after the spawn — `acServer` keeps a dup'd copy and writes
+  straight to disk, no node-held pipe in the middle. The panel re-attaches
+  to log output by tailing `AC_LOG_FILE` with `fs.watch` + a 2 s safety-net
+  poll (`startLogTail()`); the existing `/api/logs/stream` SSE channel is
+  unchanged. The existing `findACPid()` adoption path picks the orphaned
+  `acServer` back up on the new panel boot, so connected drivers see no
+  disconnect across a `git pull && systemctl restart` deploy. Heads-up: the
+  first restart that lands this fix still kicks players one last time —
+  the running panel was spawned with the old (pipe-based) code; the
+  detached spawn only takes effect from the next start onwards.
 
 ## [1.5.1] — 2026-05-19
 

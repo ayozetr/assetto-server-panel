@@ -64,7 +64,7 @@ admin panel; its scope is narrower than ACSM.
 | Multi-server (manage several acServer instances) | ❌ | ✅ | ❌ |
 | Race events / championships with standings | ❌ | ✅ | ❌ |
 | Public player profile pages | ✅ | ✅ | ✅ |
-| Live position telemetry on a track map | ❌ | partial | ❌ |
+| Live position telemetry on a track map | ✅ | partial | ❌ |
 | ELO / Glicko rating per driver | ❌ | ❌ | ❌ |
 | Stints heatmap (consistency over a session) | ❌ | ❌ | partial |
 | Strava-like driver statistics page | ❌ | ✅ | partial |
@@ -102,7 +102,6 @@ estimate: **S** ≤ 1 day · **M** 1-3 days · **L** 3-7 days · **XL** weeks.
 | Feature | Effort | Notes |
 |---|:-:|---|
 | ELO / Glicko / TrueSkill rating | L | Needs proper race-result parsing (the panel records laps, not finishing positions). Worth pairing with #2 (championships) — same data dependency. |
-| Live position telemetry on a track-map SVG | XL | Visually impressive but needs per-track SVG geometry + UDP position-update consumer. ACSM does it partially via integration; nobody else has it cleanly. |
 | Replay viewer integrated in the panel | XL | AC server doesn't record replays itself — would need a per-driver upload flow and a streaming player. Big infra change. |
 | Email password recovery (SMTP) | M | The README currently says "edit `assetto.db` with SQL if you lock yourself out". A self-service flow with `nodemailer` would be friendlier. Needs SMTP config in `.env`. |
 | API keys for external integrations | M | Token-based read-only access to `/api/results`, `/api/players/history`, etc. so a Discord bot or a Twitch overlay can pull data without sharing a session cookie. |
@@ -140,6 +139,24 @@ swap them all in one focused release.
 
 Everything in this list is shipped in a tagged release and verified in
 production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
+
+### [1.6.0] — 2026-05-19
+
+- **Live position telemetry on the Dashboard** — top-down minimap of the
+  current track with one dot per connected car at ~4 Hz, driven by a new
+  `/api/positions/stream` SSE channel. Built on top of the existing UDP
+  plugin (`CAR_UPDATE` event 53, with a `REALTIMEPOS_INTERVAL` subscribe
+  on boot) and the per-layout `data/map.ini` projection so the dots line
+  up with what drivers actually see in-game. Card is hidden on an idle
+  server; the SSE timer is ref-counted on subscribers so an empty
+  Dashboard tab doesn't burn CPU. Closes the comparison-vs-ACSM row that
+  was ❌ since launch.
+- **`acServer` survives a panel restart.** `spawnAC()` now uses
+  `detached: true` + file-FD stdio (writing straight to `AC_LOG_FILE`,
+  no node-held pipes), and the panel re-reads its output by tailing the
+  file. `systemctl restart assetto-dashboard` no longer drops connected
+  drivers — the existing `findACPid()` adoption picks the orphaned
+  process back up on the new panel boot.
 
 ### [1.5.1] — 2026-05-19
 

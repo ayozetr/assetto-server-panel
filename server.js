@@ -178,6 +178,53 @@ function loadLogFileIntoBuffer() {
   } catch {}
 }
 
+// Tail AC_LOG_FILE for new lines and push them to appendLog. acServer now
+// writes its stdout/stderr directly to the file via a passed-in FD (so it
+// survives a panel restart without dying of SIGPIPE on broken pipes); the
+// panel reads them back via inotify + delta-read. Polling fallback covers
+// edge cases where fs.watch misses events (e.g. log file truncated by the
+// "Clear logs" admin action, or replaced under us by a rotator).
+let _logTailPos     = 0;
+let _logTailWatcher = null;
+let _logTailBuffer  = '';
+function startLogTail() {
+  if (_logTailWatcher) return;
+  try { _logTailPos = fs.statSync(AC_LOG_FILE).size; } catch { _logTailPos = 0; }
+
+  const LINE_BUF_MAX = 8 * 1024;
+  const flush = () => {
+    let size;
+    try { size = fs.statSync(AC_LOG_FILE).size; } catch { return; }
+    if (size < _logTailPos) _logTailPos = 0;       // truncated or rotated
+    if (size === _logTailPos) return;
+    const len = size - _logTailPos;
+    let fd;
+    try { fd = fs.openSync(AC_LOG_FILE, 'r'); } catch { return; }
+    const buf = Buffer.alloc(len);
+    try { fs.readSync(fd, buf, 0, len, _logTailPos); }
+    finally { try { fs.closeSync(fd); } catch {} }
+    _logTailPos = size;
+    _logTailBuffer += buf.toString('utf8');
+    const parts = _logTailBuffer.split('\n');
+    _logTailBuffer = parts.pop();
+    for (const line of parts) appendLog(line);
+    if (_logTailBuffer.length > LINE_BUF_MAX) {
+      appendLog(_logTailBuffer.slice(0, LINE_BUF_MAX) + ' …(truncated)');
+      _logTailBuffer = '';
+    }
+  };
+
+  try { _logTailWatcher = fs.watch(AC_LOG_FILE, { persistent: false }, flush); }
+  catch (e) { log.warn('[LOG] fs.watch failed, falling back to poll-only:', e.message); }
+  // Safety-net poll @ 2s for environments where fs.watch under-reports
+  // (some networked filesystems, log rotators that replace the inode, etc.).
+  setInterval(flush, 2000).unref();
+}
+
+// Called when the admin truncates AC_LOG_FILE via /api/logs/clear so the
+// tail watcher doesn't mistake the new (smaller) file for a missed write.
+function resetLogTailPosition() { _logTailPos = 0; _logTailBuffer = ''; }
+
 // Authoritative Kunos content ID sets, populated at startup from bundled assets
 const KUNOS_CAR_IDS   = new Set();
 const KUNOS_TRACK_IDS = new Set();
@@ -1742,6 +1789,11 @@ function apiLogsClear(req, res) {
     // Keep logSeq monotonic so older client refs (clearedSeqRef) don't accidentally
     // un-suppress freshly-issued ids that happen to overlap with the pre-clear range.
     try { fs.truncateSync(AC_LOG_FILE, 0); } catch {}
+    // The tail watcher tracks how many bytes it has already read; resetting
+    // it here makes sure the post-truncate file is read from byte 0 instead
+    // of skipped (size < stored pos triggers the rotation branch anyway, but
+    // doing it explicitly avoids depending on that ordering).
+    resetLogTailPosition();
     for (const r of [...sseClients]) {
       try { r.write(`event: clear\ndata: {}\n\n`); } catch { sseClients.delete(r); }
     }
@@ -5455,52 +5507,56 @@ function spawnAC() {
   return new Promise((resolve) => {
     const err = checkBinary();
     if (err) { log.error('[AC] spawn error:', err); _acRunSince = null; return resolve({ ok: false, error: err }); }
-    let logStream = null;
+
+    // Open the log file once, hand its FD to the child as both stdout and
+    // stderr, then close our own reference. The child keeps a dup'd copy of
+    // the FD pointing at the file — so when the panel exits (e.g. systemd
+    // restart) the child does NOT get SIGPIPE on its next write, the way a
+    // pipe-based stdio would. Combined with `detached: true` below, this
+    // makes acServer fully outlive a panel restart and be re-adopted by the
+    // new node process via findACPid() / pidof.
+    let logFd;
     try {
       fs.mkdirSync(path.dirname(AC_LOG_FILE), { recursive: true });
-      logStream = fs.createWriteStream(AC_LOG_FILE, { flags: 'a' });
-    } catch {}
-    const closeLog = () => { if (logStream) { try { logStream.end(); } catch {} logStream = null; } };
+      logFd = fs.openSync(AC_LOG_FILE, 'a');
+    } catch (e) {
+      log.error('[AC] cannot open log file:', e.message);
+      _acRunSince = null;
+      return resolve({ ok: false, error: `No se puede abrir el log: ${e.message}` });
+    }
+
     try {
-      const child = spawn(AC_BIN, [], { cwd: AC_BIN_DIR, stdio: ['ignore', 'pipe', 'pipe'], detached: false });
-      let lineBuf = '';
-      // Force-flush very long lines so misbehaving stdout (no newlines for kilobytes)
-      // doesn't grow the buffer unbounded.
-      const LINE_BUF_MAX = 8 * 1024;
-      const onChunk = chunk => {
-        if (logStream) logStream.write(chunk);
-        lineBuf += chunk.toString();
-        const parts = lineBuf.split('\n');
-        lineBuf = parts.pop();
-        parts.forEach(appendLog);
-        if (lineBuf.length > LINE_BUF_MAX) {
-          appendLog(lineBuf.slice(0, LINE_BUF_MAX) + ' …(truncated)');
-          lineBuf = '';
-        }
-      };
-      child.stdout.on('data', onChunk);
-      child.stderr.on('data', onChunk);
+      const child = spawn(AC_BIN, [], {
+        cwd:      AC_BIN_DIR,
+        // stdin ignored; stdout + stderr go straight to the log file. No node-held
+        // pipes means nothing closes when the panel exits, so the child survives.
+        stdio:    ['ignore', logFd, logFd],
+        // setsid() — put acServer in its own session + process group so SIGHUP
+        // / SIGTERM aimed at the panel's session do not propagate.
+        detached: true,
+      });
+      // Parent no longer needs the FD; the child has its own copy.
+      try { fs.closeSync(logFd); } catch {}
+      // Let the event loop exit even if acServer is still running.
+      try { child.unref(); } catch {}
+
       let settled = false;
       child.once('error', e => {
         if (settled) return;
         settled = true;
         log.error('[AC] spawn error:', e.message);
-        if (lineBuf) { appendLog(lineBuf); lineBuf = ''; }
-        closeLog();
         acChild = null;
         resolve({ ok: false, error: e.message });
       });
       child.once('exit', (code, signal) => {
         if (acChild === child) acChild = null;
-        if (lineBuf) { appendLog(lineBuf); lineBuf = ''; }
-        closeLog();
         if (!settled) {
           settled = true;
           resolve({ ok: false, error: `Proceso terminó al arrancar (code=${code} signal=${signal})` });
         }
       });
       acChild = child;
-      // Give it a moment to confirm it didn't crash immediately
+      // Give it a moment to confirm it didn't crash immediately.
       setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -5508,8 +5564,8 @@ function spawnAC() {
         else resolve({ ok: false, error: 'Proceso no continuó tras arrancar' });
       }, 500);
     } catch (e) {
+      try { fs.closeSync(logFd); } catch {}
       log.error('[AC] spawn exception:', e.message);
-      closeLog();
       acChild = null;
       resolve({ ok: false, error: e.message });
     }
@@ -7617,6 +7673,7 @@ loadKunosIds();
 importAllResults();
 startResultsWatcher();
 loadLogFileIntoBuffer();
+startLogTail();
 cleanupOldChunks();
 
 // Boot the UDP plugin listener if server_cfg.ini already has it enabled. If

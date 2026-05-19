@@ -4,7 +4,7 @@
   <p>A web-based administration panel for <strong>Assetto Corsa</strong> dedicated servers on Linux</p>
 
   <p>
-    <a href="CHANGELOG.md"><img alt="Version"   src="https://img.shields.io/badge/version-1.5.1-blue"></a>
+    <a href="CHANGELOG.md"><img alt="Version"   src="https://img.shields.io/badge/version-1.6.0-blue"></a>
     <a href="ROADMAP.md"><img   alt="Status"    src="https://img.shields.io/badge/status-production--ready-brightgreen"></a>
     <a href="ROADMAP.md#status"><img alt="Hardening" src="https://img.shields.io/badge/hardening-96%2F100-success"></a>
     <img alt="Audit"     src="https://img.shields.io/badge/npm%20audit-clean-success?logo=npm&logoColor=white">
@@ -35,7 +35,7 @@ A full web interface to manage your Assetto Corsa server without touching the te
 ## Features
 
 ### 📊 Real-time monitoring
-Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events. Admin-only **persistent "Clear logs"** drops the in-memory buffer AND truncates `AC_LOG_FILE` on disk, then broadcasts an SSE `clear` event so every open tab wipes in lock-step — refreshing the page no longer brings the lines back. Activity card resolves car model IDs to their catalogue display name (`Toyota AE86` instead of `ks_toyota_ae86`).
+Live server metrics (CPU, RAM, uptime), AC server status, and a real-time log stream — all updated instantly via Server-Sent Events. **Live position minimap**: when the server is running and at least one driver is connected, the Dashboard renders the current track's `map.png` with one absolute-positioned dot per car at ~4 Hz, driven by acServer's UDP position stream — same world→pixel projection (`WIDTH` / `HEIGHT` / `X_OFFSET` / `Z_OFFSET` / `SCALE_FACTOR` / `MARGIN` from `data/map.ini`) that Content Manager and CSP use, so the dots align with what drivers see in-game. The widget is hidden on an idle server and its SSE stream is ref-counted on subscribers, so an empty Dashboard tab doesn't drain CPU. Admin-only **persistent "Clear logs"** drops the in-memory buffer AND truncates `AC_LOG_FILE` on disk, then broadcasts an SSE `clear` event so every open tab wipes in lock-step — refreshing the page no longer brings the lines back. Activity card resolves car model IDs to their catalogue display name (`Toyota AE86` instead of `ks_toyota_ae86`). Panel restarts are transparent to connected players — `acServer` is spawned in its own session via `setsid(2)` and writes straight to disk, so a `systemctl restart` of the panel no longer kicks anyone.
 
 ### 🏎️ Player management
 Live player table with car, lap count, best/last time and country flag. Kick and ban directly from the panel. Full history of every player who has ever joined the server. **Per-player admin-set nicknames** — pencil button in the history table opens a modal to attach a real name to an in-game alias; the panel then renders rows as "Nickname (in-game)" everywhere, including historic lap times.

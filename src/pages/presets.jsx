@@ -493,7 +493,14 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
             </button>
           )}
         </div>
-        <div className="modal-body" style={{ overflowY: 'auto', flex: 1, gap: 18 }}>
+        {/* `minHeight: 0` is load-bearing: without it, the flex item's
+            default min-height is its content size, the body doesn't shrink
+            to honour the modal's max-height, the modal grows past the
+            viewport, and each `.card` (which has `overflow: hidden`) gets
+            squeezed by flex-shrink and clips its own contents. With
+            min-height: 0 the body actually scrolls and every card keeps
+            its natural height. */}
+        <div className="modal-body" style={{ overflowY: 'auto', flex: 1, minHeight: 0, gap: 18 }}>
           {/* ── Name + description ─────────────────────────────────────── */}
           <div className="grid-2" style={{gridTemplateColumns: '1fr 1.4fr'}}>
             <div className="field">

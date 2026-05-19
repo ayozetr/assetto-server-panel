@@ -422,6 +422,21 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, busy, onClose]);
 
+  // useMemo calls MUST stay above the `if (!open) return null` early-return —
+  // otherwise the hook count differs between the closed-render (no useMemo)
+  // and the open-render (useMemo runs), which trips React error #310
+  // "Rendered more hooks during this render than during the previous render".
+  // Sort the catalogues alphabetically: /api/cars and /api/tracks come back
+  // in filesystem order which is hostile to "I'm looking for X" scanning.
+  const sortedCars = React.useMemo(
+    () => [...cars].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
+    [cars]
+  );
+  const sortedTracks = React.useMemo(
+    () => [...tracks].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
+    [tracks]
+  );
+
   if (!open) return null;
 
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
@@ -497,17 +512,6 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg }) {
       .then(() => { setBusy(false); onClose(); })
       .catch(() => setBusy(false));
   };
-
-  // Sort cars alphabetically for the picker — `cars` from /api/cars comes in
-  // filesystem order which is not great for "I'm looking for X".
-  const sortedCars = React.useMemo(
-    () => [...cars].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
-    [cars]
-  );
-  const sortedTracks = React.useMemo(
-    () => [...tracks].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
-    [tracks]
-  );
 
   return (
     <div className="modal-backdrop" onClick={busy ? null : onClose} role="presentation">

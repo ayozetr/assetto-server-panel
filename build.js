@@ -28,6 +28,7 @@ const ENTRY_POINTS = [
   'pages/content.jsx',
   'pages/tracks.jsx',
   'pages/session.jsx',
+  'pages/presets.jsx',
   'pages/settings.jsx',
   'pages/users.jsx',
   'pages/profile.jsx',

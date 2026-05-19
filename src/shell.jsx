@@ -45,10 +45,11 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
     { id: 'times', label: t('nav.times'), icon: I.IconTimer, group: 'general' },
     { id: 'logs', label: t('nav.logs'), icon: I.IconTerminal, group: 'general' },
 
-    { id: 'cars', label: t('nav.cars'), icon: I.IconCar, group: 'content' },
-    { id: 'tracks', label: t('nav.tracks'), icon: I.IconCircuit, group: 'content' },
-    { id: 'mods', label: t('nav.mods'), icon: I.IconUpload, group: 'content' },
-    { id: 'session', label: t('nav.session'), icon: I.IconFlag, group: 'content' },
+    { id: 'cars',    label: t('nav.cars'),    icon: I.IconCar,     group: 'content' },
+    { id: 'tracks',  label: t('nav.tracks'),  icon: I.IconCircuit, group: 'content' },
+    { id: 'presets', label: t('nav.presets'), icon: I.IconFolder,  group: 'content', requires: 'serverConfig' },
+    { id: 'session', label: t('nav.session'), icon: I.IconFlag,    group: 'content' },
+    { id: 'mods',    label: t('nav.mods'),    icon: I.IconUpload,  group: 'content' },
 
     { id: 'config', label: t('nav.config'), icon: I.IconSettings, group: 'admin', requires: 'serverConfig' },
     { id: 'users',  label: t('nav.users'),  icon: I.IconUsers,    group: 'admin', adminOnly: true },

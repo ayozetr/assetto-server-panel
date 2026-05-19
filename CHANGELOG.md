@@ -8,6 +8,38 @@ The dates are in `YYYY-MM-DD`. Commits referenced as `[abc1234]` link to the
 authoritative diff — the changelog entry is a hand-curated summary of *why*
 the change matters; the commit log is the source of truth for *what* changed.
 
+## [Unreleased]
+
+### Added
+
+- **Session presets / plantillas.** New `Plantillas` page in the Contenido
+  group between Tramos and Sesión, plus a "Guardar como plantilla" button on
+  the Sesión page that snapshots the current `sessionCfg` (track, layout,
+  slots with car + skin per grid position, session toggles + durations,
+  weather, time-of-day, penalties, maxClients) into a saved bundle. Each
+  card in the library shows track + layout name, slot count, sessions
+  enabled, last-modified date and "by username". "Cargar en Sesión" drops
+  the preset's config into the live `sessionCfg` and navigates to the
+  Sesión page — the operator reviews and pushes Apply to actually send it
+  to acServer, so loading a preset never directly reboots a running
+  session by accident. Names are unique (case-insensitive) so re-saving
+  with an existing name is the natural "overwrite" path; rename via the
+  card's pencil button, delete via the trash. New endpoints `GET
+  /api/session-presets` (list with summary), `POST` (create), `GET /:id`
+  (full config), `PUT /:id` (update), `DELETE /:id`. All gated by the
+  same `serverConfig` permission as `/api/session/apply`. Audit rows
+  `preset.create`, `preset.update`, `preset.delete` distinguish each
+  action. The `config` column is a JSON blob keeping the same shape
+  `sessionCfg` has on the client + `/api/session/apply` consumes, so
+  adding a Session field later doesn't need a schema migration —
+  default-fill on load. Migration `012 session_presets_table` runs
+  idempotently on boot. New i18n keys `nav.presets`, `presets.*`,
+  `sess.btn_save_preset` in en/es/it (Presets / Plantillas / Preset).
+- **Sidebar reorder in Contenido**: Coches → Tramos → Plantillas → Sesión
+  → Mods. The natural flow is now "pick a preset → review in Sesión →
+  Apply", with mod installation at the end where it belongs (it's a
+  content-management action, not part of the running-config flow).
+
 ## [1.6.0] — 2026-05-19
 
 The Dashboard finally answers the "where are they on the track right now?"

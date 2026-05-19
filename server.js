@@ -521,6 +521,25 @@ try {
               expires_at    TEXT DEFAULT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_bans_expires_at ON bans(expires_at);` },
+    { id: 12, name: 'session_presets_table',
+      // Saved bundles of (trackId, layout, slots[], session toggles, weather, time,
+      // penalties…) that an operator can browse and "Load into Session" with one
+      // click. The `config` column is a JSON blob keeping the exact same shape
+      // `sessionCfg` has on the client + the same shape /api/session/apply
+      // consumes — so adding a field to Session in the future doesn't need a
+      // schema change here, just a default-fill on load. `name` is UNIQUE
+      // (case-insensitive) so re-saving a preset with the same name reads as an
+      // overwrite, not a silent duplicate.
+      sql: `CREATE TABLE IF NOT EXISTS session_presets (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              name        TEXT    NOT NULL,
+              description TEXT    NOT NULL DEFAULT '',
+              config      TEXT    NOT NULL,
+              created_by  TEXT    NOT NULL DEFAULT '',
+              created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+              updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_session_presets_name_nocase ON session_presets(name COLLATE NOCASE);` },
   ];
   const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
   const _applied = new Set(_appliedRows.map(r => r.id));
@@ -4579,6 +4598,152 @@ function apiBansList(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// ── Session presets (saved bundles of trackId + slots + weather + …) ─────────
+// Storage is a JSON blob in `session_presets.config` so the shape stays in
+// lockstep with the client's `sessionCfg` and /api/session/apply's body — adding
+// a session field in the future doesn't need a column. Load-into-session is
+// purely a client move (GET the row, drop it into sessionCfg, navigate to the
+// Session page, user reviews and pushes Apply), so there is no /apply endpoint
+// here — that would mean two paths to acServer with subtly different validation.
+const PRESET_NAME_MAX = 120;
+const PRESET_DESC_MAX = 500;
+
+// Shape the row into the wire format the frontend expects, including a small
+// `summary` so the list view can render chips (track id, slot count, sessions
+// enabled) without re-parsing the JSON blob on every render.
+function _shapePresetRow(r, withConfig) {
+  let cfg = null;
+  try { cfg = JSON.parse(r.config); } catch {}
+  const slots = Array.isArray(cfg?.slots) ? cfg.slots : [];
+  const summary = {
+    trackId:         cfg?.trackId || '',
+    layout:          cfg?.layout || '',
+    slotCount:       slots.length,
+    practiceEnabled: !!cfg?.practiceEnabled,
+    qualifyEnabled:  !!cfg?.qualifyEnabled,
+    raceEnabled:     !!cfg?.raceEnabled,
+  };
+  return {
+    id:          r.id,
+    name:        r.name,
+    description: r.description || '',
+    summary,
+    createdBy:   r.created_by || '',
+    createdAt:   r.created_at,
+    updatedAt:   r.updated_at,
+    ...(withConfig ? { config: cfg || {} } : {}),
+  };
+}
+
+function _validatePresetPayload(body, { requireName = true } = {}) {
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  if (requireName && !name) return { error: 'name required' };
+  if (name.length > PRESET_NAME_MAX) return { error: `name too long (max ${PRESET_NAME_MAX})` };
+  const description = typeof body?.description === 'string' ? body.description.trim() : '';
+  if (description.length > PRESET_DESC_MAX) return { error: `description too long (max ${PRESET_DESC_MAX})` };
+  const config = body?.config;
+  if (config !== undefined && (config === null || typeof config !== 'object' || Array.isArray(config))) {
+    return { error: 'config must be an object' };
+  }
+  return { name, description, config };
+}
+
+function apiSessionPresetsList(req, res) {
+  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 200, []);
+  try {
+    const rows = db.prepare(`
+      SELECT id, name, description, config, created_by, created_at, updated_at
+      FROM session_presets
+      ORDER BY updated_at DESC, id DESC
+    `).all();
+    json(res, 200, rows.map(r => _shapePresetRow(r, false)));
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+function apiSessionPresetGet(req, res, id) {
+  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 404, { error: 'Not found' });
+  try {
+    const row = db.prepare(`
+      SELECT id, name, description, config, created_by, created_at, updated_at
+      FROM session_presets WHERE id = ?
+    `).get(id);
+    if (!row) return json(res, 404, { error: 'Not found' });
+    json(res, 200, _shapePresetRow(row, true));
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiSessionPresetCreate(req, res) {
+  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 500, { error: 'DB not ready' });
+  try {
+    const body = await readBody(req);
+    const v = _validatePresetPayload(body, { requireName: true });
+    if (v.error) return json(res, 400, { error: v.error });
+    if (v.config === undefined) return json(res, 400, { error: 'config required' });
+    const actor = checkAnyAuth(req)?.username || '';
+    const cfgJson = JSON.stringify(v.config);
+    try {
+      const info = db.prepare(`
+        INSERT INTO session_presets (name, description, config, created_by)
+        VALUES (?, ?, ?, ?)
+      `).run(v.name, v.description, cfgJson, actor);
+      insertAuditLog(actor, 'preset.create', v.name);
+      json(res, 200, { id: Number(info.lastInsertRowid), name: v.name });
+    } catch (e) {
+      if (/UNIQUE constraint failed/i.test(String(e.message))) {
+        return json(res, 409, { error: 'A preset with that name already exists' });
+      }
+      throw e;
+    }
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiSessionPresetUpdate(req, res, id) {
+  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 500, { error: 'DB not ready' });
+  try {
+    const body = await readBody(req);
+    const v = _validatePresetPayload(body, { requireName: false });
+    if (v.error) return json(res, 400, { error: v.error });
+    const existing = db.prepare('SELECT id, name FROM session_presets WHERE id = ?').get(id);
+    if (!existing) return json(res, 404, { error: 'Not found' });
+    const sets  = [];
+    const args  = [];
+    if (v.name)                sets.push('name = ?'),        args.push(v.name);
+    if (body?.description !== undefined) sets.push('description = ?'), args.push(v.description);
+    if (v.config !== undefined) sets.push('config = ?'),     args.push(JSON.stringify(v.config));
+    if (sets.length === 0) return json(res, 400, { error: 'no fields to update' });
+    sets.push("updated_at = datetime('now')");
+    args.push(id);
+    try {
+      db.prepare(`UPDATE session_presets SET ${sets.join(', ')} WHERE id = ?`).run(...args);
+      const actor = checkAnyAuth(req)?.username || '';
+      insertAuditLog(actor, 'preset.update', v.name || existing.name);
+      json(res, 200, { ok: true });
+    } catch (e) {
+      if (/UNIQUE constraint failed/i.test(String(e.message))) {
+        return json(res, 409, { error: 'A preset with that name already exists' });
+      }
+      throw e;
+    }
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+function apiSessionPresetDelete(req, res, id) {
+  if (!checkPermission(req, 'serverConfig')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 500, { error: 'DB not ready' });
+  try {
+    const row = db.prepare('SELECT id, name FROM session_presets WHERE id = ?').get(id);
+    if (!row) return json(res, 404, { error: 'Not found' });
+    db.prepare('DELETE FROM session_presets WHERE id = ?').run(id);
+    const actor = checkAnyAuth(req)?.username || '';
+    insertAuditLog(actor, 'preset.delete', row.name);
+    json(res, 200, { ok: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // Admin-set display name for a player — stored alongside the in-game name so
 // lap times (joined by GUID) can be rendered as "Apodo (in-game)" without
 // touching the laps the acServer importer already wrote.
@@ -7506,6 +7671,17 @@ function handler(req, res) {
 
     // Session apply
     if (urlPath === '/api/session/apply'  && req.method === 'POST') return apiSessionApply(req, res);
+
+    // Session presets (saved bundles a user can load back into the Session page)
+    if (urlPath === '/api/session-presets' && req.method === 'GET')  return apiSessionPresetsList(req, res);
+    if (urlPath === '/api/session-presets' && req.method === 'POST') return apiSessionPresetCreate(req, res);
+    const presetIdMatch = urlPath.match(/^\/api\/session-presets\/(\d+)$/);
+    if (presetIdMatch) {
+      const presetId = Number(presetIdMatch[1]);
+      if (req.method === 'GET')    return apiSessionPresetGet(req, res, presetId);
+      if (req.method === 'PUT')    return apiSessionPresetUpdate(req, res, presetId);
+      if (req.method === 'DELETE') return apiSessionPresetDelete(req, res, presetId);
+    }
 
     // Content image endpoints
     const carSkinMatch         = urlPath.match(/^\/api\/content\/cars\/([^/]+)\/skins\/([^/]+)\/preview$/);

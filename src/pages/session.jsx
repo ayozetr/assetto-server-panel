@@ -5,7 +5,7 @@ const { useState: useStateS, useMemo: useMemoS } = React;
 const I3S = window.AppIcons;
 
 // ── PageSession ───────────────────────────────────────────────────────────────
-function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit = isAdmin, onApply }) {
+function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit = isAdmin, canSavePreset = isAdmin, onApply, onAskSaveAsPreset }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
   const [confirmApply, setConfirmApply] = useStateS(false);
   const track        = tracks.find(t => t.id === sessionCfg.trackId);
@@ -225,10 +225,19 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
             </div>
           </div>
 
-          {canEdit && (
-            <button className="btn btn-primary" style={{padding: '10px', justifyContent:'center'}} onClick={()=>setConfirmApply(true)}>
-              <I3S.IconCheck size={14}/> {t('sess.btn_apply')}
-            </button>
+          {(canEdit || canSavePreset) && (
+            <div style={{display:'flex', gap: 8, flexWrap:'wrap'}}>
+              {canSavePreset && onAskSaveAsPreset && (
+                <button className="btn" style={{padding: '10px 14px'}} onClick={onAskSaveAsPreset}>
+                  <I3S.IconFolder size={14}/> {t('sess.btn_save_preset')}
+                </button>
+              )}
+              {canEdit && (
+                <button className="btn btn-primary" style={{flex: 1, padding: '10px', justifyContent:'center'}} onClick={()=>setConfirmApply(true)}>
+                  <I3S.IconCheck size={14}/> {t('sess.btn_apply')}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

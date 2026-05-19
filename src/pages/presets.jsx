@@ -503,7 +503,14 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
             height. */}
         <div className="modal-body" style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)', gap: 18 }}>
           {/* ── Name + description ─────────────────────────────────────── */}
-          <div className="grid-2" style={{gridTemplateColumns: '1fr 1.4fr'}}>
+          {/* `flex-shrink: 0` on every modal-body child is load-bearing:
+              .modal-body is a flex column with a max-height, every `.card`
+              has `overflow: hidden`, and flex containers honour the
+              min-content size of items WITHOUT counting their overflow-hidden
+              contents. So instead of the body scrolling, the cards
+              get squeezed and clip their own bottoms. flex-shrink: 0 holds
+              each section at its natural height and the body scrolls. */}
+          <div className="grid-2" style={{gridTemplateColumns: '1fr 1.4fr', flexShrink: 0}}>
             <div className="field">
               <label className="field-label" htmlFor="bp-name">{t('presets.save_modal.name_label')}</label>
               <input id="bp-name" className="input" autoFocus value={draft.name} maxLength={120}
@@ -518,7 +525,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
           </div>
 
           {/* ── Track + layout ─────────────────────────────────────────── */}
-          <div className="card" style={{padding: 14}}>
+          <div className="card" style={{padding: 14, flexShrink: 0}}>
             <div className="row" style={{marginBottom: 10}}>
               <I.IconCircuit size={13} style={{color:'var(--red)'}}/>
               <div className="card-title">{t('presets.build_modal.track_section')}</div>
@@ -550,7 +557,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
           </div>
 
           {/* ── Sessions ───────────────────────────────────────────────── */}
-          <div className="card" style={{padding: 14}}>
+          <div className="card" style={{padding: 14, flexShrink: 0}}>
             <div className="row" style={{marginBottom: 10}}>
               <I.IconFlag size={13} style={{color:'var(--red)'}}/>
               <div className="card-title">{t('presets.build_modal.sessions_section')}</div>
@@ -595,7 +602,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
           </div>
 
           {/* ── Conditions ─────────────────────────────────────────────── */}
-          <div className="card" style={{padding: 14}}>
+          <div className="card" style={{padding: 14, flexShrink: 0}}>
             <div className="row" style={{marginBottom: 10}}>
               <I.IconCloud size={13} style={{color:'var(--red)'}}/>
               <div className="card-title">{t('presets.build_modal.cond_section')}</div>
@@ -646,7 +653,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
           </div>
 
           {/* ── Cars (slots) ───────────────────────────────────────────── */}
-          <div className="card" style={{padding: 14}}>
+          <div className="card" style={{padding: 14, flexShrink: 0}}>
             <div className="row" style={{marginBottom: 10, alignItems:'center'}}>
               <I.IconCar size={13} style={{color:'var(--red)'}}/>
               <div className="card-title">{t('presets.build_modal.cars_section')}</div>

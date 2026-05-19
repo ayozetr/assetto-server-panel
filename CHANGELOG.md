@@ -12,6 +12,7 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ### Added
 
+<!-- Live position telemetry kept under [Unreleased] for v1.6.0. -->
 - **Live position telemetry on the Dashboard.** New widget renders the
   current track's `map.png` as a top-down minimap with one absolute-positioned
   dot per connected car, animated at ~4Hz from a new
@@ -36,6 +37,146 @@ the change matters; the commit log is the source of truth for *what* changed.
   catalogue entry — the rest of the time the card is hidden, so the
   Dashboard stays compact on an idle server. i18n keys
   `dash.live_map` / `_unavailable` / `_waiting` in en/es/it.
+
+## [1.5.1] — 2026-05-19
+
+Polish patch for the v1.5.0 public driver profile feature, plus general
+cache-busting infrastructure improvements. Every driver page is now
+multilingual, ships proper raster previews for Discord, and exports a
+downloadable stat card with the driver's personal best on their
+most-played combo.
+
+### Added
+
+- **Light theme variant** for `/p/<steam-id>` and its OpenGraph card.
+  Toggled via the new sun/moon button in the page topbar (anchor-based,
+  navigates with `?theme=light|dark`); choice propagates to the OG
+  image URL so a `?theme=light` link in Discord previews with the
+  light variant rather than the panel-default dark.
+- **Visible language switcher** in the SSR topbar — three flag chips
+  (EN/ES/IT) that flip the page via `?lang=…`, preserved across
+  subsequent toggles so changing language doesn't reset theme and
+  vice-versa.
+- **i18n for the SSR page**: every visible label and the OG /
+  Twitter card description text translates to English / Spanish /
+  Italian. Detection is layered — `?lang=` query override →
+  `Accept-Language` header → `panel_settings.lang` (panel-wide
+  default) → `en`. The OG image language also follows the chosen
+  lang when explicit, so Discord previews stay consistent with the
+  sharer's link rather than always rendering in the panel default.
+- **Recent laps** card on `/p/<steam-id>` showing the last 10 laps
+  the driver has set (any combo), with invalid-lap strike-through
+  + amber badge for laps with cuts. Surfaces in the JSON response
+  as `recentLaps[]`.
+- **Downloadable stat card** at `/p/<steam-id>/card.png` — a
+  1200×630 shareable PNG with the panel logo, five KPI tiles
+  (total laps, time on track, most-used car, driver's best lap
+  on their most-played track, server records held), and a small
+  silhouette of the most-played track's `map.png` in the upper
+  right. Light and dark variants follow the page's `?theme=`;
+  the download button next to the language switcher carries the
+  current theme + lang through into the saved file. Filename
+  suggestion (`driver-76561198000000001.png`) baked into
+  `Content-Disposition`.
+- **Steam glyph** before the GUID on every preview surface — the
+  `/p/<guid>` page chip, the OG card, and the download card — so
+  the chip reads as a Steam profile id at a glance.
+- **Real flag images** via `flagcdn.com` instead of the unicode
+  regional-indicator pair the v1.5.0 page used; Windows visitors
+  no longer see "ES" / "GB" / "IT" as literal letters when their
+  fonts lack the regional-indicator face.
+- **Most-used car** + **most-played track** + **driver's best on
+  most-played track** computed in `/api/public/players/:guid` and
+  surfaced in `kpis.mostUsedCar`, `kpis.mostPlayedTrack` and
+  `kpis.bestOnMostPlayed`, so Discord bots / external dashboards
+  get the same data structure the rendered cards use.
+
+### Changed
+
+- **OG image moved from SVG to PNG** at `/p/<guid>/og.png` via the
+  new `@resvg/resvg-js` pure-WASM dependency. Discord's OpenGraph
+  parser hard-rejects `image/svg+xml` and bails with "couldn't
+  load image"; PNG works everywhere. The SVG endpoint stays
+  available at `/p/<guid>/og.svg` for direct browsing.
+- **OG image URL is now versioned** with
+  `?v=<BUILD_VERSION>-<lastSeen>` so Discord re-fetches when (a)
+  the panel is redeployed or (b) the driver records a session
+  more recent than the previous one. Without this, Discord
+  pinned the first preview it ever saw under that URL
+  indefinitely regardless of subsequent updates.
+- **`BUILD_VERSION` cache-buster** is now recomputed per
+  `/index.html` request with a 5-second TTL instead of being
+  frozen at module load. Previously a `git pull && npm run build`
+  without a `systemctl restart` left the `?v=` query stuck at
+  the boot-time mtime, so Cloudflare's edge replayed the old
+  bundle. Now any rebuild reaches browsers on the next page load.
+- **`src/styles.css` link** also gets a `?v=…` cache buster in
+  `index.html`. CSS-only deploys were previously invisible for
+  up to 10 minutes while Cloudflare's edge served the previous
+  stylesheet.
+- **Spanish UI terminology refresh**: the mod upload page and
+  the permission-hint copy now say "tramo" / "tramos" instead
+  of "circuito" / "circuitos" — matches the touge / rally
+  framing the panel's primary deployment uses. The Tracks
+  sidebar nav also switches to a new `IconCircuit` (an
+  irregular-loop silhouette) instead of the athletics-oval
+  `IconTrack` it shared with the Session card.
+
+### Fixed
+
+- **`bestDate` on `/api/public/players/:guid`** pointed at the
+  earliest valid lap instead of the date the fastest lap was
+  actually set. The fastest-lap-on-X-date KPI in the rendered
+  page was therefore showing the wrong date for any driver
+  whose PB came after an earlier slower lap. Now a follow-up
+  query filters by `ms = bestMs` and returns the matching
+  `session_date`.
+- **`/p/<guid>`, `/p/<guid>/og.png`, `/p/<guid>/og.svg`,
+  `/api/public/players/:guid` and `/p/_theme.js`** all accept
+  `HEAD` requests now, matching the `GET` response shape.
+  Discord/Twitter scrape with `GET` but `curl -I`, Cloudflare
+  healthchecks and link-unfurl bots use `HEAD` and were getting
+  401 / 404 / wrong-content-type back from those handlers.
+- **Map silhouette on the download card** is now legible on the
+  light theme — was rendering near-invisible because AC's
+  `map.png` ships anti-aliased low-contrast trails that wash
+  out on a pure white surface. The map's container rect is now
+  always dark regardless of card theme with the trail inverted
+  to white, so the thumbnail reads as a focal element on both
+  light and dark cards.
+- **KPI tile overflow** on the download card: long car names
+  like "Toyota AE86" used to clip out of the 210px
+  tile width with the ellipsis spilling past the rounded
+  border. Now greedy-pack text values across two lines with a
+  16-char-per-line budget, so the full name is visible without
+  truncation.
+- **`/p/<guid>/card.png` download link** had a relative `href`
+  that resolved against `/p/<guid>` (no trailing slash) and
+  landed at `/p/card.png` instead of the intended path. The
+  browser returned "El archivo no estaba disponible en el sitio"
+  for the click. Href is now absolute.
+- **OG image lang propagation**: a link shared with `?lang=en`
+  used to render the page in English but the Discord preview
+  still in the panel default (because Discord's crawler
+  doesn't send `Accept-Language`). The OG image URL now
+  includes `&lang=…` when the lang was set explicitly, so the
+  preview language matches what the sharer chose.
+
+### Upgrade notes
+
+- New dependency: `@resvg/resvg-js` (pure-WASM, no native
+  compilation, ~6 MB installed). Run `npm install` after
+  pulling.
+- Service Worker cache name bumped from `ac-panel-v38` to
+  `ac-panel-v39` so existing PWA installs drop their old
+  cached bundle on the next reload and pick up the new JS.
+- `panel_settings.lang` is now consulted by the public profile
+  language resolver as a fallback. Setting it (via Settings →
+  Idioma) controls the default language used in OG previews
+  when a visitor's `Accept-Language` doesn't match a supported
+  locale.
+- No DB migration — every new SQL query against `players` /
+  `laps` uses columns that already existed.
 
 ## [1.5.0] — 2026-05-18
 

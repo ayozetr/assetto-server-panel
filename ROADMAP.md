@@ -141,6 +141,26 @@ swap them all in one focused release.
 Everything in this list is shipped in a tagged release and verified in
 production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
 
+### [1.5.1] — 2026-05-19
+
+- **Public profile polish**: light/dark theme variant for `/p/<guid>`
+  + OG card (URL-controlled via `?theme=`), visible flag + sun-moon
+  switchers, full SSR i18n (en/es/it), recent-laps card, real flag
+  images via flagcdn.com (no more Windows-rendering glitches with
+  unicode emoji), Steam glyph next to the GUID everywhere.
+- **Downloadable PNG stat card** at `/p/<guid>/card.png` with 5
+  KPIs including driver's best lap on their most-played track + a
+  silhouette of that track's `map.png` rendered legible on both
+  themes. New `@resvg/resvg-js` dep does the SVG → PNG raster.
+- **OG image moved SVG → PNG** because Discord rejects SVG
+  og:image with "couldn't load image". The PNG endpoint URL is
+  versioned with `BUILD_VERSION-lastSeen` so cached previews
+  auto-refresh after deploys + new sessions.
+- **General cache-busting fixes**: `BUILD_VERSION` recomputes per
+  request (was frozen at module load), `src/styles.css` link in
+  `index.html` also gets the `?v=` cache-buster so CSS-only
+  deploys reach browsers without operator intervention.
+
 ### [1.5.0] — 2026-05-18
 
 - **Public driver profile pages** at `/p/<steam-id>` — totals, server

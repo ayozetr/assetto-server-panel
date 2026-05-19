@@ -327,10 +327,28 @@ Aggregated stats for a single driver. Same shape as the data the SSR `/p/<guid>`
     "sessions":    4,
     "laps":        41,
     "totalMs":     10399664,
-    "totalTime":   "2h 53m",            // pretty-printed totalMs
+    "totalTime":   "2h 53m",                  // pretty-printed totalMs
     "bestMs":      238997,
-    "bestDate":    "2026-05-13",        // date the bestMs lap was set, not first valid lap
-    "recordsHeld": 10                   // count of records[] below
+    "bestDate":    "2026-05-13",              // date the bestMs lap was set, not first valid lap
+    "recordsHeld": 10,                        // count of records[] below
+    "mostUsedCar": {                          // null when the driver has no laps
+      "car":     "ks_toyota_ae86",
+      "carName": "Toyota AE86",     // from ui_car.json or formatted slug
+      "laps":    10                           // total lap count on this car (any track)
+    },
+    "mostPlayedTrack": {                      // null when no laps
+      "track":       "ks_red_bull_ring",
+      "trackName":   "Red Bull Ring",
+      "trackConfig": "layout_gp",
+      "layoutName":  "Grand Prix",
+      "laps":        25                       // total lap count on this combo
+    },
+    "bestOnMostPlayed": {                     // driver's PB on the most-played combo, any car. null when no valid lap
+      "ms":      238997,
+      "car":     "ks_toyota_ae86",
+      "carName": "Toyota AE86",
+      "date":    "2026-05-13"
+    }
   },
   "records": [                          // combos where this driver has the panel-wide MIN(ms) valid lap
     {
@@ -356,6 +374,20 @@ Aggregated stats for a single driver. Same shape as the data the SSR `/p/<guid>`
       "ms":          238997,
       "date":        "2026-05-13"
     }
+  ],
+  "recentLaps": [                       // last 10 laps the driver has set (any combo), valid or invalid, newest first
+    {
+      "track":       "ks_red_bull_ring",
+      "trackName":   "Red Bull Ring",
+      "trackConfig": "layout_gp",
+      "layoutName":  "Grand Prix",
+      "car":         "ks_toyota_ae86",
+      "carName":     "Toyota AE86",
+      "ms":          238997,
+      "cuts":        0,
+      "valid":       true,              // false when cuts > 0
+      "date":        "2026-05-18"
+    }
   ]
 }
 ```
@@ -371,7 +403,7 @@ Aggregated stats for a single driver. Same shape as the data the SSR `/p/<guid>`
 ---
 
 ### `GET /p/:guid`
-The same data, but rendered as an HTML page using `/src/styles.css` for visual continuity with the panel. Lives outside `/api/` so the URL is short and shareable. OpenGraph + Twitter card meta tags ship the driver's name and headline stats so a paste in Discord renders a proper preview. The page links to `/p/_theme.js` for the in-page light/dark toggle.
+The same data, but rendered as an HTML page using `/src/styles.css` for visual continuity with the panel. Lives outside `/api/` so the URL is short and shareable. OpenGraph + Twitter card meta tags ship the driver's name + headline stats + a per-driver PNG so a paste in Discord renders a proper preview with image.
 
 **Auth required:** no
 
@@ -379,12 +411,47 @@ The same data, but rendered as an HTML page using `/src/styles.css` for visual c
 
 **Methods:** `GET`, `HEAD`. `HEAD` returns the same status code and headers as `GET` with an empty body — Discord/Twitter scrape with `GET` but `curl -I` and Cloudflare healthchecks use `HEAD`.
 
-**Response:** `200 text/html; charset=utf-8`, ~12–20 KB depending on records and personal-bests volume. Headers include `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` (the page is share-able but never search-engine indexed) and `Cache-Control: no-store` (stats change live as drivers set laps).
+**Query parameters (optional):**
+
+| Param   | Values                | Effect |
+|---------|-----------------------|--------|
+| `lang`  | `en`, `es`, `it`      | Overrides the visitor's `Accept-Language` and the panel-default `panel_settings.lang`. Propagates to the OG image URL when explicit, so `?lang=en` previews in English on Discord even when the panel default is Spanish. |
+| `theme` | `light`, `dark`       | Sets the page `data-theme` and propagates to the OG image URL so a `?theme=light` share previews with the light card variant. Defaults to `dark`. |
+
+**Response:** `200 text/html; charset=utf-8`, ~15–25 KB depending on records / personal-bests / recent-laps volume. Headers include `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` (the page is share-able but never search-engine indexed) and `Cache-Control: no-store` (stats change live as drivers set laps).
 
 **Response 404:**
 - player has no row in `players`, OR
 - `publicProfilesEnabled` is `false`, OR
 - the GUID didn't match the 17-digit shape.
+
+---
+
+### `GET /p/:guid/og.png`
+PNG render of the driver's OpenGraph card — used as `og:image` / `twitter:image` on the HTML page so Discord, Slack and Twitter previews show a per-driver thumbnail rather than the panel logo alone. Generated server-side at 1200×630 via `@resvg/resvg-js`. SVG variant available at `/p/:guid/og.svg` for direct browsing; Discord rejects SVG og:image so PNG is the canonical version referenced from the HTML.
+
+**Auth required:** no
+
+**Methods:** `GET`, `HEAD`
+
+**Query parameters:** `lang`, `theme` — same semantics as `/p/<guid>`. The HTML's `og:image` URL adds them automatically when explicit so cached Discord previews match the page they were shared from.
+
+**Response:** `200 image/png`, ~90–140 KB depending on theme + content density. Cached at the edge for 5 minutes (`Cache-Control: public, max-age=300`).
+
+**Fallback:** if `@resvg/resvg-js` is missing on the host or rendering fails, the handler returns `src/assets/icon-512.png` (the panel logo) with the same `Cache-Control` so Discord at least shows *something* instead of "couldn't load image".
+
+---
+
+### `GET /p/:guid/card.png`
+Downloadable PNG stat card with extended KPIs. Sent with `Content-Disposition: attachment` so clicking the download button on the SSR page saves it to disk with a filename like `<sanitized-name>-<guid>.png`. Layout differs from the OG card: 5 KPI tiles (total laps, time on track, most-used car, driver's best lap on their most-played track, server records held), a thumbnail of the most-played track's `map.png` in the upper-right, and a footer with the public profile URL.
+
+**Auth required:** no
+
+**Methods:** `GET`, `HEAD`
+
+**Query parameters:** `lang`, `theme` — same semantics. The download button on the SSR page carries the current page's explicit `?lang=` / `?theme=` through so the saved file matches what the user is looking at.
+
+**Response:** `200 image/png`, ~95–145 KB. `Content-Disposition: attachment; filename="..."`. Not edge-cached (`Cache-Control: no-store`) — every download click hits the renderer fresh.
 
 ---
 

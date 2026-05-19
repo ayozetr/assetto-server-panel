@@ -20,6 +20,13 @@ try { StreamZip = require('node-stream-zip'); } catch { _missingExtractors.push(
 try { Unrar    = require('node-unrar-js');   } catch { _missingExtractors.push('rar (node-unrar-js)'); }
 try { sevenZ   = require('node-7z');         } catch { _missingExtractors.push('7z (node-7z)'); }
 try { sevenBin = require('7zip-bin');        } catch { _missingExtractors.push('7z binary (7zip-bin)'); }
+// Some npm installs (--ignore-scripts, tarball restores, or node_modules copied
+// across machines) drop the +x bit on the bundled 7za binary, so spawn() later
+// throws EACCES and chunked mod uploads fail with HTTP 500. chmod is a no-op on
+// Windows and idempotent everywhere else.
+if (sevenBin && sevenBin.path7za && process.platform !== 'win32') {
+  try { fs.chmodSync(sevenBin.path7za, 0o755); } catch { /* read-only fs etc. — surfaced later at spawn time */ }
+}
 if (_missingExtractors.length) {
   console.warn(`  Mod extraction limited — missing: ${_missingExtractors.join(', ')}. Run "npm install" to enable.`);
 }

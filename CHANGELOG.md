@@ -41,6 +41,21 @@ the change matters; the commit log is the source of truth for *what* changed.
   (it's a content-management action, not part of the running-config
   flow).
 
+### Fixed
+
+- **HTTP 500 on chunked mod upload when `node_modules/7zip-bin/linux/x64/7za`
+  was missing its +x bit.** `npm install --ignore-scripts`, tarball
+  restores, and `node_modules` copied between machines all drop the
+  execute bit on the bundled 7za binary; the chunk upload route then
+  hits `spawn EACCES` inside `node-7z.extractFull` and the handler
+  responds with a generic 500, so the operator only sees "upload
+  failed" with no clue why. `server.js` now runs an idempotent
+  `fs.chmodSync(sevenBin.path7za, 0o755)` right after the
+  `require('7zip-bin')`, gated to non-Windows. Any chmod failure
+  (read-only `node_modules`, missing file) is swallowed so the panel
+  still boots; the underlying spawn error would still surface clearly
+  at upload time.
+
 ## [1.6.0] — 2026-05-19
 
 The Dashboard finally answers the "where are they on the track right now?"

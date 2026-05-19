@@ -183,7 +183,7 @@ production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
 - **Public driver profile pages** at `/p/<steam-id>` — totals, server
   records held, personal bests, OpenGraph previews for Discord shares.
   Companion `/api/public/players/<id>` for bots. Admin-toggleable from
-  Configuración; on by default. ROADMAP-doing-next #1 closed.
+  Settings; on by default. ROADMAP-doing-next #1 closed.
 - **UDP live-driver fixes** — phantom drivers on dashboard boot are
   gone (boot burst now gated on `/JSON|0`'s `IsConnected` flag rather
   than blindly firing `GET_CAR_INFO` at 64 slots), and `players.nation`

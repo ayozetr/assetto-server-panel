@@ -9,7 +9,35 @@ const fsp           = fs.promises;
 const path          = require('path');
 const os            = require('os');
 const crypto        = require('crypto');
-const { spawn }     = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+
+// ── Auto-build dist/ if stale or missing ────────────────────────────────────
+// The package.json `prestart` hook only runs under `npm start`. Deployments
+// that invoke `node server.js` directly (systemd unit, docker, fresh clone)
+// would otherwise serve a stale or empty dist/ — users see old UI even after
+// pulling new src/. Compare newest src/ mtime against the dist/app.js marker
+// and rebuild only when needed so warm restarts stay fast.
+(function ensureBuildFresh() {
+  const distMarker = path.join(__dirname, 'dist', 'app.js');
+  const srcDir     = path.join(__dirname, 'src');
+  if (!fs.existsSync(srcDir)) return; // not a source tree (e.g. extracted dist-only build)
+  let distMtime = 0;
+  try { distMtime = fs.statSync(distMarker).mtimeMs; } catch { /* missing */ }
+  let srcMtime = 0;
+  (function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else { const m = fs.statSync(p).mtimeMs; if (m > srcMtime) srcMtime = m; }
+    }
+  })(srcDir);
+  if (distMtime > 0 && distMtime >= srcMtime) return; // already fresh
+  console.log(distMtime === 0
+    ? '  [build] dist/ missing — running build.js…'
+    : '  [build] dist/ older than src/ — running build.js…');
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'build.js')], { stdio: 'inherit' });
+  if (r.status !== 0) console.warn(`  [build] build.js exited with status ${r.status}; serving existing dist/ as-is`);
+})();
 
 // ── Mod extraction libraries (loaded lazily to avoid startup errors if missing) ─
 // Each format has an optional dependency. We log a clear banner at startup if a

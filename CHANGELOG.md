@@ -43,6 +43,19 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ### Fixed
 
+- **`dist/` served stale UI after deployments that invoke `node server.js`
+  directly.** The `prestart` hook in `package.json` only fires under
+  `npm start`; the production systemd unit runs `node server.js`, so
+  `git pull` updated `src/` but `dist/` kept the previous build's
+  bundles — operators saw old UI until someone manually ran
+  `node build.js`. `server.js` now runs an auto-build check at startup:
+  it compares the newest `src/**` mtime against the `dist/app.js` mtime
+  and invokes `build.js` synchronously (via `spawnSync`) only when
+  `dist/` is missing or older. Warm restarts stay fast (single `stat`
+  per file, no rebuild when up to date), fresh clones work with
+  `node server.js` directly without a separate build step, and a failed
+  build is non-fatal — the panel still boots and serves whatever
+  `dist/` currently has, with a warning in the log.
 - **HTTP 500 on chunked mod upload when `node_modules/7zip-bin/linux/x64/7za`
   was missing its +x bit.** `npm install --ignore-scripts`, tarball
   restores, and `node_modules` copied between machines all drop the

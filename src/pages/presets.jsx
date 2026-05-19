@@ -482,7 +482,7 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
         aria-modal="true"
         aria-label={t(editing ? 'presets.build_modal.edit_title' : 'presets.build_modal.title')}
         tabIndex={-1}
-        style={{ maxWidth: 760, maxHeight: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column' }}
+        style={{ maxWidth: 760 }}
       >
         <div className="modal-header">
           <I.IconFolder size={15}/>
@@ -493,14 +493,15 @@ function BuildPresetModal({ open, onClose, onSave, tracks, cars, sessionCfg, edi
             </button>
           )}
         </div>
-        {/* `minHeight: 0` is load-bearing: without it, the flex item's
-            default min-height is its content size, the body doesn't shrink
-            to honour the modal's max-height, the modal grows past the
-            viewport, and each `.card` (which has `overflow: hidden`) gets
-            squeezed by flex-shrink and clips its own contents. With
-            min-height: 0 the body actually scrolls and every card keeps
-            its natural height. */}
-        <div className="modal-body" style={{ overflowY: 'auto', flex: 1, minHeight: 0, gap: 18 }}>
+        {/* The modal-body owns its own max-height + scroll instead of relying
+            on a flex column from the modal. The earlier flex-1 / min-height-0
+            approach failed when the modal's `overflow: hidden` + each card's
+            own `overflow: hidden` combined to clip every card's bottom edge
+            before the body had a chance to scroll. With a direct max-height
+            (viewport minus header/footer/modal-padding) the body always
+            scrolls when content overflows and the cards keep their natural
+            height. */}
+        <div className="modal-body" style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)', gap: 18 }}>
           {/* ── Name + description ─────────────────────────────────────── */}
           <div className="grid-2" style={{gridTemplateColumns: '1fr 1.4fr'}}>
             <div className="field">

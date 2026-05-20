@@ -674,6 +674,113 @@ A keep-alive heartbeat (`: ping\n\n`) is written every 25 s so Cloudflare / reve
 
 ---
 
+## Session presets
+
+Saved session configurations the operator can pick from the Presets page and reload into the Session editor with one click. All endpoints below are gated by the `presetManage` permission; admin always passes. Preset names are unique (case-insensitive) — the `UNIQUE` constraint in the schema makes a colliding `POST` / `PUT` return `409`; the import endpoint instead auto-suffixes with ` (2)`, ` (3)`, …
+
+### `GET /api/session-presets`
+List every saved preset with a summary used to render the card grid.
+
+**Response:**
+
+```json
+[
+  {
+    "id": 7,
+    "name": "GP Practice",
+    "description": "Sunday warm-up loop",
+    "summary": {
+      "trackId": "ks_nordschleife",
+      "layout": "endurance",
+      "slotCount": 24,
+      "practiceEnabled": true,
+      "qualifyEnabled": false,
+      "raceEnabled": true
+    },
+    "createdBy": "ayoze",
+    "createdAt": "2026-05-19 22:11:03",
+    "updatedAt": "2026-05-20 00:42:10"
+  }
+]
+```
+
+`config` is intentionally omitted — fetch it via `GET /:id` when you actually need to load.
+
+---
+
+### `POST /api/session-presets`
+Create a new preset.
+
+**Body:**
+
+```json
+{ "name": "GP Practice", "description": "Sunday warm-up loop", "config": { /* sessionCfg shape */ } }
+```
+
+`config` must be an object; its shape matches what `POST /api/session/apply` consumes plus any extra fields the Session page tracks client-side. Server preserves the JSON byte-for-byte (after `JSON.parse` round-trip), so adding a future Session field doesn't need a schema migration. Audited as `preset.create`.
+
+**Response:** `{ "id": <number>, "name": <string> }` on success, `409 { "error": "A preset with that name already exists" }` on collision.
+
+---
+
+### `GET /api/session-presets/:id`
+Full preset including its `config` blob — what the edit modal hydrates from and what `Load into Session` drops into the live `sessionCfg`.
+
+**Response:** the list-shape row plus `"config": { … }`.
+
+---
+
+### `PUT /api/session-presets/:id`
+Partial update. Send any subset of `name`, `description`, `config`; omitted fields are left untouched. `updated_at` is refreshed automatically. Audited as `preset.update`. Returns `{ "ok": true }`, or `409` if the new name collides.
+
+---
+
+### `DELETE /api/session-presets/:id`
+Delete the row. Audited as `preset.delete`. Returns `{ "ok": true }` or `404`.
+
+---
+
+### `GET /api/session-presets/:id/export`
+Download the preset as a portable JSON file. The browser saves it as `<name>.json` via `Content-Disposition: attachment; filename="…"; filename*=UTF-8''…`. The filename is sanitised against hostile filesystem characters (`\/:*?"<>|`, control bytes), collapses runs of whitespace, and is capped at 80 chars with a `preset` fallback.
+
+**Response payload** (the envelope on disk):
+
+```json
+{
+  "format": "assetto-server-panel-preset",
+  "formatVersion": 1,
+  "exportedAt": "2026-05-20T00:00:00.000Z",
+  "exportedFrom": "ayoze",
+  "panelVersion": "1.7.1",
+  "preset": {
+    "name": "GP Practice",
+    "description": "Sunday warm-up loop",
+    "config": { /* sessionCfg shape */ }
+  }
+}
+```
+
+`Cache-Control: no-store` so a download is never served from a stale proxy / SW cache. Audited as `preset.export`.
+
+---
+
+### `POST /api/session-presets/import`
+Create a new preset from an exported file.
+
+**Body:** either the full envelope (`format` + `formatVersion` + `preset`) emitted by `/export`, or a bare `{ "name": "...", "description": "...", "config": {...} }` for hand-crafted files. Validation reuses the same `_validatePresetPayload` as the regular `POST`, so the field constraints (name ≤ 120, description ≤ 500, config object-only) are identical.
+
+When the requested `name` collides with an existing preset (case-insensitive) the endpoint **does not** return `409` — it appends ` (2)`, ` (3)`, … until it finds a free slot and stores under that name, so a re-import never fails because the operator forgot they already had a copy.
+
+**Response:**
+
+```json
+{ "id": 42, "name": "GP Practice (2)", "renamed": true, "original": "GP Practice" }
+```
+
+`renamed: false` (and `original === name`) when no collision occurred. Audited as `preset.import`.
+
+---
+
 ## Mod upload
 
 ### `POST /api/mods/upload`
@@ -851,7 +958,7 @@ Return audit log entries in reverse chronological order, with cursor pagination.
 }
 ```
 
-Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`, `admin.backup`.
+Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`, `admin.backup`, `preset.create`, `preset.update`, `preset.delete`, `preset.export`, `preset.import`.
 
 A daily sweeper deletes entries older than `AUDIT_RETENTION_DAYS` (env, default 365).
 

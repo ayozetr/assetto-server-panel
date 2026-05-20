@@ -10,6 +10,52 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-05-20
+
+Presets are now portable. Operators can download any saved preset as a
+`.json` file and re-import it into the same panel or onto another
+installation — useful for sharing a known-good GP / endurance / cup
+configuration without having to reproduce the grid by hand.
+
+### Added
+
+- **Preset export.** A new download button on every preset card (next
+  to edit / delete) hits `GET /api/session-presets/:id/export` and the
+  browser saves the response as `<name>.json` via the
+  `Content-Disposition` header the route sets. The payload is a
+  self-describing envelope:
+  ```json
+  {
+    "format": "assetto-server-panel-preset",
+    "formatVersion": 1,
+    "exportedAt": "<ISO>",
+    "exportedFrom": "<username>",
+    "panelVersion": "1.7.1",
+    "preset": { "name": "...", "description": "...", "config": { … } }
+  }
+  ```
+  The filename is sanitised against the usual hostile filesystem
+  characters (`\/:*?"<>|`, control bytes), collapses runs of
+  whitespace, and is capped at 80 chars with a `preset` fallback for
+  edge cases. Gated by `presetManage` and writes a `preset.export`
+  audit row.
+- **Preset import.** A new `Import` button in the Presets page header
+  opens a hidden file picker; the chosen JSON is parsed client-side
+  and POSTed to `POST /api/session-presets/import`. The endpoint
+  accepts both the full envelope above and a bare
+  `{ name, description, config }` for hand-crafted files. When the
+  requested name collides with an existing preset (case-insensitive,
+  matching the schema's `UNIQUE` constraint) it auto-suffixes with
+  ` (2)`, ` (3)`, … instead of erroring out, and the response
+  surfaces both the final name and the original so the success toast
+  can read "Imported as X — Y already existed" when a collision was
+  auto-resolved. Gated by `presetManage` and writes a `preset.import`
+  audit row.
+- New i18n keys `presets.btn_import`, `presets.card.export`,
+  `presets.toast.imported`, `presets.toast.imported_renamed`,
+  `presets.toast.import_invalid`, `presets.toast.import_failed` in
+  EN/ES/IT.
+
 ## [1.7.0] — 2026-05-20
 
 Saved session presets shipped. Operators can stash a `sessionCfg` under a

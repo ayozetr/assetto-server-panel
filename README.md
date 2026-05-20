@@ -68,6 +68,9 @@ Per-session (Practice / Qualify / Race) enable toggles — when a session is dis
   <img src="docs/screenshots/session.webp" alt="Session planner with Practice / Qualify / Race configuration" width="800"/>
 </p>
 
+### 📋 Session presets
+Save a whole `sessionCfg` (track, layout, slots with per-car/skin combinations, session toggles + durations, weather, time of day, penalties, max clients) under a name and load it back later in one click. Two creation paths from the Presets page: **Save as preset** on the Session page snapshots the live config, while **New preset** opens a self-contained builder that composes a configuration from scratch without touching the running session. The pencil icon on any card re-opens the same builder pre-filled, so editing is the same flow as creating. **Loading** a preset drops its config into the Session page and leaves the operator one click away from Apply — never reboots the running session by accident. Presets are also **portable**: every card has a download button that exports the preset as `<name>.json`, and the Import button accepts those files (or hand-crafted `{ name, description, config }` JSON), auto-suffixing the name with `(2)`, `(3)`, … when a preset already exists. Gated by the `presetManage` permission so non-admins can manage presets without also getting `server_cfg.ini` edit rights.
+
 ### 📦 Mod installer
 Upload mods as `.zip`, `.rar` or `.7z` straight from the browser. The server automatically detects whether it's a car or a track and installs it in the right folder. Works remotely too, with chunked upload support for Cloudflare and other proxies.
 
@@ -86,7 +89,7 @@ Edit `server_cfg.ini` through a visual interface: server name, ports, slots, pas
 Create, edit and delete panel users. Each user has their own profile with password change and a built-in secure password generator (uses `crypto.getRandomValues`). The panel refuses to delete *or demote* the last remaining admin and revokes a user's active sessions when an admin resets their password.
 
 ### 🔐 Granular role permissions
-The `user` role is gated by nine independent toggles edited from the **Users** page: `serverControl`, `sessionEdit`, `serverConfig`, `whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`, `auditView`, `dbBackup`. Admin always passes every check. Defaults preserve the open grants from earlier deployments (server control / session edit / mod upload on; the rest off). Editing a permission takes effect on the affected user's next request — no re-login needed. Panel-user CRUD, AC `PASSWORD` / `ADMIN_PASSWORD` and the permission set itself are reserved to admins by design (cannot be exposed as toggles without enabling privilege escalation).
+The `user` role is gated by ten independent toggles edited from the **Users** page: `serverControl`, `sessionEdit`, `serverConfig`, `presetManage`, `whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`, `auditView`, `dbBackup`. Admin always passes every check. Defaults preserve the open grants from earlier deployments (server control / session edit / mod upload / preset management on; the rest off). Editing a permission takes effect on the affected user's next request — no re-login needed. New permissions added in a later release auto-backfill into pre-existing role rows with their intended defaults so upgrades don't silently demote users. Panel-user CRUD, AC `PASSWORD` / `ADMIN_PASSWORD` and the permission set itself are reserved to admins by design (cannot be exposed as toggles without enabling privilege escalation).
 
 <p align="center">
   <img src="docs/screenshots/users.webp" alt="User management with role-based granular permissions" width="800"/>

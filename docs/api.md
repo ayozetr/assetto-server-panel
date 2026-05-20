@@ -19,6 +19,29 @@ Liveness probe. No auth required. Intentionally returns no diagnostic data to an
 
 ---
 
+### `GET /api/setup/status`
+First-run readiness probe used by the install wizard. No auth required — surfacing whether the panel can already see `server_cfg.ini`, `cars/`, `tracks/` doesn't leak anything sensitive, and the wizard needs to read it before any user exists.
+
+**Response:**
+
+```json
+{
+  "ready": true,
+  "issues": [],
+  "paths": {
+    "cfgFile": { "path": "/srv/assetto/cfg/server_cfg.ini", "exists": true },
+    "cars":    { "path": "/srv/assetto/content/cars",       "exists": true },
+    "tracks":  { "path": "/srv/assetto/content/tracks",     "exists": true },
+    "…": "…"
+  },
+  "detectedAcRoot": "/srv/assetto"
+}
+```
+
+`ready` is `true` only when all three critical paths (`cfgFile`, `cars`, `tracks`) resolve to an existing file/dir. `issues` lists which of those three are missing — the wizard renders one row per entry with the failing path so the operator knows what to fix. `detectedAcRoot` is the auto-discovered root (or `null` if nothing plausible was found).
+
+---
+
 ### `POST /api/auth/login`
 Authenticate with username and password.
 
@@ -69,6 +92,56 @@ set so the frontend can render conditional UI without an extra fetch.
 
 Admin always gets every permission as `true`. Users get whatever the admin has
 configured via the Users → Permissions card (see `/api/permissions/role`).
+
+---
+
+### `GET /api/auth/2fa/status`
+Whether the current session's user has 2FA enabled, and whether a setup is in progress but not yet confirmed.
+
+**Auth required:** yes
+
+**Response:** `{ "enabled": <bool>, "pending": <bool> }`. With no DB available, both fields fall back to `false`.
+
+---
+
+### `POST /api/auth/2fa/setup`
+Generate a fresh TOTP secret for the current user. The secret lives in `totp_pending` until the next endpoint confirms it — actually enrolling 2FA always takes two server round-trips so a half-completed flow doesn't lock the user out.
+
+**Auth required:** yes
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "secret": "JBSWY3DPEHPK3PXP…",
+  "otpauth": "otpauth://totp/Assetto%20Server%20Panel:ayoze?secret=…&issuer=Assetto%20Server%20Panel"
+}
+```
+
+The `secret` is base32-encoded 20 random bytes (RFC 4226 SHA-1 min). `otpauth` is the URI an authenticator app encodes into the QR. Calling this endpoint again before confirm rotates the pending secret — a partial setup never blocks a retry.
+
+---
+
+### `POST /api/auth/2fa/confirm`
+Promote the pending secret into the active `totp_secret` after the user types a code from their authenticator app.
+
+**Auth required:** yes
+
+**Body:** `{ "code": "123456" }` — six digits, whitespace stripped.
+
+**Response:** `{ "ok": true }` on success, `400` if there's no pending setup or the code isn't six digits, `401` for an invalid code, `429` if the global login-attempt rate limit is currently throttling the client IP (same bucket as `/api/auth/login`, on the assumption that brute-force should also affect 2FA confirmation). Audited as `user.2fa.enable`.
+
+---
+
+### `POST /api/auth/2fa/disable`
+Turn 2FA off for the current user. Requires both the current password (so a stolen session cookie can't disable 2FA on its own) **and** a current 2FA code (proves the user still has access to the authenticator they're disabling).
+
+**Auth required:** yes
+
+**Body:** `{ "currentPassword": "…", "code": "123456" }`.
+
+**Response:** `{ "ok": true }`. Returns `401` on either wrong-password or wrong-code, `400` if 2FA isn't currently on, `429` if the login rate limit fires. Audited as `user.2fa.disable`.
 
 ---
 
@@ -277,11 +350,48 @@ Kick a player via the AC HTTP API.
 ---
 
 ### `POST /api/players/ban`
-Add a Steam GUID to `blacklist.txt`.
+Add a Steam GUID to `blacklist.txt` and write a row in the `bans` table for the audited/expiry view. Audited as `player.ban`.
 
-**Auth required:** yes (admin)
+**Auth required:** yes (`playerModeration` permission)
 
-**Body:** `{ "guid": "76561198...", "name": "PlayerName" }`
+**Body:** `{ "guid": "76561198...", "name": "PlayerName", "reason": "...", "ttlHours": <int>|null }` — `ttlHours` makes the ban expire (`null` or omitted = permanent).
+
+---
+
+### `GET /api/bans`
+List active and recently-expired bans for the Bans view.
+
+**Auth required:** yes (`playerModeration` permission)
+
+**Response:**
+
+```json
+[
+  {
+    "guid":      "76561198...",
+    "name":      "PlayerName",
+    "reason":    "...",
+    "bannedBy":  "ayoze",
+    "bannedAt":  "2026-05-19 22:11:03",
+    "expiresAt": "2026-05-26 22:11:03",
+    "permanent": false,
+    "expired":   false
+  }
+]
+```
+
+Ordered with permanent bans first, then by `bannedAt` descending. `expiresAt` is `null` for permanent rows; `expired: true` is computed server-side so the UI doesn't have to compare clocks.
+
+---
+
+### `DELETE /api/players/:guid/ban`
+Lift an active ban. Removes the GUID from `blacklist.txt` and the matching `bans` row. Audited as `player.unban`.
+
+**Auth required:** yes (`playerModeration` permission)
+
+**URL:** `:guid` must be a 17-digit Steam GUID.
+
+**Response:** `{ "ok": true }`. The endpoint is idempotent — calling it on a GUID that wasn't banned still returns `ok` but the audit row records that nothing was actually removed.
 
 ---
 
@@ -442,6 +552,17 @@ PNG render of the driver's OpenGraph card — used as `og:image` / `twitter:imag
 
 ---
 
+### `GET /p/:guid/og.svg`
+The raw SVG behind the PNG above. Same content, same query parameters (`lang`, `theme`), useful for direct browsing or for tooling that prefers vector input — but **not** what the HTML's `og:image` points at, because Discord and Twitter reject `image/svg+xml` for security reasons. Cached for 5 minutes (`Cache-Control: public, max-age=300`).
+
+**Auth required:** no
+
+**Methods:** `GET`, `HEAD`
+
+**Response:** `200 image/svg+xml`, ~6–12 KB.
+
+---
+
 ### `GET /p/:guid/card.png`
 Downloadable PNG stat card with extended KPIs. Sent with `Content-Disposition: attachment` so clicking the download button on the SSR page saves it to disk with a filename like `<sanitized-name>-<guid>.png`. Layout differs from the OG card: 5 KPI tiles (total laps, time on track, most-used car, driver's best lap on their most-played track, server records held), a thumbnail of the most-played track's `map.png` in the upper-right, and a footer with the public profile URL.
 
@@ -561,7 +682,12 @@ Serve the car's badge/preview image. Falls back to the bundled Kunos asset.
 ---
 
 ### `GET /api/content/cars/:id/skins/:skin/preview`
-Serve a skin preview image.
+Serve a skin preview image from the installed `AC_CARS_DIR/<id>/skins/<skin>/preview.{webp,jpg,png}` (whichever exists first).
+
+---
+
+### `GET /api/content/cars/:id/kunos-skin/:skin/preview`
+Same as above, but reads from the bundled `KUNOS_ASSETS_DIR/cars/<id>/skins/<skin>/` instead of the live `AC_CARS_DIR`. Used by the Cars page to render the original Kunos skin previews even when the operator's installation only ships a subset of the stock content. Both `:id` and `:skin` go through `isValidContentId` / `isValidSkinName` and the resolved path is asserted to stay under `KUNOS_ASSETS_DIR` (defence-in-depth on top of the validators).
 
 ---
 

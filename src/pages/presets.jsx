@@ -48,6 +48,7 @@ function PagePresets({ tracks, canEdit, onAskBuild, onAskEdit, onLoadPreset }) {
   const [presets, setPresets] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [deleteTarget, setDeleteTarget] = React.useState(null); // { id, name }
+  const fileInputRef = React.useRef(null);
 
   // Stable refs for `t` and `toast`. The originals are rebound on every render
   // (`AppI18n.t.bind(...)` returns a new function ref every time and useToast
@@ -89,6 +90,51 @@ function PagePresets({ tracks, canEdit, onAskBuild, onAskEdit, onLoadPreset }) {
       .catch(e => toast.push(`${t('common.error')}: ${e.message}`, 'error'));
   };
 
+  // Programmatic anchor click: avoids changing the URL bar (which window.location
+  // assignment would do) and side-steps the Service Worker's navigation handler
+  // by being a same-origin GET that returns a Content-Disposition attachment.
+  const handleExport = (preset) => {
+    const a = document.createElement('a');
+    a.href = `/api/session-presets/${preset.id}/export`;
+    a.rel  = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset the input so re-selecting the same file fires `change` again.
+    e.target.value = '';
+    if (!file) return;
+    let payload;
+    try {
+      const text = await file.text();
+      payload = JSON.parse(text);
+    } catch {
+      toast.push(t('presets.toast.import_invalid'), 'error');
+      return;
+    }
+    try {
+      const r = await fetch('/api/session-presets/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      const msg = d.renamed
+        ? t('presets.toast.imported_renamed').replace('{name}', d.name).replace('{original}', d.original)
+        : t('presets.toast.imported').replace('{name}', d.name);
+      toast.push(msg, 'ok');
+      refresh();
+    } catch (e2) {
+      toast.push(`${t('presets.toast.import_failed')}: ${e2.message}`, 'error');
+    }
+  };
+
   const handleDelete = () => {
     if (!deleteTarget) return;
     const name = deleteTarget.name;
@@ -115,9 +161,21 @@ function PagePresets({ tracks, canEdit, onAskBuild, onAskEdit, onLoadPreset }) {
             <I.IconRefresh size={13}/> {t('presets.refresh')}
           </button>
           {canEdit && (
-            <button className="btn btn-primary" onClick={onAskBuild} style={{whiteSpace:'nowrap'}}>
-              <I.IconPlus size={14}/> {t('presets.new')}
-            </button>
+            <>
+              <button className="btn" onClick={handleImportClick} style={{whiteSpace:'nowrap'}}>
+                <I.IconUpload size={13}/> {t('presets.btn_import')}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                style={{display:'none'}}
+                onChange={handleImportFile}
+              />
+              <button className="btn btn-primary" onClick={onAskBuild} style={{whiteSpace:'nowrap'}}>
+                <I.IconPlus size={14}/> {t('presets.new')}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -143,6 +201,7 @@ function PagePresets({ tracks, canEdit, onAskBuild, onAskEdit, onLoadPreset }) {
               canEdit={canEdit}
               onLoad={() => handleLoad(p)}
               onEdit={() => onAskEdit(p)}
+              onExport={() => handleExport(p)}
               onDelete={() => setDeleteTarget({ id: p.id, name: p.name })}
             />
           ))}
@@ -161,7 +220,7 @@ function PagePresets({ tracks, canEdit, onAskBuild, onAskEdit, onLoadPreset }) {
   );
 }
 
-function PresetCard({ t, preset, tracks, canEdit, onLoad, onEdit, onDelete }) {
+function PresetCard({ t, preset, tracks, canEdit, onLoad, onEdit, onExport, onDelete }) {
   const trackLabel = _trackLabel(tracks, preset.summary);
   return (
     <div className="card preset-card" style={{padding: 14, display:'flex', flexDirection:'column', gap: 10}}>
@@ -197,6 +256,9 @@ function PresetCard({ t, preset, tracks, canEdit, onLoad, onEdit, onDelete }) {
       <div style={{display:'flex', gap: 6, flexWrap:'wrap', marginTop: 2}}>
         <button className="btn btn-primary" style={{flex: 1, minWidth: 140}} onClick={onLoad}>
           <I.IconPlay size={12}/> {t('presets.card.load')}
+        </button>
+        <button className="btn icon-btn" title={t('presets.card.export')} aria-label={t('presets.card.export')} onClick={onExport}>
+          <I.IconDownload size={13}/>
         </button>
         {canEdit && (
           <>

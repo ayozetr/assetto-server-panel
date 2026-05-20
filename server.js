@@ -4801,6 +4801,124 @@ function apiSessionPresetDelete(req, res, id) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Filename-safe version of the preset name for Content-Disposition. Strips
+// characters that confuse Windows/macOS/Linux filesystems, collapses
+// whitespace, and trims to a reasonable length. Falls back to "preset" if
+// the result would be empty.
+function _presetFilename(name) {
+  const cleaned = String(name || '')
+    .replace(/[\\/:*?"<>|\x00-\x1f]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  return cleaned || 'preset';
+}
+
+// Pick a unique name for an imported preset. If the requested name already
+// exists (case-insensitive, matching the schema's UNIQUE), append " (2)",
+// " (3)" … until we find a free slot. Avoids the import flow dying on a
+// 409 just because the operator already had a preset with the same name.
+function _uniquePresetName(base) {
+  const exists = (n) => !!db.prepare('SELECT 1 FROM session_presets WHERE LOWER(name) = LOWER(?)').get(n);
+  if (!exists(base)) return base;
+  for (let n = 2; n < 10000; n++) {
+    const cand = `${base} (${n})`;
+    if (!exists(cand)) return cand;
+  }
+  // Pathological — 10k presets with the same base name. Append a timestamp.
+  return `${base} (${Date.now()})`;
+}
+
+// Wrap a preset row in a portable envelope: format marker + version + a
+// little provenance so an operator opening the file in a text editor can
+// tell what it is. The `preset` object inside matches the POST payload
+// /api/session-presets accepts, so re-importing into another panel is a
+// straight pass-through after envelope unwrap.
+const PRESET_EXPORT_FORMAT  = 'assetto-server-panel-preset';
+const PRESET_EXPORT_VERSION = 1;
+
+function apiSessionPresetExport(req, res, id) {
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 404, { error: 'Not found' });
+  try {
+    const row = db.prepare(`
+      SELECT id, name, description, config, created_by, created_at, updated_at
+      FROM session_presets WHERE id = ?
+    `).get(id);
+    if (!row) return json(res, 404, { error: 'Not found' });
+    let cfg = {};
+    try { cfg = JSON.parse(row.config) || {}; } catch {}
+    const envelope = {
+      format:        PRESET_EXPORT_FORMAT,
+      formatVersion: PRESET_EXPORT_VERSION,
+      exportedAt:    new Date().toISOString(),
+      exportedFrom:  checkAnyAuth(req)?.username || '',
+      panelVersion:  require('./package.json').version,
+      preset: {
+        name:        row.name,
+        description: row.description || '',
+        config:      cfg,
+      },
+    };
+    const filename = _presetFilename(row.name) + '.json';
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    // RFC 6266: include filename* for non-ASCII (encodeURIComponent handles
+    // the percent-encoding) while keeping a plain `filename=` fallback for
+    // legacy clients that ignore the extended form.
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${filename.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(JSON.stringify(envelope, null, 2));
+    const actor = checkAnyAuth(req)?.username || '';
+    insertAuditLog(actor, 'preset.export', row.name);
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
+async function apiSessionPresetImport(req, res) {
+  if (!checkPermission(req, 'presetManage')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 500, { error: 'DB not ready' });
+  try {
+    const body = await readBody(req);
+    if (!body || typeof body !== 'object') {
+      return json(res, 400, { error: 'invalid body' });
+    }
+    // Accept both the full envelope and a bare preset object (`{ name,
+    // description, config }`) — the former is what /export emits, the
+    // latter is what someone hand-crafting a file is most likely to write.
+    let preset;
+    if (body.format === PRESET_EXPORT_FORMAT) {
+      if (body.formatVersion !== PRESET_EXPORT_VERSION) {
+        return json(res, 400, { error: `unsupported formatVersion ${body.formatVersion}` });
+      }
+      preset = body.preset;
+    } else if (body.preset && typeof body.preset === 'object') {
+      preset = body.preset;
+    } else {
+      preset = body;
+    }
+    const v = _validatePresetPayload(preset, { requireName: true });
+    if (v.error) return json(res, 400, { error: v.error });
+    if (v.config === undefined) return json(res, 400, { error: 'config required' });
+    const finalName = _uniquePresetName(v.name);
+    const actor = checkAnyAuth(req)?.username || '';
+    const cfgJson = JSON.stringify(v.config);
+    const info = db.prepare(`
+      INSERT INTO session_presets (name, description, config, created_by)
+      VALUES (?, ?, ?, ?)
+    `).run(finalName, v.description, cfgJson, actor);
+    insertAuditLog(actor, 'preset.import', finalName);
+    json(res, 200, {
+      id:       Number(info.lastInsertRowid),
+      name:     finalName,
+      // Surface the rename so the client can toast "Imported as X" when the
+      // requested name collided.
+      renamed:  finalName !== v.name,
+      original: v.name,
+    });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // Admin-set display name for a player — stored alongside the in-game name so
 // lap times (joined by GUID) can be rendered as "Apodo (in-game)" without
 // touching the laps the acServer importer already wrote.
@@ -7730,8 +7848,11 @@ function handler(req, res) {
     if (urlPath === '/api/session/apply'  && req.method === 'POST') return apiSessionApply(req, res);
 
     // Session presets (saved bundles a user can load back into the Session page)
-    if (urlPath === '/api/session-presets' && req.method === 'GET')  return apiSessionPresetsList(req, res);
-    if (urlPath === '/api/session-presets' && req.method === 'POST') return apiSessionPresetCreate(req, res);
+    if (urlPath === '/api/session-presets'        && req.method === 'GET')  return apiSessionPresetsList(req, res);
+    if (urlPath === '/api/session-presets'        && req.method === 'POST') return apiSessionPresetCreate(req, res);
+    if (urlPath === '/api/session-presets/import' && req.method === 'POST') return apiSessionPresetImport(req, res);
+    const presetExportMatch = urlPath.match(/^\/api\/session-presets\/(\d+)\/export$/);
+    if (presetExportMatch && req.method === 'GET') return apiSessionPresetExport(req, res, Number(presetExportMatch[1]));
     const presetIdMatch = urlPath.match(/^\/api\/session-presets\/(\d+)$/);
     if (presetIdMatch) {
       const presetId = Number(presetIdMatch[1]);

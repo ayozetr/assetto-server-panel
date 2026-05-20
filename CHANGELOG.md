@@ -10,6 +10,20 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-05-20
+
+Saved session presets shipped. Operators can stash a `sessionCfg` under a
+name and load it back later in one click — and the page graduated from
+"new feature in 1.6.0's Unreleased queue" into something ready to hand to
+non-admin users: a full inline editor that opens from the pencil icon, a
+new dedicated `presetManage` permission so granting preset access no
+longer also hands over `server_cfg.ini` write rights, and a clutch of
+layout / scroll / icon fixes from actual use. Two operational papercuts
+also got patched: `dist/` self-rebuilds when the panel is restarted
+through anything other than `npm start` (which `systemd` is), and
+chunked mod uploads no longer fall over with a generic HTTP 500 when
+`node_modules/7zip-bin` lost its `+x` bit during install.
+
 ### Added
 
 - **Session presets.** New `Presets` page in the Content group between
@@ -23,18 +37,34 @@ the change matters; the commit log is the source of truth for *what* changed.
   Session page — the operator reviews and pushes Apply to actually send
   it to acServer, so loading a preset never directly reboots a running
   session by accident. Names are unique (case-insensitive) so re-saving
-  with an existing name is the natural "overwrite" path; rename via the
-  card's pencil button, delete via the trash. New endpoints `GET
-  /api/session-presets` (list with summary), `POST` (create), `GET /:id`
-  (full config), `PUT /:id` (update), `DELETE /:id`. All gated by the
-  same `serverConfig` permission as `/api/session/apply`. Audit rows
-  `preset.create`, `preset.update`, `preset.delete` distinguish each
-  action. The `config` column is a JSON blob keeping the same shape
-  `sessionCfg` has on the client + `/api/session/apply` consumes, so
-  adding a Session field later doesn't need a schema migration —
-  default-fill on load. Migration `012 session_presets_table` runs
-  idempotently on boot. New i18n keys `nav.presets`, `presets.*`,
-  `sess.btn_save_preset` translated into en/es/it.
+  with an existing name is the natural "overwrite" path; edit via the
+  card's pencil button (opens the builder pre-filled, see below),
+  delete via the trash. New endpoints `GET /api/session-presets` (list
+  with summary), `POST` (create), `GET /:id` (full config), `PUT /:id`
+  (update), `DELETE /:id`. All gated by the new `presetManage`
+  permission (see Added below). Audit rows `preset.create`,
+  `preset.update`, `preset.delete` distinguish each action. The
+  `config` column is a JSON blob keeping the same shape `sessionCfg`
+  has on the client + `/api/session/apply` consumes, so adding a
+  Session field later doesn't need a schema migration — default-fill
+  on load. Migration `012 session_presets_table` runs idempotently on
+  boot. New i18n keys `nav.presets`, `presets.*`, `sess.btn_save_preset`
+  translated into en/es/it.
+- **Custom preset builder modal.** The "New preset" button opens a
+  self-contained editor where the operator picks track + layout,
+  builds the grid one slot at a time via two dropdowns (car + optional
+  skin) and an "Add slot" button (so adding the same car twice with
+  different skins produces two distinct grid slots, matching how
+  `content.jsx` handles slots), toggles practice / qualify / race with
+  their own duration / laps inputs, sets max clients, weather,
+  time-of-day, air temp and penalties — all without touching the live
+  `sessionCfg` or leaving the Presets page. POSTs the same `config`
+  JSON shape `/api/session-presets` already accepts, so the saved row
+  is interchangeable with snapshot presets when "Load into Session"
+  pulls it back. A "Use current session" shortcut in the modal header
+  imports the live `sessionCfg` into the draft as a starting point
+  (hidden when editing — the existing preset is already the starting
+  point). Adds `presets.build_modal.*` strings in EN/ES/IT.
 - **Sidebar reorder in the Content group**: Cars → Tracks → Presets →
   Session → Mods. The natural flow is now "pick a preset → review in
   Session → Apply", with mod installation at the end where it belongs
@@ -60,6 +90,39 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ### Fixed
 
+- **Cards inside the builder/edit modal clipped their own bottoms.**
+  In practice operators saw only the labels of Track & layout (no
+  selects), the Race row sliced in half in Sessions, the bottom two
+  cells of Conditions (Temp + Penalties) gone, and only the first
+  added car in the Cars list. Cause: `.modal-body` is a flex column
+  with a max-height, every `.card` has `overflow: hidden` for its
+  rounded corner, and flex containers compute an item's min-content
+  size *without* its overflow-hidden contents — so the body had no
+  reason to scroll, it just shrunk every card past its natural height
+  and each card clipped the missing portion. Adds `flex-shrink: 0` to
+  every direct child of the modal-body (the name+description grid
+  plus the four cards) so they hold their natural height and the body
+  actually scrolls when the total exceeds the max-height.
+- **BuildPresetModal crashed with React error #310** ("Rendered more
+  hooks during this render than during the previous render") the
+  moment the modal mounted. The `useMemo` calls for `sortedCars` /
+  `sortedTracks` sat below the `if (!open) return null` early-return,
+  so the closed-render saw N hooks (useState + useEffect only) while
+  the open-render saw N+2 — React's hook-count check fired the
+  instant `open` flipped from false to true and the error boundary
+  tore down the whole app. Moves both `useMemo` calls above the
+  early return so the hook count stays constant across renders.
+- **Infinite refetch loop on the Presets page** when the list was
+  empty. The `t()` and toast objects passed into `refresh()`'s
+  `useCallback` dep array got a fresh reference on every render
+  (`AppI18n.t.bind(...)` returns a new function ref each time,
+  `useToast()` returns a new context value), so `refresh()`'s
+  identity flipped each render, the `useEffect` that depends on it
+  fired, `setLoading(true)` re-rendered the component, and the cycle
+  repeated — the "Loading…" placeholder never settled and the
+  empty-state card never had a chance to render. Captures both
+  through `useRef` so `refresh` keeps an empty dep array, and adds a
+  manual Refresh button in the page header for explicit reloads.
 - **Edit / delete icon buttons on preset cards were left-aligned
   inside the 32×32 box** instead of centred. `.btn` is
   `display: inline-flex` with the default `justify-content: flex-start`,
@@ -67,7 +130,14 @@ the change matters; the commit log is the source of truth for *what* changed.
   that alignment in place, so the 13px SVG drew against the left edge
   of the box. CSS now also forces `justify-content: center` on the
   combined selector, snapping the icon to the middle.
-
+- **Edit / delete icon buttons on preset cards rendering as blank
+  32×32 squares**. `.btn.icon-btn` inherited `padding: 7px 14px` from
+  `.btn` while keeping the fixed 32×32 from `.icon-btn` — with
+  `box-sizing: border-box` that left ~4px of content area, so the
+  13px SVG inside got squeezed out of the visible box even though the
+  button itself drew correctly. Resets `padding` + `gap` to 0 only
+  when both classes are combined so the bordered icon button keeps
+  `.btn`'s surface/border/hover treatment but actually shows the icon.
 - **`dist/` served stale UI after deployments that invoke `node server.js`
   directly.** The `prestart` hook in `package.json` only fires under
   `npm start`; the production systemd unit runs `node server.js`, so

@@ -6,7 +6,7 @@
   <p>
     <a href="CHANGELOG.md"><img alt="Version"   src="https://img.shields.io/badge/version-1.7.1-blue"></a>
     <a href="ROADMAP.md"><img   alt="Status"    src="https://img.shields.io/badge/status-production--ready-brightgreen"></a>
-    <a href="ROADMAP.md#status"><img alt="Hardening" src="https://img.shields.io/badge/hardening-96%2F100-success"></a>
+    <a href="ROADMAP.md#status"><img alt="Hardening" src="https://img.shields.io/badge/hardening-99%2F100-success"></a>
     <img alt="Audit"     src="https://img.shields.io/badge/npm%20audit-clean-success?logo=npm&logoColor=white">
     <img alt="2FA"       src="https://img.shields.io/badge/2FA-TOTP-blueviolet?logo=keycdn&logoColor=white">
   </p>

@@ -17,15 +17,16 @@ landing on the repo can answer three questions in under a minute:
 
 | Aspect | Score | Notes |
 |---|---:|---|
-| **Hardening** | **96 / 100** | Every CRITICAL and ~45 HIGH findings from the May 2026 internal audit are closed. The 4 remaining HIGH items are upstream-blocked (deps with latent CVEs that have application-level mitigations in place and pass `npm run audit:deps`). |
+| **Hardening** | **99 / 100** | All CRITICAL and HIGH findings with active exploits are closed. `npm audit` and the bundled `npm run audit:deps` both report **0 vulnerabilities** as of 2026-05-20. The one remaining point is `§6.5 extractRar` (no streaming API in `node-unrar-js`, so a `.rar` upload is read into RAM; mitigated by the 2 GB hard cap on upload size plus a 2-slot extractor semaphore that bounds peak memory). The other items originally counted against the score in May (`tar-fs` CVEs in 2.x, `prebuild-install` deprecation, `node-stream-zip` and `node-unrar-js` upstream stalls) have either been patched upstream (`tar-fs@2.1.4` carries the fixes for CVE-2024-12905 / CVE-2025-48387) or remain as deprecation / no-update warnings with no exploitable CVE — they don't move the score because they don't increase risk. |
 | **Tests** | 75 / 100 | `npm test` covers auth, must-change gate, CSRF, rate-limit, TOTP (RFC 6238 reference vector), INI render guard. No deep coverage of mod extractors or UDP packet parsing yet. |
 | **Docs** | 90 / 100 | README, 9 dedicated `docs/*.md` files (installation, Docker, Cloudflare, AC server setup, mods, auth, API, database, troubleshooting, tools), SECURITY.md with supply-chain section, CHANGELOG. Missing: architecture diagram, screenshots, formal threat model doc. |
 | **Portability** | 95 / 100 | One-command Docker (`docker compose up -d`), bare-metal systemd, auto-detect of AC paths from conventional layouts, `npm run setup` wizard, public `/api/setup/status` endpoint, sane defaults across `.env`. Missing: a Helm chart and a one-click "deploy to VPS" option. |
 | **Features vs the field** | 70 / 100 | Caught up with most of ACSM's table stakes (mod manager, session apply, lap times, Discord notifications, audit log, scheduled backups). Leads on security (2FA, ban TTLs, hash-chained audit). Lags on multi-server, race events / championships, public player profiles. See the comparison table below. |
 
-**Overall: ~92 / 100.** The remaining 8 points are mostly product surface
-area (championships, multi-server, public driver pages, telemetry replay)
-rather than technical debt.
+**Overall: ~93 / 100.** The remaining 7 points are mostly product surface
+area (championships, multi-server, telemetry replay, league features)
+rather than technical debt — public driver profiles and live position
+telemetry already shipped in 1.5.x and 1.6.x.
 
 The project follows [Semantic Versioning](https://semver.org). The current
 release is documented in [`CHANGELOG.md`](CHANGELOG.md); the latest version

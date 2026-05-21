@@ -7686,11 +7686,30 @@ function checkOrigin(req) {
   // headless callers (ADMIN_TOKEN) hit this branch and pass without an Origin.
   if (!readCookie(req, 'sid')) return true;
   const raw = req.headers.origin || req.headers.referer || '';
-  if (!raw) return false; // cookie present + no Origin/Referer → refuse
+  if (!raw) {
+    console.warn(`[checkOrigin] reject ${req.method} ${req.url} — session cookie present but no Origin/Referer header (peer=${req.socket?.remoteAddress || '?'})`);
+    return false;
+  }
   try {
     const u = new URL(raw);
-    return u.host.toLowerCase() === host;
-  } catch { return false; }
+    const originHost = u.host.toLowerCase();
+    if (originHost === host) return true;
+    // Behind a reverse proxy that rewrites the Host header to the upstream socket
+    // (nginx without `proxy_set_header Host`, Caddy with default reverse_proxy,
+    // cloudflared with `httpHostHeader: localhost`), Origin will match the public
+    // hostname while Host arrives as `localhost:PORT`. Accept the forwarded host
+    // when the peer is a trusted proxy — same trust gate the rate limiter uses.
+    if (TRUST_PROXY && isTrustedProxyIp(req.socket?.remoteAddress || '')) {
+      const xfh = (req.headers['x-forwarded-host'] || '').toLowerCase().split(',')[0].trim();
+      if (xfh && originHost === xfh) return true;
+    }
+    console.warn(`[checkOrigin] reject ${req.method} ${req.url} — origin "${originHost}" ≠ host "${host}"` +
+      (TRUST_PROXY ? ` (x-forwarded-host="${req.headers['x-forwarded-host'] || ''}", peer=${req.socket?.remoteAddress || '?'})` : ''));
+    return false;
+  } catch {
+    console.warn(`[checkOrigin] reject ${req.method} ${req.url} — invalid Origin/Referer "${raw}"`);
+    return false;
+  }
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────

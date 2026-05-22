@@ -11,6 +11,8 @@
     <img alt="2FA"       src="https://img.shields.io/badge/2FA-TOTP-blueviolet?logo=keycdn&logoColor=white">
   </p>
   <p>
+    <a href="https://www.assettocorsa.gg/"><img alt="Game" src="https://img.shields.io/badge/game-Assetto%20Corsa-E60012"></a>
+    <a href="https://acstuff.club/app/"><img    alt="Launcher" src="https://img.shields.io/badge/launcher-Content%20Manager-FFCC00"></a>
     <img alt="Node.js"          src="https://img.shields.io/badge/Node.js-20.20.2-339933?logo=node.js&logoColor=white">
     <img alt="SQLite"           src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white">
     <img alt="Build"            src="https://img.shields.io/badge/build-esbuild-FFCF00?logo=esbuild">

@@ -145,6 +145,19 @@ Turn 2FA off for the current user. Requires both the current password (so a stol
 
 ---
 
+### `POST /api/auth/2fa/rotate`
+Replace the TOTP secret without leaving the account without a second factor in between. Use when an admin loses their device, switches to a different authenticator app, or wants a periodic rotation — calling `/disable` + `/setup` + `/confirm` for the same outcome would briefly clear `totp_enabled`, so any cookie left on a stolen browser would be past the second factor for the window between the two operations.
+
+**Auth required:** yes (current password + current TOTP code as proof)
+
+**Body:** `{ "currentPassword": "…", "code": "123456" }`. Same shape as `/disable`.
+
+**Response:** `{ "ok": true, "secret": "<base32>", "otpauth": "otpauth://…", "rotating": true }`. The new secret is staged into `totp_pending` while `totp_secret` + `totp_enabled` stay intact, so the OLD code still logs the user in if they back out before finishing. The user finishes the rotation through the existing `POST /api/auth/2fa/confirm` flow with a code from the NEW authenticator entry — at that point `totp_pending` is promoted to `totp_secret` and the old secret is gone for good.
+
+Returns `400` if 2FA isn't currently on (call `/setup` instead), `401` on wrong-password or wrong-code, `429` if the login rate limit fires. Audited as `user.2fa.rotate`.
+
+---
+
 ### `POST /api/auth/change-password`
 Change the authenticated user's own password.
 

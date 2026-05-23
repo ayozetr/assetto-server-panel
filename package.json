@@ -19,7 +19,9 @@
     "prestart": "node build.js",
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node tools/test-smoke.js",
+    "test": "node tools/unit-tests.js && node tools/test-smoke.js",
+    "test:unit": "node tools/unit-tests.js",
+    "test:smoke": "node tools/test-smoke.js",
     "audit:deps": "node tools/audit-deps.js"
   },
   "dependencies": {

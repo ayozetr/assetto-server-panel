@@ -1838,33 +1838,10 @@ function getACUptime() {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
-// ── Log parser ────────────────────────────────────────────────────────────────
-// Heuristic log line parser. AC server output is unstructured English text, so
-// classification is best-effort: word-boundary regex matches narrow the false
-// positive rate, but if AC ever changes its strings or runs in another language
-// the worst case is "info" tag/level — never a crash. The frontend filters by
-// these levels so accuracy isn't load-bearing.
-const _LVL_ERROR   = /\b(error|exception|fatal|fail(ed|ure)?)\b/i;
-const _LVL_WARN    = /\b(warn(ing)?|deprecated|skipped|missing)\b/i;
-const _LVL_OK      = /\b(connected|joined|lap completed|validated|best lap|ok|success)\b/i;
-const _TAG_BRACKET = /\[([A-Z_0-9]{2,12})\]/;
-const _TAG_HTTP    = /^(PAGE:|Serve |GET |POST |HEAD )/;
-const _TAG_CFG     = /^(REQ|\{)/;
-const _TIME        = /(\d{2}:\d{2}:\d{2})/;
-
-function parseLine(raw, id) {
-  const lvl = _LVL_ERROR.test(raw) ? 'error'
-            : _LVL_WARN.test(raw)  ? 'warn'
-            : _LVL_OK.test(raw)    ? 'ok'
-            : 'info';
-  const tm  = raw.match(_TAG_BRACKET);
-  const tag = tm                          ? tm[1]
-            : _TAG_HTTP.test(raw)         ? 'HTTP'
-            : _TAG_CFG.test(raw.trim())   ? 'CFG'
-            : 'SRV';
-  const timeMatch = raw.match(_TIME);
-  return { id, time: timeMatch ? timeMatch[1] : '', lvl, tag, msg: raw };
-}
+// Pure helpers (_csvCell, parseLine) live in lib/pure.js so unit tests can
+// load them without booting the HTTP server / DB / log watcher. See that
+// file's header for the rule about what belongs there.
+const { parseLine } = require('./lib/pure.js');
 
 // ── API handlers ──────────────────────────────────────────────────────────────
 
@@ -7354,13 +7331,8 @@ function apiAuditGet(req, res) {
 // flat on large exports; the JSON path renders an array in one shot because
 // JSON.stringify on N rows of audit data is cheap and the output is meant
 // for jq / SIEM ingestion which prefers one well-formed document over NDJSON.
-function _csvCell(v) {
-  if (v === null || v === undefined) return '';
-  const s = String(v);
-  // RFC 4180: quote any field that contains a quote, comma or any newline.
-  // Escape internal quotes by doubling them.
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
+// _csvCell lives in lib/pure.js so the CSV-quoting invariants can be unit-tested.
+const { _csvCell } = require('./lib/pure.js');
 function apiAuditExport(req, res) {
   if (!checkPermission(req, 'auditView')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 503, { error: 'Database unavailable' });

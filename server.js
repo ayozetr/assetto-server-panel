@@ -6150,10 +6150,29 @@ function _parseProxyEntry(entry) {
   return null;
 }
 
-const _trustedProxyMatchers = (() => {
-  const raw = process.env.TRUST_PROXY_FROM || DEFAULT_PROXY_CIDRS.join(',');
-  return raw.split(',').map(s => s.trim()).filter(Boolean).map(_parseProxyEntry).filter(Boolean);
-})();
+// Returns { matchers, source, rejected } so the boot banner can surface a
+// misconfiguration that would otherwise silently disable forward-IP trust:
+// - source: 'env' if TRUST_PROXY_FROM was set, 'default' if we fell back to
+//   the published Cloudflare ranges.
+// - rejected: list of entries that didn't parse (typo, wrong CIDR shape, …).
+//   When TRUST_PROXY=1 and matchers is empty AFTER parsing, the panel can
+//   still boot but every clientIp() call ignores the headers — exactly the
+//   silent "TRUST_PROXY=1 but nothing works" trap we want to flag loudly.
+function _buildTrustedProxyMatchers() {
+  const envRaw    = process.env.TRUST_PROXY_FROM;
+  const usedEnv   = envRaw !== undefined && envRaw !== '';
+  const raw       = usedEnv ? envRaw : DEFAULT_PROXY_CIDRS.join(',');
+  const entries   = raw.split(',').map(s => s.trim()).filter(Boolean);
+  const matchers  = [];
+  const rejected  = [];
+  for (const e of entries) {
+    const m = _parseProxyEntry(e);
+    if (m) matchers.push(m); else rejected.push(e);
+  }
+  return { matchers, source: usedEnv ? 'env' : 'default', rejected };
+}
+const _trustedProxyConfig   = _buildTrustedProxyMatchers();
+const _trustedProxyMatchers = _trustedProxyConfig.matchers;
 
 function _ipv4ToInt(ip) {
   const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
@@ -8249,6 +8268,27 @@ server.listen(PORT, HOST, () => {
     console.warn(`     Forwarded-IP headers will only be honoured from the Cloudflare ranges (or your`);
     console.warn(`     TRUST_PROXY_FROM override). Set HOST=127.0.0.1 in .env when behind Cloudflare`);
     console.warn(`     Tunnel / a local reverse proxy to remove direct LAN exposure entirely.\n`);
+  }
+  if (TRUST_PROXY) {
+    // Surface what TRUST_PROXY=1 will actually trust at runtime. The defensive
+    // fallback in clientIp() means an empty matcher set just makes the panel
+    // ignore forward-IP headers — but the operator who set TRUST_PROXY=1
+    // expected those headers to do something, so making the discrepancy noisy
+    // is what flips this from "silent footgun" to "obvious misconfiguration".
+    const cfg = _trustedProxyConfig;
+    console.log(`  trust-proxy: ${cfg.matchers.length} trusted ${cfg.matchers.length === 1 ? 'range' : 'ranges'} (source: ${cfg.source === 'env' ? 'TRUST_PROXY_FROM' : 'Cloudflare defaults'})`);
+    if (cfg.rejected.length > 0) {
+      console.warn(`  ⚠️  TRUST_PROXY_FROM has ${cfg.rejected.length} unparseable ${cfg.rejected.length === 1 ? 'entry' : 'entries'}: ${cfg.rejected.join(', ')}`);
+      console.warn(`     These are silently dropped — fix the CIDR shape (e.g. 192.168.0.0/24) or the`);
+      console.warn(`     IPv6 prefix (e.g. 2606:4700::) and restart.\n`);
+    }
+    if (cfg.matchers.length === 0) {
+      console.warn(`  ⚠️  TRUST_PROXY=1 but the trusted-proxy allowlist is EMPTY after parsing.`);
+      console.warn(`     Every request will be read as coming directly from the socket peer —`);
+      console.warn(`     CF-Connecting-IP / X-Forwarded-For / X-Forwarded-Host will be ignored.`);
+      console.warn(`     Either unset TRUST_PROXY (if you have no proxy in front) or fix`);
+      console.warn(`     TRUST_PROXY_FROM to list your proxy's source CIDRs.\n`);
+    }
   }
 });
 

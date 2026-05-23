@@ -6349,6 +6349,51 @@ async function apiAuth2faDisable(req, res) {
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
+// Rotate the TOTP secret without going through disable → setup. The user
+// already has 2FA on, wants a fresh secret (lost device, new authenticator
+// app, periodic rotation), and shouldn't have to leave the account
+// without a second factor in between. Atomic in two phases like setup:
+//   1. This endpoint requires currentPassword + a code from the CURRENT
+//      secret (so a stolen session cookie can't replace the secret) and
+//      stages a fresh base32 in totp_pending. totp_secret stays put, so
+//      the old code still logs the user in if they back out here.
+//   2. The user confirms with the existing /api/auth/2fa/confirm flow,
+//      which promotes totp_pending → totp_secret and the old secret is
+//      gone for good. Until that confirm, the rotation is reversible —
+//      just don't re-scan the QR.
+async function apiAuth2faRotate(req, res) {
+  try {
+    const sess = getSession(req);
+    if (!sess) return json(res, 401, { error: 'Unauthorized' });
+    const ip = clientIp(req);
+    if (!checkLoginRateLimit(ip))
+      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
+    const body = await readBody(req);
+    const currentPassword = String(body.currentPassword || '');
+    const code = String(body.code || '').replace(/\s/g, '');
+    if (!currentPassword || !code) return json(res, 400, { error: 'currentPassword and code are required' });
+    if (!db) return json(res, 503, { error: 'Database unavailable' });
+    const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(sess.username);
+    if (!user) return json(res, 404, { error: 'User not found' });
+    if (!user.totp_enabled || !user.totp_secret)
+      return json(res, 400, { error: '2FA is not currently enabled — call /api/auth/2fa/setup instead' });
+    if (!verifyPassword(currentPassword, user.salt, user.password_hash))
+      return json(res, 401, { error: 'Current password is incorrect' });
+    if (!totpVerify(user.totp_secret, code))
+      return json(res, 401, { error: 'Invalid 2FA code' });
+    const secret = _base32Encode(crypto.randomBytes(20));
+    db.prepare('UPDATE panel_users SET totp_pending = ? WHERE username = ?').run(secret, sess.username);
+    const otpauth = totpProvisioningUri({
+      secret,
+      account: sess.username,
+      issuer:  'Assetto Server Panel',
+    });
+    _clearLoginAttempt(ip);
+    insertAuditLog(sess.username, 'user.2fa.rotate', sess.username);
+    json(res, 200, { ok: true, secret, otpauth, rotating: true });
+  } catch (e) { json(res, 500, { error: e.message }); }
+}
+
 // Status endpoint for the Profile page UI — returns whether 2FA is on for the
 // current session's user, and whether a pending (un-confirmed) setup exists.
 function apiAuth2faStatus(req, res) {
@@ -7965,6 +8010,7 @@ function handler(req, res) {
     if (urlPath === '/api/auth/2fa/status'      && req.method === 'GET')  return apiAuth2faStatus(req, res);
     if (urlPath === '/api/auth/2fa/setup'       && req.method === 'POST') return apiAuth2faSetup(req, res);
     if (urlPath === '/api/auth/2fa/confirm'     && req.method === 'POST') return apiAuth2faConfirm(req, res);
+    if (urlPath === '/api/auth/2fa/rotate'      && req.method === 'POST') return apiAuth2faRotate(req, res);
     if (urlPath === '/api/auth/2fa/disable'     && req.method === 'POST') return apiAuth2faDisable(req, res);
 
     // All routes below require a valid session

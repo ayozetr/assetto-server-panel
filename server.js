@@ -367,11 +367,19 @@ const ROLE_PERMISSIONS = [
   'playerModeration', 'modUpload', 'discordWebhook', 'auditView', 'dbBackup',
 ];
 
-function getUserRolePermissions() {
+// Roles besides 'admin' (which always passes) that can be assigned to a
+// panel_user. Each one has its own permission row in panel_settings under
+// `role_permissions_<role>`; the admin UI edits those rows independently.
+const ASSIGNABLE_ROLES = ['user', 'moderator'];
+
+function _roleSettingsKey(role) { return `role_permissions_${role}`; }
+
+function getRolePermissions(role) {
   const fallback = Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, false]));
   if (!db) return fallback;
+  if (!ASSIGNABLE_ROLES.includes(role)) return fallback;
   try {
-    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'role_permissions_user'`).get();
+    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = ?`).get(_roleSettingsKey(role));
     if (!row?.value) return fallback;
     const parsed = JSON.parse(row.value);
     // Re-key against the canonical list so a stale row (older deploy that knew
@@ -382,16 +390,22 @@ function getUserRolePermissions() {
   } catch { return fallback; }
 }
 
+// Backwards-compatible alias — older code paths that hard-coded 'user' should
+// keep working; new code should call getRolePermissions(role) explicitly.
+function getUserRolePermissions() { return getRolePermissions('user'); }
+
 // Per-request permission check. Admin always passes (subject to the must-
-// change-password gate, same as checkAdminAuth). Users consult the stored
-// JSON for this role. Callers should follow the pattern:
+// change-password gate, same as checkAdminAuth). Other roles consult the
+// stored JSON for THEIR role, so a 'moderator' session can be granted (say)
+// auditView + playerModeration without that bleeding into 'user' sessions.
+// Callers should follow the pattern:
 //   if (!checkPermission(req, 'X')) return json(res, 403, { error: ... });
 function checkPermission(req, perm) {
   const sess = getSession(req);
   if (!sess) return false;
   if (userMustChangePassword(sess.username)) return false;
   if (sess.role === 'admin') return true;
-  const perms = getUserRolePermissions();
+  const perms = getRolePermissions(sess.role);
   return !!perms[perm];
 }
 
@@ -628,12 +642,53 @@ try {
   };
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('role_permissions_user', ?)`)
     .run(JSON.stringify(DEFAULT_USER_PERMS));
+
+  // 'moderator' role: read-only oversight + active moderation, no config /
+  // upload / restart / backup. Sized for the person who watches the audit
+  // log and bans griefers but isn't trusted with the server itself. Admin
+  // can flip toggles in the same UI that drives DEFAULT_USER_PERMS.
+  const DEFAULT_MODERATOR_PERMS = {
+    serverControl:    false,
+    sessionEdit:      false,
+    modUpload:        false,
+    presetManage:     false,
+    serverConfig:     false,
+    whitelistManage:  true,
+    playerModeration: true,
+    discordWebhook:   false,
+    auditView:        true,
+    dbBackup:         false,
+  };
+  db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('role_permissions_moderator', ?)`)
+    .run(JSON.stringify(DEFAULT_MODERATOR_PERMS));
+
   // Backfill: for installs predating a release that introduced a new
   // permission key, the stored row won't have an entry for it and
-  // getUserRolePermissions() will report it as false. Re-insert any missing
-  // key with its intended default so "granted by default" actually applies
-  // to existing user accounts, not just fresh installs. Only ADDS missing
-  // keys — never overwrites a value the admin has already set.
+  // getRolePermissions() will report it as false. Re-insert any missing key
+  // with its intended default so "granted by default" actually applies to
+  // existing accounts, not just fresh installs. Only ADDS missing keys —
+  // never overwrites a value the admin has already set.
+  const _backfillRolePerms = (key, defaults) => {
+    try {
+      const row = db.prepare(`SELECT value FROM panel_settings WHERE key = ?`).get(key);
+      if (row?.value) {
+        const parsed = JSON.parse(row.value);
+        let changed = false;
+        for (const [k, v] of Object.entries(defaults)) {
+          if (!(k in parsed)) { parsed[k] = v; changed = true; }
+        }
+        if (changed) {
+          db.prepare(`UPDATE panel_settings SET value = ? WHERE key = ?`)
+            .run(JSON.stringify(parsed), key);
+        }
+      }
+    } catch {}
+  };
+  _backfillRolePerms('role_permissions_user', DEFAULT_USER_PERMS);
+  _backfillRolePerms('role_permissions_moderator', DEFAULT_MODERATOR_PERMS);
+
+  // Keep the surrounding try/catch shape that the old inline code had so the
+  // surrounding scope sees the same control flow.
   try {
     const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'role_permissions_user'`).get();
     if (row?.value) {
@@ -6264,7 +6319,7 @@ async function apiAuthLogin(req, res) {
     res.setHeader('Set-Cookie', sessionCookieHeader(token, requestIsHttps(req)));
     const permissions = user.role === 'admin'
       ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
-      : getUserRolePermissions();
+      : getRolePermissions(user.role);
     json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1, twoFactorEnabled: user.totp_enabled === 1, permissions } });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
@@ -6400,7 +6455,7 @@ function apiAuthMe(req, res) {
   }
   const permissions = sess.role === 'admin'
     ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
-    : getUserRolePermissions();
+    : getRolePermissions(sess.role);
   json(res, 200, { username: sess.username, role: sess.role, mustChangePassword: mustChange, twoFactorEnabled, permissions });
 }
 
@@ -6475,8 +6530,8 @@ async function apiPanelUserCreate(req, res) {
       if (policyErr) return json(res, 400, { error: policyErr });
     }
     // Reject unknown roles instead of silently coercing — caller intent stays explicit
-    if (role !== undefined && role !== 'admin' && role !== 'user')
-      return json(res, 400, { error: 'role must be "admin" or "user"' });
+    if (role !== undefined && role !== 'admin' && !ASSIGNABLE_ROLES.includes(role))
+      return json(res, 400, { error: `role must be "admin" or one of: ${ASSIGNABLE_ROLES.join(', ')}` });
     if (!db) return json(res, 503, { error: 'Database unavailable' });
     // Case-insensitive uniqueness — 'admin' and 'Admin' must not coexist
     const exists = db.prepare('SELECT 1 FROM panel_users WHERE LOWER(username) = LOWER(?)').get(username);
@@ -6498,11 +6553,11 @@ async function apiPanelUserUpdate(req, res, username) {
     const user = db.prepare('SELECT * FROM panel_users WHERE username = ?').get(username);
     if (!user) return json(res, 404, { error: 'User not found' });
     const changes = [];
-    if (body.role !== undefined && (body.role === 'admin' || body.role === 'user')) {
+    if (body.role !== undefined && (body.role === 'admin' || ASSIGNABLE_ROLES.includes(body.role))) {
       // Refuse to demote the last admin — mirrors apiPanelUserDelete. Without
       // this guard an admin could promote themselves out of the role and lock
       // the panel for everyone (no admin = no recoverable login).
-      if (body.role === 'user' && user.role === 'admin') {
+      if (body.role !== 'admin' && user.role === 'admin') {
         const adminCount = db.prepare(`SELECT COUNT(*) AS n FROM panel_users WHERE role = 'admin'`).get().n;
         if (adminCount <= 1) return json(res, 400, { error: 'Cannot demote the last admin' });
       }
@@ -6621,27 +6676,43 @@ async function apiPanelSettingsPut(req, res) {
 }
 
 // ── Role permissions ─────────────────────────────────────────────────────────
-// Admin-managed toggles that control what users with role='user' can do.
+// Admin-managed toggles that control what each non-admin role can do.
 // Effective perms for the current session are returned by /api/auth/me; these
 // endpoints are for the admin UI to read/write the canonical role config.
+// The base routes (GET/PUT /api/permissions/role) operate on 'user' for
+// backwards compatibility with the existing frontend. The role-suffixed routes
+// (/api/permissions/role/<role>) let the UI manage 'moderator' (and any
+// future role added to ASSIGNABLE_ROLES) without a second pair of handlers.
 
-function apiRolePermissionsGet(req, res) {
-  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
-  json(res, 200, { permissions: getUserRolePermissions() });
+function _parseRoleFromUrl(urlPath) {
+  const m = urlPath.match(/^\/api\/permissions\/role(?:\/([a-z_]+))?$/);
+  if (!m) return null;
+  return m[1] || 'user';
 }
 
-async function apiRolePermissionsPut(req, res) {
+function apiRolePermissionsGet(req, res, role) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  const targetRole = role || 'user';
+  if (!ASSIGNABLE_ROLES.includes(targetRole))
+    return json(res, 400, { error: `Unknown role: ${targetRole}` });
+  json(res, 200, { role: targetRole, permissions: getRolePermissions(targetRole) });
+}
+
+async function apiRolePermissionsPut(req, res, role) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 503, { error: 'Database unavailable' });
+  const targetRole = role || 'user';
+  if (!ASSIGNABLE_ROLES.includes(targetRole))
+    return json(res, 400, { error: `Unknown role: ${targetRole}` });
   try {
     const body = await readBody(req);
     const next = {};
     for (const p of ROLE_PERMISSIONS) next[p] = !!body[p];
-    db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES ('role_permissions_user', ?)`)
-      .run(JSON.stringify(next));
-    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'role.permissions.update', 'user',
+    db.prepare(`INSERT OR REPLACE INTO panel_settings (key, value) VALUES (?, ?)`)
+      .run(_roleSettingsKey(targetRole), JSON.stringify(next));
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'role.permissions.update', targetRole,
       Object.entries(next).filter(([, v]) => v).map(([k]) => k).join(',') || '(none)');
-    json(res, 200, { ok: true, permissions: next });
+    json(res, 200, { ok: true, role: targetRole, permissions: next });
   } catch (e) { json(res, 500, { error: e.message }); }
 }
 
@@ -7989,9 +8060,16 @@ function handler(req, res) {
     if (urlPath === '/api/panel/settings' && req.method === 'PUT') return apiPanelSettingsPut(req, res);
     if (urlPath === '/api/discord/webhook/test' && req.method === 'POST') return apiDiscordWebhookTest(req, res);
 
-    // Role permissions
-    if (urlPath === '/api/permissions/role' && req.method === 'GET') return apiRolePermissionsGet(req, res);
-    if (urlPath === '/api/permissions/role' && req.method === 'PUT') return apiRolePermissionsPut(req, res);
+    // Role permissions. Bare /api/permissions/role defaults to 'user' for
+    // backwards compat; /api/permissions/role/<role> targets any other role
+    // listed in ASSIGNABLE_ROLES (e.g. 'moderator').
+    {
+      const role = _parseRoleFromUrl(urlPath);
+      if (role !== null) {
+        if (req.method === 'GET') return apiRolePermissionsGet(req, res, role);
+        if (req.method === 'PUT') return apiRolePermissionsPut(req, res, role);
+      }
+    }
 
     // Mod upload & history
     if (urlPath === '/api/mods/upload'       && req.method === 'POST')   return apiModUpload(req, res);

@@ -1173,8 +1173,18 @@ function formatTotalTime(ms) {
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
+// Strict allowlist for AC content ids (car/track folder names): alphanumeric,
+// underscore, hyphen, dot. The regex implicitly rejects `/`, `\`, `\0`, `%`
+// and every other separator a path-traversal payload would need, but we
+// also explicitly bar `..` (which the regex DOES match because `.` is in
+// the set) and cap length so a hostile caller can't force unbounded work
+// in callers that interpolate the id into a path or a log line.
 function isValidContentId(id) {
-  return typeof id === 'string' && /^[a-zA-Z0-9_\-\.]+$/.test(id) && !id.includes('..');
+  if (typeof id !== 'string') return false;
+  if (id.length === 0 || id.length > 256) return false;
+  if (!/^[a-zA-Z0-9_\-\.]+$/.test(id)) return false;
+  if (id === '.' || id === '..' || id.includes('..')) return false;
+  return true;
 }
 
 // Synchronous display-name resolvers used by the Discord notifier on the

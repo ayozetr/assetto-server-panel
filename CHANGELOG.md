@@ -12,9 +12,9 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 Hardening + ops-quality-of-life pass driven by an external audit. Nothing in
 this block is user-facing on the AC server itself; operators get a new
-clinical health endpoint, a CSV/JSON audit export, a third role (`moderator`)
-with sensible defaults, louder warnings when `TRUST_PROXY` is misconfigured,
-and a fast unit-test layer in front of the existing smoke run.
+clinical health endpoint, a CSV/JSON audit export, louder warnings when
+`TRUST_PROXY` is misconfigured, and a fast unit-test layer in front of the
+existing smoke run.
 
 ### Added
 
@@ -36,17 +36,6 @@ and a fast unit-test layer in front of the existing smoke run.
   commas, quotes and newlines inside reason / detail fields. The export
   action is itself audit-logged with the chosen filter so an operator
   scraping the table leaves a trace. [`2925ee8`]
-- **`moderator` role.** A third role alongside `admin` / `user`, with
-  read-only oversight + active moderation defaults (`auditView`,
-  `playerModeration`, `whitelistManage` on; everything else off). Sized
-  for the person who watches the audit log and bans griefers but isn't
-  trusted with the server itself. Fully data-driven: `ASSIGNABLE_ROLES`
-  is the single list every gate consults, and the existing
-  `/api/permissions/role` endpoint now accepts an optional `/<role>`
-  suffix so the same handler edits user / moderator (and any future role
-  added to the list) without a second pair of routes. Bare path still
-  resolves to `user` for backwards compatibility with the existing
-  frontend. [`0625c3c`]
 - **Unit tests.** `npm run test:unit` loads `lib/pure.js` directly and
   asserts on the CSV-quoting + log-parsing invariants without booting
   the HTTP server / DB / log watcher. Runs in ~5 ms; chained ahead of

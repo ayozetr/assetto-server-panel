@@ -993,40 +993,29 @@ back to the saved webhook when absent)
 
 ## Role permissions
 
-### `GET /api/permissions/role`, `GET /api/permissions/role/:role`
-Return the canonical permission set for an assignable role. The bare path
-targets `user` for backwards compatibility; the suffixed path targets any
-other role listed in `ASSIGNABLE_ROLES` (currently `user`, `moderator`).
+### `GET /api/permissions/role`
+Return the canonical permission set for the `user` role.
 
 **Auth required:** yes (admin)
 
-**Response:** `{ "role": "moderator", "permissions": { "auditView": true, "playerModeration": true, ... } }`
+**Response:** `{ "permissions": { "serverControl": true, "sessionEdit": true, ... } }`
 
 ---
 
-### `PUT /api/permissions/role`, `PUT /api/permissions/role/:role`
-Update the permission set for an assignable role. Unknown keys are dropped;
-missing keys become `false`. The bare path targets `user`; the suffixed
-path targets any other role listed in `ASSIGNABLE_ROLES`.
+### `PUT /api/permissions/role`
+Update the permission set for the `user` role. Unknown keys are dropped;
+missing keys become `false`.
 
 **Auth required:** yes (admin)
 
 **Body:** `{ "serverControl": true, "sessionEdit": false, ... }`
 
-**Audit:** logs `role.permissions.update` with the target role and the list
-of enabled perms.
+**Audit:** logs `role.permissions.update` with the list of enabled perms.
 
 Permission keys recognised: `serverControl`, `sessionEdit`, `serverConfig`,
-`presetManage`, `whitelistManage`, `playerModeration`, `modUpload`,
-`discordWebhook`, `auditView`, `dbBackup`. Panel-user CRUD and AC server
-passwords stay admin-only and are NOT toggleable from this endpoint.
-
-**Defaults — `user` role:** serverControl, sessionEdit, modUpload, presetManage
-are on; everything else off (mirrors the pre-granular-permissions baseline).
-
-**Defaults — `moderator` role:** auditView, playerModeration, whitelistManage
-are on; everything else off. Sized for the person who watches the audit log
-and bans griefers but isn't trusted with the server itself.
+`whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`,
+`auditView`, `dbBackup`. Panel-user CRUD and AC server passwords stay
+admin-only and are NOT toggleable from this endpoint.
 
 ---
 

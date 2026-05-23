@@ -7276,6 +7276,73 @@ function apiAuditGet(req, res) {
   json(res, 200, { rows, hasMore, nextCursor: hasMore ? rows[rows.length - 1].id : null });
 }
 
+// Audit export: streams the audit_log as CSV or JSON for offline analysis.
+// Filters (since/until ISO 8601, actor, action substring) compose into a
+// single WHERE clause so the export can target an incident window without
+// pulling the whole table. The CSV path streams row-by-row to keep memory
+// flat on large exports; the JSON path renders an array in one shot because
+// JSON.stringify on N rows of audit data is cheap and the output is meant
+// for jq / SIEM ingestion which prefers one well-formed document over NDJSON.
+function _csvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  // RFC 4180: quote any field that contains a quote, comma or any newline.
+  // Escape internal quotes by doubling them.
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function apiAuditExport(req, res) {
+  if (!checkPermission(req, 'auditView')) return json(res, 403, { error: 'Forbidden' });
+  if (!db) return json(res, 503, { error: 'Database unavailable' });
+  const qs       = new URLSearchParams(req.url.split('?')[1] || '');
+  const format   = (qs.get('format') || 'csv').toLowerCase();
+  if (format !== 'csv' && format !== 'json') return json(res, 400, { error: 'format must be csv or json' });
+  // Parse filters. ISO-8601 strings round-trip into SQLite's TEXT timestamps
+  // unchanged because the audit_log column was inserted with datetime('now'),
+  // which uses the same shape ("YYYY-MM-DD HH:MM:SS"). We accept both forms
+  // (with or without the T separator) and normalise.
+  const normTs = s => {
+    if (!s) return null;
+    const m = String(s).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+    return m ? `${m[1]} ${m[2]}` : null;
+  };
+  const since  = normTs(qs.get('since'));
+  const until  = normTs(qs.get('until'));
+  const actor  = qs.get('actor');
+  const action = qs.get('action');
+  const where  = [];
+  const params = [];
+  if (since)  { where.push('logged_at >= ?'); params.push(since); }
+  if (until)  { where.push('logged_at <= ?'); params.push(until); }
+  if (actor)  { where.push('actor = ?');      params.push(actor); }
+  if (action) { where.push('action LIKE ?');  params.push(`%${action}%`); }
+  const sql = `SELECT id, actor, action, target, detail, logged_at FROM audit_log
+               ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+               ORDER BY id DESC`;
+  insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'audit.export', format, where.join(' AND '));
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  if (format === 'csv') {
+    res.writeHead(200, {
+      'Content-Type':        'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="assetto-audit-${stamp}.csv"`,
+      'Cache-Control':       'no-store',
+    });
+    res.write('id,actor,action,target,detail,logged_at\n');
+    // better-sqlite3 .iterate() returns an iterator that fetches rows lazily,
+    // keeping peak memory bound to one row at a time regardless of result size.
+    for (const r of db.prepare(sql).iterate(...params)) {
+      res.write(`${r.id},${_csvCell(r.actor)},${_csvCell(r.action)},${_csvCell(r.target)},${_csvCell(r.detail)},${_csvCell(r.logged_at)}\n`);
+    }
+    return res.end();
+  }
+  const rows = db.prepare(sql).all(...params);
+  res.writeHead(200, {
+    'Content-Type':        'application/json; charset=utf-8',
+    'Content-Disposition': `attachment; filename="assetto-audit-${stamp}.json"`,
+    'Cache-Control':       'no-store',
+  });
+  res.end(JSON.stringify({ exportedAt: new Date().toISOString(), filter: { since, until, actor, action }, count: rows.length, rows }, null, 2));
+}
+
 function apiModHistoryGet(res) {
   if (!db) return json(res, 200, []);
   const rows = db.prepare(`
@@ -7932,6 +7999,7 @@ function handler(req, res) {
     if (urlPath === '/api/mods/history'      && req.method === 'GET')    return apiModHistoryGet(res);
     if (urlPath === '/api/mods/history'      && req.method === 'DELETE') return apiModHistoryDelete(req, res);
     if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
+    if (urlPath === '/api/audit/export'      && req.method === 'GET')    return apiAuditExport(req, res);
     if (urlPath === '/api/admin/backup'      && req.method === 'GET')    return apiAdminBackup(req, res);
     if (urlPath === '/api/admin/stats'       && req.method === 'GET')    return apiAdminStats(req, res);
     if (urlPath === '/api/admin/health'      && req.method === 'GET')    return apiAdminHealth(req, res);

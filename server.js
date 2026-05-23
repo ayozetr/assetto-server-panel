@@ -7081,18 +7081,30 @@ async function _pathHealth() {
 // Public endpoint: tells the frontend whether the panel is fully configured.
 // Returns the boolean `ready` plus the per-path summary so the UI can render
 // an actionable banner pointing operators at the specific path that's
-// missing. No auth required because (a) the same data is needed before any
-// login can succeed if AC_CFG_DIR is wrong, and (b) it leaks no secret —
-// only the filesystem paths the operator already chose in their own .env.
+// missing. No auth required because the same data is needed before any
+// login can succeed if AC_CFG_DIR is wrong.
+//
+// Absolute paths and the auto-detected root are stripped for unauthenticated
+// callers — they're useful to an admin staring at the setup banner but pure
+// signal to an external scanner trying to fingerprint the host's filesystem
+// layout. Authenticated callers still see the full path so the banner stays
+// actionable after login.
 async function apiSetupStatus(req, res) {
   const paths = await _pathHealth();
   const critical = ['cfgFile', 'cars', 'tracks'];
   const issues = critical.filter(k => !paths[k] || !paths[k].exists);
+  const isAuthed = !!checkAnyAuth(req);
+  const publicPaths = {};
+  for (const [k, v] of Object.entries(paths)) {
+    publicPaths[k] = isAuthed
+      ? v
+      : { exists: v.exists, kind: v.kind, ok: v.ok, missing: v.missing };
+  }
   json(res, 200, {
     ready: issues.length === 0,
     issues,
-    paths,
-    detectedAcRoot: _detectedAcRoot || null,
+    paths: publicPaths,
+    detectedAcRoot: isAuthed ? (_detectedAcRoot || null) : null,
   });
 }
 

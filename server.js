@@ -7154,6 +7154,83 @@ async function apiAdminStats(req, res) {
   });
 }
 
+// Clinical-style health endpoint for ops dashboards / Kubernetes readiness
+// probes / Uptime-Kuma. Unlike the public /api/health (which returns just
+// { ok: true } and intentionally leaks no fingerprintable signal), this one
+// is admin-gated and aggregates the disk + DB + process + acServer checks
+// into a status verdict the operator can alert on. HTTP code mirrors the
+// verdict so an alerting rule can be a simple "non-2xx" check:
+//   healthy   → 200 OK   (everything within thresholds)
+//   degraded  → 200 OK   (advisory: free disk getting low, server expected up but down, …)
+//   unhealthy → 503      (DB unavailable, disk effectively full, …)
+async function apiAdminHealth(req, res) {
+  if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  const checks = {};
+  let worst = 'healthy';
+  const escalate = level => {
+    if (level === 'unhealthy' || worst === 'unhealthy') worst = 'unhealthy';
+    else if (level === 'degraded') worst = 'degraded';
+  };
+
+  // DB: try a cheap SELECT and read the file size. Anything that throws here
+  // counts as a hard failure — the panel can technically keep serving static
+  // files without the DB, but every meaningful API call needs it.
+  try {
+    db.prepare('SELECT 1').get();
+    const st = await fsp.stat(DB_PATH).catch(() => null);
+    checks.db = { status: 'healthy', sizeMb: st ? Math.round(st.size / 1024 / 1024 * 100) / 100 : null };
+  } catch (e) {
+    checks.db = { status: 'unhealthy', error: e.message };
+    escalate('unhealthy');
+  }
+
+  // Disk: fs.statfsSync against the dir that holds DB + uploads + backups.
+  // < 500 MB free is hard fail (next upload or backup likely fails); < 5 GB
+  // is degraded (operator has time to react before it bites).
+  try {
+    const sf = fs.statfsSync(path.dirname(DB_PATH));
+    const freeBytes  = sf.bavail * sf.bsize;
+    const totalBytes = sf.blocks * sf.bsize;
+    const freeGb     = Math.round(freeBytes / 1024 / 1024 / 1024 * 100) / 100;
+    const totalGb    = Math.round(totalBytes / 1024 / 1024 / 1024 * 100) / 100;
+    let status = 'healthy';
+    if (freeBytes < 500 * 1024 * 1024)       { status = 'unhealthy'; escalate('unhealthy'); }
+    else if (freeBytes < 5 * 1024 * 1024 * 1024) { status = 'degraded';  escalate('degraded'); }
+    checks.disk = { status, freeGb, totalGb };
+  } catch (e) {
+    checks.disk = { status: 'degraded', error: e.message };
+    escalate('degraded');
+  }
+
+  // Process: RSS over 1 GB on a panel this size is a leak signal worth surfacing,
+  // not enough to alert hard (the OOM killer would have taken us out already).
+  const rss = process.memoryUsage().rss;
+  const rssMb = Math.round(rss / 1024 / 1024);
+  checks.process = {
+    status: rss > 1024 * 1024 * 1024 ? 'degraded' : 'healthy',
+    memoryMb: rssMb,
+    uptimeSec: Math.floor(process.uptime()),
+  };
+  if (rss > 1024 * 1024 * 1024) escalate('degraded');
+
+  // acServer presence: degraded (not unhealthy) when not running — the panel
+  // is still useful with the server down (config edits, uploads, audit log).
+  checks.acServer = {
+    status: _acRunSince ? 'healthy' : 'degraded',
+    running: !!_acRunSince,
+    uptimeSec: _acRunSince ? Math.floor((Date.now() - _acRunSince) / 1000) : 0,
+  };
+  if (!_acRunSince) escalate('degraded');
+
+  const httpCode = worst === 'unhealthy' ? 503 : 200;
+  json(res, httpCode, {
+    status: worst,
+    version: require('./package.json').version,
+    uptimeSec: Math.floor(process.uptime()),
+    checks,
+  });
+}
+
 // Admin: download a consistent DB snapshot via SQLite VACUUM INTO. Streams the
 // resulting file as `assetto-YYYY-MM-DD.db`, then deletes the temp copy.
 async function apiAdminBackup(req, res) {
@@ -7857,6 +7934,7 @@ function handler(req, res) {
     if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
     if (urlPath === '/api/admin/backup'      && req.method === 'GET')    return apiAdminBackup(req, res);
     if (urlPath === '/api/admin/stats'       && req.method === 'GET')    return apiAdminStats(req, res);
+    if (urlPath === '/api/admin/health'      && req.method === 'GET')    return apiAdminHealth(req, res);
     if (urlPath === '/api/admin/metrics'     && req.method === 'GET')    return apiAdminMetricsProm(req, res);
     const panelUserM = urlPath.match(/^\/api\/panel\/users\/([^/]+)$/);
     if (panelUserM && req.method === 'PUT')    return apiPanelUserUpdate(req, res, decodeURIComponent(panelUserM[1]));

@@ -2774,9 +2774,12 @@ function apiPublicPlayer(req, res, guid) {
   if (!publicProfilesEnabled()) return json(res, 404, { error: 'Not Found' });
   if (!/^\d{17}$/.test(guid))    return json(res, 400, { error: 'Invalid Steam ID' });
   // Cheap per-IP throttle. The endpoint is unauthenticated and trivially
-  // scannable (17-digit GUIDs are guessable), so cap at 120/min/IP — plenty
-  // for an honest browser and a Discord bot, painful for a scraper.
-  if (!checkRateLimit('public-player', clientIp(req), 120, 60 * 1000)) {
+  // scannable (17-digit GUIDs are guessable), so cap at 30/min/IP — plenty
+  // for an honest browser refreshing a profile page and a Discord bot polling
+  // a handful of regulars, painful enough for a scraper trying to enumerate
+  // the full leaderboard. All five `public-player` callsites share this
+  // bucket so a hostile client can't multiplex across endpoints.
+  if (!checkRateLimit('public-player', clientIp(req), 30, 60 * 1000)) {
     return json(res, 429, { error: 'Rate limit' });
   }
   const data = getPublicPlayerData(guid);

@@ -47,16 +47,22 @@ Then log in normally and use the **Reset password** flow.
 | Role | Access |
 |------|--------|
 | `admin` | Always passes every permission check. Exclusively allowed to manage panel users (create / delete / change role / reset password), edit the AC server `PASSWORD` and `ADMIN_PASSWORD` fields, wipe mod history, and consult the role-permissions card itself. |
-| `user` | Read access + own profile by default. Anything beyond that is configured per-permission by an admin (see [Granular permissions](#granular-permissions)). The defaults preserve the open grants from before the granular system existed: `serverControl`, `sessionEdit` and `modUpload` are on; the rest are off. |
+| `user` | Read access + own profile by default. Anything beyond that is configured per-permission by an admin (see [Granular permissions](#granular-permissions)). The defaults preserve the open grants from before the granular system existed: `serverControl`, `sessionEdit`, `presetManage` and `modUpload` are on; the rest are off. |
+| `moderator` | Read-only oversight + active moderation by default: `auditView`, `playerModeration` and `whitelistManage` are on; everything else (config, upload, restart, backup) is off. Sized for the person who watches the audit log and bans griefers but isn't trusted with the server itself. All toggles are still admin-editable via the same Users page — `moderator` is a different default starting point, not a hardcoded role. |
+
+Roles are listed in `ASSIGNABLE_ROLES` (currently `['user', 'moderator']`).
+Adding a fourth role is a one-line change there + a `_DEFAULT_<role>_PERMS`
+table; the rest of the gates (panel_users validation, `checkPermission`
+lookup, `/api/permissions/role/:role` API) consult that array.
 
 ---
 
 ## Granular permissions
 
-The `user` role is gated by a set of nine independent boolean toggles edited
+Each non-admin role is gated by a set of independent boolean toggles edited
 from the **Users** page (admin only). They are stored as a single JSON value
-under the key `role_permissions_user` in `panel_settings`, and surface on
-`/api/auth/me` so the frontend can hide buttons / pages the user cannot use.
+under the key `role_permissions_<role>` in `panel_settings`, and surface on
+`/api/auth/me` so the frontend can hide buttons / pages the role cannot use.
 
 | Permission | When `true`, the `user` role can… |
 |------------|------------------------------------|
@@ -81,12 +87,15 @@ function checkPermission(req, perm) {
   if (!sess) return false;
   if (userMustChangePassword(sess.username)) return false;
   if (sess.role === 'admin') return true;
-  return !!getUserRolePermissions()[perm];
+  return !!getRolePermissions(sess.role)[perm];
 }
 ```
 
 Admin always passes. Users with a forced-change-password flag never do (they
 are bounced into the change-password modal regardless of role or permission).
+`getRolePermissions(role)` reads the appropriate `role_permissions_<role>`
+row from `panel_settings` so a `moderator` session never accidentally
+inherits the `user` toggles.
 
 Editing a permission takes effect immediately for affected users: the panel
 re-reads `/api/auth/me` on mount, and any subsequent request from the affected

@@ -10,6 +10,66 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
+Hardening + ops-quality-of-life pass driven by an external audit. Nothing in
+this block is user-facing on the AC server itself; operators get a new
+clinical health endpoint, a CSV/JSON audit export, a third role (`moderator`)
+with sensible defaults, louder warnings when `TRUST_PROXY` is misconfigured,
+and a fast unit-test layer in front of the existing smoke run.
+
+### Added
+
+- **`GET /api/admin/health`** — clinical-style readiness probe for
+  Uptime-Kuma / blackbox-exporter / Kubernetes. Aggregates DB + disk +
+  process + acServer checks into a `healthy` / `degraded` / `unhealthy`
+  verdict; HTTP code mirrors the verdict (200 for the first two, 503 for
+  the last) so the alert rule is a one-line non-2xx check. Admin-gated —
+  the public `/api/health` still returns `{ ok: true }` and intentionally
+  leaks no fingerprintable signal. Thresholds: < 500 MB free disk →
+  unhealthy, < 5 GB → degraded; RSS > 1 GB → degraded; acServer down →
+  degraded, not unhealthy (the panel keeps serving config edits + uploads
+  when AC isn't up). [`1bb5da4`]
+- **`GET /api/audit/export?format=csv|json`** — streams the audit log for
+  offline analysis with optional `since` / `until` / `actor` / `action`
+  filters. CSV uses `better-sqlite3` `.iterate()` so a multi-year export
+  stays flat on memory; JSON ships one well-formed document because jq /
+  SIEM ingestion prefers that over NDJSON. RFC 4180 quoting handles
+  commas, quotes and newlines inside reason / detail fields. The export
+  action is itself audit-logged with the chosen filter so an operator
+  scraping the table leaves a trace. [`2925ee8`]
+- **`moderator` role.** A third role alongside `admin` / `user`, with
+  read-only oversight + active moderation defaults (`auditView`,
+  `playerModeration`, `whitelistManage` on; everything else off). Sized
+  for the person who watches the audit log and bans griefers but isn't
+  trusted with the server itself. Fully data-driven: `ASSIGNABLE_ROLES`
+  is the single list every gate consults, and the existing
+  `/api/permissions/role` endpoint now accepts an optional `/<role>`
+  suffix so the same handler edits user / moderator (and any future role
+  added to the list) without a second pair of routes. Bare path still
+  resolves to `user` for backwards compatibility with the existing
+  frontend. [`0625c3c`]
+- **Unit tests.** `npm run test:unit` loads `lib/pure.js` directly and
+  asserts on the CSV-quoting + log-parsing invariants without booting
+  the HTTP server / DB / log watcher. Runs in ~5 ms; chained ahead of
+  the existing smoke run by `npm test` so a broken invariant fails fast.
+  [`5b12ecc`]
+
+### Changed
+
+- **Boot banner surfaces silent `TRUST_PROXY` misconfigurations.** Before,
+  setting `TRUST_PROXY=1` with a `TRUST_PROXY_FROM` that had typos or
+  malformed CIDRs would silently drop the bad entries and could leave the
+  trusted-proxy allowlist completely empty — `clientIp()` then ignored
+  `CF-Connecting-IP` / `X-Forwarded-For` on every request, so per-IP rate
+  limits and audit-log attribution silently fell back to using the socket
+  peer (typically the upstream proxy itself, one bucket for everyone). The
+  defensive fallback was still correct (spoofs got ignored, not honoured),
+  but there was no way for an operator to discover the misconfiguration
+  short of grepping audit logs. The boot banner now prints the effective
+  range count + source (`TRUST_PROXY_FROM` vs Cloudflare defaults), lists
+  any unparseable entries by their original string, and warns again when
+  the resulting allowlist is empty. See `docs/troubleshooting.md` for the
+  remediation paths. [`0053f54`]
+
 ## [1.7.1] — 2026-05-20
 
 Presets are now portable. Operators can download any saved preset as a

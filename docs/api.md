@@ -993,29 +993,40 @@ back to the saved webhook when absent)
 
 ## Role permissions
 
-### `GET /api/permissions/role`
-Return the canonical permission set for the `user` role.
+### `GET /api/permissions/role`, `GET /api/permissions/role/:role`
+Return the canonical permission set for an assignable role. The bare path
+targets `user` for backwards compatibility; the suffixed path targets any
+other role listed in `ASSIGNABLE_ROLES` (currently `user`, `moderator`).
 
 **Auth required:** yes (admin)
 
-**Response:** `{ "permissions": { "serverControl": true, "sessionEdit": true, ... } }`
+**Response:** `{ "role": "moderator", "permissions": { "auditView": true, "playerModeration": true, ... } }`
 
 ---
 
-### `PUT /api/permissions/role`
-Update the permission set for the `user` role. Unknown keys are dropped;
-missing keys become `false`.
+### `PUT /api/permissions/role`, `PUT /api/permissions/role/:role`
+Update the permission set for an assignable role. Unknown keys are dropped;
+missing keys become `false`. The bare path targets `user`; the suffixed
+path targets any other role listed in `ASSIGNABLE_ROLES`.
 
 **Auth required:** yes (admin)
 
 **Body:** `{ "serverControl": true, "sessionEdit": false, ... }`
 
-**Audit:** logs `role.permissions.update` with the list of enabled perms.
+**Audit:** logs `role.permissions.update` with the target role and the list
+of enabled perms.
 
 Permission keys recognised: `serverControl`, `sessionEdit`, `serverConfig`,
-`whitelistManage`, `playerModeration`, `modUpload`, `discordWebhook`,
-`auditView`, `dbBackup`. Panel-user CRUD and AC server passwords stay
-admin-only and are NOT toggleable from this endpoint.
+`presetManage`, `whitelistManage`, `playerModeration`, `modUpload`,
+`discordWebhook`, `auditView`, `dbBackup`. Panel-user CRUD and AC server
+passwords stay admin-only and are NOT toggleable from this endpoint.
+
+**Defaults — `user` role:** serverControl, sessionEdit, modUpload, presetManage
+are on; everything else off (mirrors the pre-granular-permissions baseline).
+
+**Defaults — `moderator` role:** auditView, playerModeration, whitelistManage
+are on; everything else off. Sized for the person who watches the audit log
+and bans griefers but isn't trusted with the server itself.
 
 ---
 
@@ -1084,9 +1095,53 @@ Return audit log entries in reverse chronological order, with cursor pagination.
 }
 ```
 
-Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`, `admin.backup`, `preset.create`, `preset.update`, `preset.delete`, `preset.export`, `preset.import`.
+Recorded actions: `server.start`, `server.stop`, `server.restart`, `player.kick`, `player.ban`, `config.save`, `session.apply`, `mod.install`, `user.create`, `user.update`, `user.delete`, `whitelist.add`, `admin.backup`, `preset.create`, `preset.update`, `preset.delete`, `preset.export`, `preset.import`, `audit.export`, `role.permissions.update`.
 
 A daily sweeper deletes entries older than `AUDIT_RETENTION_DAYS` (env, default 365).
+
+---
+
+### `GET /api/audit/export`
+Stream the audit log as CSV or JSON for offline analysis (jq, SIEM, spreadsheet).
+Optional filters compose into a single WHERE clause so a single request can
+target an incident window without pulling the whole table.
+
+**Auth required:** yes (`auditView` permission)
+
+**Query params:**
+- `format` — `csv` (default) or `json`
+- `since` — ISO 8601 timestamp inclusive (e.g. `2026-05-01T00:00:00`)
+- `until` — ISO 8601 timestamp inclusive
+- `actor` — exact match on the actor column
+- `action` — substring match (`LIKE %action%`) on the action column
+
+**Response (CSV):**
+```
+Content-Type: text/csv; charset=utf-8
+Content-Disposition: attachment; filename="assetto-audit-2026-05-23-12-34-56.csv"
+
+id,actor,action,target,detail,logged_at
+42,Admin,player.ban,76561198000000001,"banned for griefing",2026-05-06 14:23:00
+...
+```
+
+CSV cells follow RFC 4180 quoting — fields with comma, quote or newline are
+double-quoted, internal quotes are escaped by doubling. The CSV path streams
+row-by-row via `better-sqlite3` `.iterate()` so a multi-year export stays
+flat on memory.
+
+**Response (JSON):**
+```json
+{
+  "exportedAt": "2026-05-23T12:34:56.789Z",
+  "filter": { "since": "2026-05-01 00:00:00", "until": null, "actor": null, "action": "player" },
+  "count": 38,
+  "rows": [ { "id": 42, "actor": "Admin", "action": "player.ban", ... } ]
+}
+```
+
+**Audit:** logs `audit.export` with the format and the rendered WHERE clause
+so an operator scraping the table leaves a trace.
 
 ---
 
@@ -1128,6 +1183,44 @@ Internal status snapshot for ops debugging. Returns Node version + uptime + RSS 
 ```
 
 Verify the audit hash chain locally with `node tools/verify-audit.js path/to/assetto.db` (downloadable via `/api/admin/backup`).
+
+---
+
+### `GET /api/admin/health`
+Clinical-style health probe for ops dashboards / Kubernetes readiness /
+Uptime-Kuma. Aggregates the disk + DB + process + acServer checks into a
+single verdict the operator can alert on. Unlike the public `/api/health`
+(which returns just `{ ok: true }` and intentionally hides fingerprintable
+signal), this one is admin-gated and includes the underlying numbers.
+
+**Auth required:** yes (admin)
+
+**HTTP code mirrors the verdict** so an alerting rule is a one-liner
+"non-2xx" check:
+- `healthy` → **200**
+- `degraded` → **200** (advisory)
+- `unhealthy` → **503**
+
+**Thresholds:**
+- Disk free < 500 MB → unhealthy. < 5 GB → degraded.
+- RSS > 1 GB → degraded (leak signal; the OOM killer would have taken us out before this matters).
+- acServer not running → degraded, not unhealthy (the panel keeps serving config edits + uploads + audit log when AC isn't up).
+- DB throws on `SELECT 1` → unhealthy.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "version": "1.7.1",
+  "uptimeSec": 12345,
+  "checks": {
+    "db":       { "status": "healthy", "sizeMb": 3.21 },
+    "disk":     { "status": "healthy", "freeGb": 87.4, "totalGb": 250.0 },
+    "process":  { "status": "healthy", "memoryMb": 78, "uptimeSec": 12345 },
+    "acServer": { "status": "healthy", "running": true, "uptimeSec": 4321 }
+  }
+}
+```
 
 ---
 

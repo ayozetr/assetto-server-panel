@@ -193,4 +193,28 @@ The CSRF guard rejects POST/PUT/DELETE/PATCH whose `Origin` header does not matc
 - A reverse proxy rewrote `Host` but kept the original `Origin`. Fix the proxy config so both reflect the public hostname.
 - A custom HTTP client setting an explicit `Origin: …` that differs from the panel's URL — drop the header or align it.
 
+---
+
+## "TRUST_PROXY=1 but the trusted-proxy allowlist is EMPTY" at boot
+
+The startup banner prints this when `TRUST_PROXY=1` is set in `.env` but every entry in `TRUST_PROXY_FROM` failed to parse, or the variable was set to an empty string. The defensive code in `clientIp()` still does the right thing (it ignores forward-IP headers entirely when the allowlist is empty, so a spoof attempt cannot succeed), but **the operator who set `TRUST_PROXY=1` expected those headers to do something** — per-IP rate limits, audit-log attribution and the `checkOrigin` `X-Forwarded-Host` fallback all silently revert to using the socket peer (typically the upstream proxy itself, so every request looks like it came from the same IP).
+
+**Fix:** read the rejected entries the banner lists right above the warning and check the CIDR shape:
+
+- IPv4: `192.168.0.0/24`, `10.0.0.0/8`, `100.64.0.0/10` (Tailscale CGNAT), `127.0.0.0/8` (loopback).
+- IPv6: an exact prefix like `2606:4700::` or `fd00::` — the panel does a coarse prefix-string match, not a full CIDR engine, so trailing `/N` masks are ignored.
+- Multiple entries are comma-separated.
+
+If you have no proxy in front, **unset `TRUST_PROXY`** entirely (or set it to `0`). The panel will then read the socket peer as the client IP, which is correct for direct LAN / localhost access.
+
+---
+
+## "TRUST_PROXY_FROM has N unparseable entries" at boot
+
+The banner lists every entry that didn't parse. Typical mistakes:
+
+- Spaces inside an entry: `192.168.0.0 / 24` instead of `192.168.0.0/24`.
+- Hostnames instead of IPs: `cf.example.com` won't resolve — use the published Cloudflare ranges.
+- An IPv6 entry with a `/N` mask that the coarse prefix matcher doesn't understand: drop the mask and use the prefix only (`2606:4700::` not `2606:4700::/32`).
+
 If `Origin` is absent (some proxies strip it), the request is allowed and the cookie's `SameSite=Strict` is the only line of defence — that's intentional.

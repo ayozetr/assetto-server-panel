@@ -3,7 +3,17 @@
 The `tools/` folder contains:
 
 - Two **Python scripts** for managing the bundled Kunos asset previews that the dashboard uses as fallbacks when a car or track has no thumbnails in the AC content directory.
-- Three **Node scripts**: one verifies the integrity of the audit log hash chain, two report coverage gaps (i18n keys and CSS class selectors) against the source tree.
+- Several **Node scripts**: audit-chain verifier, i18n / CSS / dependency coverage reports, smoke + unit test runners, and a synthetic UDP plugin generator for the dashboard.
+
+## Tests
+
+Two layered test scripts ship in this repo:
+
+- `npm run test:unit` — fast pure-function tests (no I/O, no HTTP boot). Loads `lib/pure.js` directly and asserts on CSV quoting + log parsing invariants. Runs in ~5 ms.
+- `npm run test:smoke` — boots a throwaway panel against `/tmp` paths and a fresh DB, exercises the security-relevant endpoints (login + must-change gate, CSRF, rate limit, 2FA, INI guard) over a real HTTP socket. Runs in ~1 s.
+- `npm test` — chains both (unit first, smoke second) so a broken invariant fails before paying the smoke-boot cost.
+
+Both exit `0` only when every assertion held; CI / a human can jump straight to the first `✗` line that includes the assertion name + the failing diff.
 
 ## Requirements
 

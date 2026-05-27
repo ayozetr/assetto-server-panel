@@ -14,10 +14,23 @@ Hardening + ops-quality-of-life pass driven by an external audit. Nothing in
 this block is user-facing on the AC server itself; operators get a new
 clinical health endpoint, a CSV/JSON audit export, louder warnings when
 `TRUST_PROXY` is misconfigured, and a fast unit-test layer in front of the
-existing smoke run.
+existing smoke run. The Dashboard also grows a fifth KPI tile bringing the
+panel back in line with its BeamMP sibling.
 
 ### Added
 
+- **"Mods en disco" KPI card on the Dashboard.** Fifth tile in the
+  metrics row, mirroring the sibling BeamMP panel so the two
+  dashboards expose the same shape of information. Value is the
+  cumulative bytes used by `content/cars/` + `content/tracks/` walked
+  recursively (capped to 50 GB to bound runaway symlink loops); the
+  meta line shows `acServer vX.Y.Z` parsed out of the binary's
+  `--version` output, falling back to a static `content/cars + tracks`
+  label when the version regex misses. Backed by a new
+  `GET /api/dashboard/extra` endpoint with a 6 h in-memory cache on
+  the version lookup so the disk walk is the only work done on each
+  30 s frontend refresh. New i18n keys `dash.mods_disk` and
+  `dash.mods_disk_meta` in en + es + it.
 - **`GET /api/admin/health`** — clinical-style readiness probe for
   Uptime-Kuma / blackbox-exporter / Kubernetes. Aggregates DB + disk +
   process + acServer checks into a `healthy` / `degraded` / `unhealthy`

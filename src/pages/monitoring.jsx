@@ -188,8 +188,35 @@ function LiveMapCard({ trackId, layoutId, tracks }) {
 }
 
 // Dashboard
+// Bytes → human-readable label. Mirrors the BeamNG sibling panel so the two
+// dashboards format disk-usage consistently. Inlined here rather than
+// shared because the panels are independent codebases.
+function formatBytesMonAC(b) {
+  if (!b) return '0';
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+  return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
 function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
+
+  // Dashboard extras (content disk usage + acServer version): polled lazily
+  // every 30 s because the disk walk is real work and the values rarely
+  // change. Same pattern as BeamNG's /api/dashboard/extra.
+  const [extras, setExtras] = useState({ contentBytes: 0, acVersion: null });
+  useEffect(() => {
+    const load = () => {
+      fetch('/api/dashboard/extra')
+        .then(r => r.json())
+        .then(d => { if (d && !d.error) setExtras(d); })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, []);
   // Prefer the live track reported by the running server; fall back to configured
   const liveTrackId    = server.status === 'running' && server.liveTrack ? server.liveTrack : sessionCfg.trackId;
   const track          = tracks.find(t => t.id === liveTrackId) || tracks.find(t => t.id === sessionCfg.trackId) || tracks[0];
@@ -349,6 +376,11 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           <div className="kpi-label">{t('dash.ram')}</div>
           <div className="kpi-value">{server.ram}<span className="unit">MB</span></div>
           <div className="kpi-meta">{server.ramTotal || '—'} MB</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">{t('dash.mods_disk') || 'Mods on disk'}</div>
+          <div className="kpi-value">{formatBytesMonAC(extras.contentBytes)}</div>
+          <div className="kpi-meta">{extras.acVersion ? `acServer v${extras.acVersion}` : (t('dash.mods_disk_meta') || 'content/cars + tracks')}</div>
         </div>
       </div>
 

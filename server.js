@@ -7306,6 +7306,81 @@ async function apiAdminBackup(req, res) {
   }
 }
 
+// Recursive byte-count for a content directory. Walks lazily and bails out
+// once a per-call cap is hit so a runaway symlink loop or a misconfigured
+// path can't pin the event loop. Returns total bytes accumulated. Same shape
+// as the BeamNG sibling panel's helper so the two dashboards behave the same.
+async function _acDirSizeBytes(rootDir, capBytes = 50 * 1024 * 1024 * 1024) {
+  let total = 0;
+  const stack = [rootDir];
+  while (stack.length) {
+    const cur = stack.pop();
+    let ents;
+    try { ents = await fsp.readdir(cur, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of ents) {
+      const p = path.join(cur, e.name);
+      try {
+        if (e.isDirectory()) stack.push(p);
+        else if (e.isFile()) {
+          const st = await fsp.stat(p);
+          total += st.size;
+          if (total > capBytes) return total;
+        }
+      } catch { /* unreadable entry — skip */ }
+    }
+  }
+  return total;
+}
+
+// Best-effort acServer version. acServer's --version output varies across
+// builds (some print "AC server <version>", some emit nothing on stdout
+// and a banner on stderr) so we look for the first three-component numeric
+// run. Returns null if the binary doesn't run or the regex misses — the
+// dashboard tile falls back to a static label in that case.
+let _acVersionCache = null; // { version, cachedAt }
+const AC_VERSION_TTL_MS = 6 * 60 * 60 * 1000;
+async function _getLocalAcVersion() {
+  if (_acVersionCache && Date.now() - _acVersionCache.cachedAt < AC_VERSION_TTL_MS) {
+    return _acVersionCache.version;
+  }
+  let version = null;
+  try {
+    if (AC_BIN && fs.existsSync(AC_BIN)) {
+      const out = await new Promise((resolve) => {
+        const p = spawn(AC_BIN, ['--version'], { timeout: 3000 });
+        let buf = '';
+        p.stdout.on('data', d => { buf += d.toString(); });
+        p.stderr.on('data', d => { buf += d.toString(); });
+        p.on('close', () => resolve(buf));
+        p.on('error', () => resolve(''));
+      });
+      const m = out.match(/(\d+\.\d+\.\d+)/);
+      if (m) version = m[1];
+    }
+  } catch { /* ignore */ }
+  _acVersionCache = { version, cachedAt: Date.now() };
+  return version;
+}
+
+// Dashboard extras: best-effort metrics that aren't part of the canonical
+// /api/server poll because they're slow (disk walks) or rarely change
+// (binary version). The frontend polls this every 30 s; the version is
+// further cached for 6 h so we don't shell out on every refresh.
+async function apiDashboardExtra(req, res) {
+  if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  let contentBytes = 0;
+  try {
+    const [cars, tracks] = await Promise.all([
+      _acDirSizeBytes(AC_CARS_DIR).catch(() => 0),
+      _acDirSizeBytes(AC_TRACKS_DIR).catch(() => 0),
+    ]);
+    contentBytes = (cars || 0) + (tracks || 0);
+  } catch {}
+  const acVersion = await _getLocalAcVersion();
+  return json(res, 200, { contentBytes, acVersion });
+}
+
 function apiAuditGet(req, res) {
   if (!checkPermission(req, 'auditView')) return json(res, 403, { error: 'Forbidden' });
   if (!db) return json(res, 200, { rows: [], hasMore: false });
@@ -8043,6 +8118,7 @@ function handler(req, res) {
     if (urlPath === '/api/mods/history'      && req.method === 'DELETE') return apiModHistoryDelete(req, res);
     if (urlPath === '/api/audit'             && req.method === 'GET')    return apiAuditGet(req, res);
     if (urlPath === '/api/audit/export'      && req.method === 'GET')    return apiAuditExport(req, res);
+    if (urlPath === '/api/dashboard/extra'   && req.method === 'GET')    return apiDashboardExtra(req, res);
     if (urlPath === '/api/admin/backup'      && req.method === 'GET')    return apiAdminBackup(req, res);
     if (urlPath === '/api/admin/stats'       && req.method === 'GET')    return apiAdminStats(req, res);
     if (urlPath === '/api/admin/health'      && req.method === 'GET')    return apiAdminHealth(req, res);

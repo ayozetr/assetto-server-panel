@@ -141,6 +141,15 @@ swap them all in one focused release.
 Everything in this list is shipped in a tagged release and verified in
 production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
 
+### Unreleased
+
+- **"Mods en disco" KPI on the Dashboard.** Brings the AC panel in line
+  with its BeamMP sibling: fifth tile in the metrics row shows the
+  cumulative bytes used by `content/cars/` + `content/tracks/` plus
+  the running `acServer` binary version. Backed by `GET /api/dashboard/extra`
+  with a 6 h cache on the version lookup so the only per-poll work is
+  the disk walk.
+
 ### [1.6.0] — 2026-05-19
 
 - **Live position telemetry on the Dashboard** — top-down minimap of the

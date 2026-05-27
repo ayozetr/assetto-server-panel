@@ -7414,6 +7414,10 @@ async function apiDashboardExtra(req, res) {
   // No uptime-history table exists, so this is the closest proxy for
   // "how active was the server" without rebuilding history from logs.
   let laps24h = 0;
+  // totalDrivers: cumulative distinct drivers ever seen by the server.
+  // Closes the temporal trio "current / last 24 h / lifetime" with one
+  // PRIMARY KEY scan — cheap even on a busy server.
+  let totalDrivers = 0;
   try {
     if (db) {
       activeDrivers24h = db.prepare(`
@@ -7424,10 +7428,11 @@ async function apiDashboardExtra(req, res) {
         SELECT COUNT(*) AS n FROM laps
         WHERE session_date >= datetime('now', '-1 day')
       `).get()?.n || 0;
+      totalDrivers = db.prepare(`SELECT COUNT(*) AS n FROM players`).get()?.n || 0;
     }
   } catch {}
   const acVersion = await _getLocalAcVersion();
-  return json(res, 200, { contentBytes, activeDrivers24h, laps24h, acVersion });
+  return json(res, 200, { contentBytes, activeDrivers24h, laps24h, totalDrivers, acVersion });
 }
 
 function apiAuditGet(req, res) {

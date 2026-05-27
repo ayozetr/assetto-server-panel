@@ -14,23 +14,43 @@ Hardening + ops-quality-of-life pass driven by an external audit. Nothing in
 this block is user-facing on the AC server itself; operators get a new
 clinical health endpoint, a CSV/JSON audit export, louder warnings when
 `TRUST_PROXY` is misconfigured, and a fast unit-test layer in front of the
-existing smoke run. The Dashboard also grows a fifth KPI tile bringing the
-panel back in line with its BeamMP sibling.
+existing smoke run. The Dashboard also grows four new KPI tiles bringing the
+metrics row to seven evenly-spaced cards and the panel back in line with its
+BeamMP sibling.
 
 ### Added
 
-- **"Mods en disco" KPI card on the Dashboard.** Fifth tile in the
-  metrics row, mirroring the sibling BeamMP panel so the two
-  dashboards expose the same shape of information. Value is the
-  cumulative bytes used by `content/cars/` + `content/tracks/` walked
-  recursively (capped to 50 GB to bound runaway symlink loops); the
-  meta line shows `acServer vX.Y.Z` parsed out of the binary's
-  `--version` output, falling back to a static `content/cars + tracks`
-  label when the version regex misses. Backed by a new
-  `GET /api/dashboard/extra` endpoint with a 6 h in-memory cache on
-  the version lookup so the disk walk is the only work done on each
-  30 s frontend refresh. New i18n keys `dash.mods_disk` and
-  `dash.mods_disk_meta` in en + es + it.
+- **Four new Dashboard KPI tiles** alongside the existing
+  Status / Players / CPU / RAM row. All four are served by a new
+  `GET /api/dashboard/extra` endpoint and refreshed every 30 s on the
+  client; SQL aggregations run against tables the panel already
+  maintains (`players`, `laps`), and disk walks are bounded by a
+  50 GB cap so a runaway symlink can't pin the event loop.
+  - **Mods en disco** — bytes consumed by content/cars + content/tracks
+    **excluding** vanilla Kunos directories (the existing
+    `KUNOS_CAR_IDS` / `KUNOS_TRACK_IDS` sets loaded at startup from
+    `src/assets/kunos/` are used to filter the top-level walk). The
+    meta line surfaces the running `acServer vX.Y.Z` when the binary
+    reports a version, falling back to a static "excludes Kunos
+    content" label otherwise. Version lookup is cached for 6 h so the
+    only per-poll work is the (small, now-Kunos-free) disk walk.
+  - **Conexiones (24 h)** — distinct drivers whose `last_seen` falls in
+    the trailing 24 h. Same shape as the BeamMP sibling's "Joins
+    today" tile; reuses the players table the ACSP UDP listener
+    already updates on every JOIN line, so no new schema was needed.
+  - **Vueltas (24 h)** — laps recorded in the trailing 24 h, the
+    closest "how active was the server" proxy available without
+    rebuilding uptime history from logs. Lap rows land in real time
+    from the listener so the tile reflects live activity within
+    minutes.
+  - **Pilotos totales** — cumulative distinct drivers ever seen by
+    the server (PRIMARY KEY scan over `players`). Closes the temporal
+    trio "now / last 24 h / lifetime" with one cheap query.
+- Twelve new i18n keys (en + es + it) for the four tile titles + meta
+  lines: `dash.mods_disk`, `dash.mods_disk_meta`,
+  `dash.joins_today`, `dash.joins_today_meta`,
+  `dash.laps_today`, `dash.laps_today_meta`,
+  `dash.total_drivers`, `dash.total_drivers_meta`.
 - **`GET /api/admin/health`** — clinical-style readiness probe for
   Uptime-Kuma / blackbox-exporter / Kubernetes. Aggregates DB + disk +
   process + acServer checks into a `healthy` / `degraded` / `unhealthy`

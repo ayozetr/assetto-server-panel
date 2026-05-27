@@ -143,12 +143,21 @@ production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
 
 ### Unreleased
 
-- **"Mods en disco" KPI on the Dashboard.** Brings the AC panel in line
-  with its BeamMP sibling: fifth tile in the metrics row shows the
-  cumulative bytes used by `content/cars/` + `content/tracks/` plus
-  the running `acServer` binary version. Backed by `GET /api/dashboard/extra`
-  with a 6 h cache on the version lookup so the only per-poll work is
-  the disk walk.
+- **Dashboard KPI row expanded from four to seven tiles.** New
+  `GET /api/dashboard/extra` (auth-gated, 30 s client polling)
+  powers four metrics that the canonical `/api/server` poll
+  doesn't carry: **Mods en disco** (bytes used by content/cars +
+  content/tracks excluding vanilla Kunos directories — the
+  existing `KUNOS_CAR_IDS` / `KUNOS_TRACK_IDS` sets bundled at
+  startup filter the walk), **Conexiones (24 h)** (distinct
+  drivers seen in the trailing 24 h), **Vueltas (24 h)** (laps
+  recorded in the trailing 24 h), and **Pilotos totales**
+  (cumulative distinct drivers ever seen by the server). The
+  Mods tile's meta line also surfaces `acServer vX.Y.Z` parsed
+  out of `--version` (6 h cache so the only per-poll work is the
+  disk walk). Twelve new i18n keys (en + es + it) for the four
+  tile titles + meta lines. Brings the AC panel in line with its
+  BeamMP sibling.
 
 ### [1.6.0] — 2026-05-19
 

@@ -206,7 +206,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   // version): polled lazily every 30 s because the disk walk is real work
   // and the values rarely change. Same pattern as BeamMP's
   // /api/dashboard/extra.
-  const [extras, setExtras] = useState({ contentBytes: 0, activeDrivers24h: 0, laps24h: 0, acVersion: null });
+  const [extras, setExtras] = useState({ contentBytes: 0, activeDrivers24h: 0, laps24h: 0, totalDrivers: 0, acVersion: null });
   useEffect(() => {
     const load = () => {
       fetch('/api/dashboard/extra')
@@ -392,6 +392,11 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           <div className="kpi-label">{t('dash.laps_today') || 'Laps (24 h)'}</div>
           <div className="kpi-value">{extras.laps24h}</div>
           <div className="kpi-meta">{t('dash.laps_today_meta') || 'laps recorded in the last 24 h'}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">{t('dash.total_drivers') || 'Total drivers'}</div>
+          <div className="kpi-value">{extras.totalDrivers}</div>
+          <div className="kpi-meta">{t('dash.total_drivers_meta') || 'distinct drivers ever seen'}</div>
         </div>
       </div>
 

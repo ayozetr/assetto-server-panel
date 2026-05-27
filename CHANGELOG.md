@@ -20,6 +20,19 @@ BeamMP sibling.
 
 ### Added
 
+- **CPU temperature badge on the Dashboard's "Uso CPU" tile.** Small
+  number in the top-right corner of the existing CPU card, no layout
+  changes. Sourced from `/sys/class/thermal/thermal_zone*/temp` — pure
+  kernel surface, no extra package, no sudo, plug-and-play on every
+  modern Linux host. `_getCpuTempC` walks each zone, prefers ones whose
+  `type` matches a CPU sensor (`x86_pkg_temp`, `coretemp`,
+  `cpu[-_]thermal`, `core_N`, `package_N`) and reports the highest
+  reading among the preferred set so a multi-package box shows the
+  hottest die. On hosts where the thermal tree doesn't exist (some VPS,
+  LXC containers, FreeBSD, Windows) or every reading is out of plausible
+  range, the helper returns null and the badge simply doesn't render —
+  the tile looks exactly like before. Same implementation as the BeamMP
+  sibling panel so the two dashboards behave identically.
 - **Four new Dashboard KPI tiles** alongside the existing
   Status / Players / CPU / RAM row. All four are served by a new
   `GET /api/dashboard/extra` endpoint and refreshed every 30 s on the

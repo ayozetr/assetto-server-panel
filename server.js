@@ -1741,6 +1741,38 @@ function getRAM() {
   return { used: Math.round((total - avail) / 1024), total: Math.round(total / 1024) };
 }
 
+// Best-effort CPU temperature via /sys/class/thermal — pure Linux kernel
+// surface, no external binary, no extra package to install, no sudo. Walks
+// every thermal_zone, prefers zones whose `type` looks like a CPU sensor
+// (x86_pkg_temp, coretemp, cpu-thermal, core_N, package_N) and reports the
+// highest reading among the preferred set (multi-package boxes). If no
+// zones exist or all readings look bogus (the file is missing, the value
+// is out of plausible range, the host is a VPS with thermal hidden by the
+// hypervisor, …) the helper returns null and the frontend hides the badge —
+// there is no fallback temperature to show, just absence.
+async function _getCpuTempC() {
+  try {
+    const base = '/sys/class/thermal';
+    const zones = await fsp.readdir(base).catch(() => []);
+    const candidates = [];
+    for (const z of zones) {
+      if (!/^thermal_zone\d+$/.test(z)) continue;
+      try {
+        const type = (await fsp.readFile(path.join(base, z, 'type'), 'utf8')).trim();
+        const tempRaw = await fsp.readFile(path.join(base, z, 'temp'), 'utf8');
+        const tempC = parseInt(tempRaw, 10) / 1000;
+        if (!Number.isFinite(tempC) || tempC <= 0 || tempC > 200) continue;
+        const isCpuLike = /(x86_pkg_temp|coretemp|cpu[-_]thermal|core_?\d|package_?\d)/i.test(type);
+        candidates.push({ tempC, isCpuLike });
+      } catch { /* unreadable zone — skip */ }
+    }
+    if (!candidates.length) return null;
+    const cpu = candidates.filter(c => c.isCpuLike);
+    const pool = cpu.length ? cpu : candidates;
+    return Math.round(Math.max(...pool.map(c => c.tempC)));
+  } catch { return null; }
+}
+
 // ── AC Server detection ───────────────────────────────────────────────────────
 let _acRunSince  = null;
 let _acFailCount = 0;
@@ -1802,7 +1834,7 @@ const { parseLine } = require('./lib/pure.js');
 
 async function apiMetrics(res) {
   try {
-    const [cpu, ram, acInfo, publicIp] = await Promise.all([getCPU(), Promise.resolve(getRAM()), getACInfo(), getPublicIp()]);
+    const [cpu, ram, acInfo, publicIp, cpuTemp] = await Promise.all([getCPU(), Promise.resolve(getRAM()), getACInfo(), getPublicIp(), _getCpuTempC()]);
     // Connected-player count, sourced in priority: UDP plugin (knows by GUID
     // from NEW_CONNECTION) → /JSON|0 IsConnected flags → unknown (-1).
     // Surfaced here so the Dashboard KPI can poll once and stay in sync with
@@ -1822,7 +1854,7 @@ async function apiMetrics(res) {
       players = 0;
     }
     json(res, 200, {
-      cpu, ram,
+      cpu, ram, cpuTemp,
       running:   acInfo.running,
       liveTrack: acInfo.liveTrack,
       uptime:    getACUptime(),

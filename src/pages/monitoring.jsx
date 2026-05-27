@@ -365,7 +365,13 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
           <div className="kpi-value">{server.players}<span className="unit">/ {server.slots}</span></div>
           <div className="bar"><div className="bar-fill" style={{width: `${(server.players/server.slots)*100}%`}}></div></div>
         </div>
-        <div className="kpi">
+        <div className="kpi" style={{position:'relative'}}>
+          {Number.isFinite(server.cpuTemp) && (
+            <span title={t('dash.cpu_temp_title') || 'CPU temperature'}
+                  style={{position:'absolute', top: 10, right: 12, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, fontVariantNumeric: 'tabular-nums'}}>
+              {server.cpuTemp}°C
+            </span>
+          )}
           <div className="kpi-label">{t('dash.cpu')}</div>
           <div className="kpi-value">{server.cpu}<span className="unit">%</span></div>
           <div className="kpi-meta" title={server.cpuName} style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>

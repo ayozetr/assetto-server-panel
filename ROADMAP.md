@@ -143,6 +143,15 @@ production. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail.
 
 ### Unreleased
 
+- **CPU temperature badge on the Dashboard's CPU tile.** Reads
+  `/sys/class/thermal/thermal_zone*` (pure kernel surface, no
+  external binary, no extra package), prefers CPU-labelled zones
+  (`x86_pkg_temp`, `coretemp`, `cpu[-_]thermal`, `core_N`,
+  `package_N`) and reports the hottest die. Returns null on hosts
+  without a thermal tree so the badge silently disappears on
+  VPS / LXC / non-Linux setups instead of rendering "0 °C" or
+  breaking the tile layout. Mirrors the BeamMP sibling so the two
+  dashboards behave identically.
 - **Dashboard KPI row expanded from four to seven tiles.** New
   `GET /api/dashboard/extra` (auth-gated, 30 s client polling)
   powers four metrics that the canonical `/api/server` poll

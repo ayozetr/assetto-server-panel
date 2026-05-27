@@ -7333,6 +7333,26 @@ async function _acDirSizeBytes(rootDir, capBytes = 50 * 1024 * 1024 * 1024) {
   return total;
 }
 
+// Same as _acDirSizeBytes but the top-level child directories whose names
+// match the Kunos-ID set are skipped. The Dashboard's "Mods en disco" tile
+// uses this to count only modder-supplied content — a healthy AC server's
+// content/cars + content/tracks is mostly vanilla Kunos (~33 GB out of
+// the box on a fully-installed server), so a naïve total would tell the
+// operator nothing about how much disk their mods are actually consuming.
+async function _acModsBytesIn(rootDir, kunosIds, capBytes = 50 * 1024 * 1024 * 1024) {
+  let total = 0;
+  let topLevel;
+  try { topLevel = await fsp.readdir(rootDir, { withFileTypes: true }); }
+  catch { return 0; }
+  for (const e of topLevel) {
+    if (!e.isDirectory()) continue;
+    if (kunosIds.has(e.name)) continue;
+    total += await _acDirSizeBytes(path.join(rootDir, e.name), capBytes - total);
+    if (total > capBytes) return total;
+  }
+  return total;
+}
+
 // Best-effort acServer version. acServer's --version output varies across
 // builds (some print "AC server <version>", some emit nothing on stdout
 // and a banner on stderr) so we look for the first three-component numeric
@@ -7364,21 +7384,50 @@ async function _getLocalAcVersion() {
 }
 
 // Dashboard extras: best-effort metrics that aren't part of the canonical
-// /api/server poll because they're slow (disk walks) or rarely change
-// (binary version). The frontend polls this every 30 s; the version is
-// further cached for 6 h so we don't shell out on every refresh.
+// /api/server poll because they're slow (disk walks, SQL aggregations) or
+// rarely change (binary version). The frontend polls this every 30 s; the
+// version is further cached for 6 h so we don't shell out on every refresh.
 async function apiDashboardExtra(req, res) {
   if (!checkAnyAuth(req)) return json(res, 401, { error: 'Unauthorized' });
+  // contentBytes intentionally EXCLUDES Kunos vanilla content — a fresh
+  // AC server install carries ~33 GB of stock cars + tracks, so a naïve
+  // total tells the operator nothing about how much disk their mods are
+  // taking. KUNOS_CAR_IDS / KUNOS_TRACK_IDS are populated at startup from
+  // the bundled src/assets/kunos/ catalogue and stay authoritative for
+  // "what shipped with the game".
   let contentBytes = 0;
   try {
     const [cars, tracks] = await Promise.all([
-      _acDirSizeBytes(AC_CARS_DIR).catch(() => 0),
-      _acDirSizeBytes(AC_TRACKS_DIR).catch(() => 0),
+      _acModsBytesIn(AC_CARS_DIR,   KUNOS_CAR_IDS).catch(()  => 0),
+      _acModsBytesIn(AC_TRACKS_DIR, KUNOS_TRACK_IDS).catch(() => 0),
     ]);
     contentBytes = (cars || 0) + (tracks || 0);
   } catch {}
+  // activeDrivers24h: drivers whose last_seen falls in the trailing 24 h
+  // window. AC's player tracking updates last_seen on every JOIN line the
+  // UDP listener parses, so this is the practical "how many distinct
+  // people connected today" answer despite the absence of a dedicated
+  // player_events table (the BeamMP sibling uses such a table because its
+  // PanelBridge plugin writes one row per join/leave).
+  let activeDrivers24h = 0;
+  // laps24h: total laps the server has registered in the trailing 24 h.
+  // No uptime-history table exists, so this is the closest proxy for
+  // "how active was the server" without rebuilding history from logs.
+  let laps24h = 0;
+  try {
+    if (db) {
+      activeDrivers24h = db.prepare(`
+        SELECT COUNT(*) AS n FROM players
+        WHERE last_seen >= datetime('now', '-1 day')
+      `).get()?.n || 0;
+      laps24h = db.prepare(`
+        SELECT COUNT(*) AS n FROM laps
+        WHERE session_date >= datetime('now', '-1 day')
+      `).get()?.n || 0;
+    }
+  } catch {}
   const acVersion = await _getLocalAcVersion();
-  return json(res, 200, { contentBytes, acVersion });
+  return json(res, 200, { contentBytes, activeDrivers24h, laps24h, acVersion });
 }
 
 function apiAuditGet(req, res) {

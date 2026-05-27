@@ -202,10 +202,11 @@ function formatBytesMonAC(b) {
 function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
 
-  // Dashboard extras (content disk usage + acServer version): polled lazily
-  // every 30 s because the disk walk is real work and the values rarely
-  // change. Same pattern as BeamNG's /api/dashboard/extra.
-  const [extras, setExtras] = useState({ contentBytes: 0, acVersion: null });
+  // Dashboard extras (mod-only disk usage + 24 h activity + acServer
+  // version): polled lazily every 30 s because the disk walk is real work
+  // and the values rarely change. Same pattern as BeamMP's
+  // /api/dashboard/extra.
+  const [extras, setExtras] = useState({ contentBytes: 0, activeDrivers24h: 0, laps24h: 0, acVersion: null });
   useEffect(() => {
     const load = () => {
       fetch('/api/dashboard/extra')
@@ -380,7 +381,17 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
         <div className="kpi">
           <div className="kpi-label">{t('dash.mods_disk') || 'Mods on disk'}</div>
           <div className="kpi-value">{formatBytesMonAC(extras.contentBytes)}</div>
-          <div className="kpi-meta">{extras.acVersion ? `acServer v${extras.acVersion}` : (t('dash.mods_disk_meta') || 'content/cars + tracks')}</div>
+          <div className="kpi-meta">{extras.acVersion ? `acServer v${extras.acVersion}` : (t('dash.mods_disk_meta') || 'excludes Kunos content')}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">{t('dash.joins_today') || 'Joins (24 h)'}</div>
+          <div className="kpi-value">{extras.activeDrivers24h}</div>
+          <div className="kpi-meta">{t('dash.joins_today_meta') || 'distinct drivers seen in the last 24 h'}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">{t('dash.laps_today') || 'Laps (24 h)'}</div>
+          <div className="kpi-value">{extras.laps24h}</div>
+          <div className="kpi-meta">{t('dash.laps_today_meta') || 'laps recorded in the last 24 h'}</div>
         </div>
       </div>
 

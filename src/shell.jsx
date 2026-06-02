@@ -122,7 +122,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
           target="_blank"
           rel="noreferrer"
           style={{
-            display:'flex', alignItems:'center', gap: 5,
+            display:'flex', alignItems:'center', justifyContent:'center', gap: 5,
             fontSize: 10.5, color: 'var(--text-faint)',
             textDecoration: 'none',
             padding: '6px 10px 8px',

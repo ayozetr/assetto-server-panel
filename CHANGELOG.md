@@ -10,13 +10,22 @@ the change matters; the commit log is the source of truth for *what* changed.
 
 ## [Unreleased]
 
-Hardening + ops-quality-of-life pass driven by an external audit. Nothing in
-this block is user-facing on the AC server itself; operators get a new
-clinical health endpoint, a CSV/JSON audit export, louder warnings when
-`TRUST_PROXY` is misconfigured, and a fast unit-test layer in front of the
-existing smoke run. The Dashboard also grows four new KPI tiles bringing the
-metrics row to seven evenly-spaced cards and the panel back in line with its
-BeamMP sibling.
+## [1.8.0] — 2026-06-02
+
+Hardening + ops-quality-of-life pass driven by an external audit, plus a
+seven-tile Dashboard refresh and a batch of security fixes. Operators get a
+new clinical health endpoint, a CSV/JSON audit export, staged 2FA secret
+rotation, louder warnings when `TRUST_PROXY` is misconfigured, and a fast
+unit-test layer in front of the existing smoke run. The Dashboard grows four
+new KPI tiles bringing the metrics row to seven evenly-spaced cards and the
+panel back in line with its BeamMP sibling. On the security side: the CSRF
+check now works behind a Host-rewriting reverse proxy, the unauthenticated
+`/api/setup/status` no longer leaks absolute filesystem paths, the
+public-profile rate limit is tightened against GUID scraping, and the
+content-id validator is hardened against path-traversal / oversized inputs.
+(A `moderator` third role was prototyped and reverted within this window —
+the existing granular per-permission toggles already cover that use case, so
+it ships nothing.)
 
 ### Added
 
@@ -73,7 +82,7 @@ BeamMP sibling.
   leaks no fingerprintable signal. Thresholds: < 500 MB free disk →
   unhealthy, < 5 GB → degraded; RSS > 1 GB → degraded; acServer down →
   degraded, not unhealthy (the panel keeps serving config edits + uploads
-  when AC isn't up). [`1bb5da4`]
+  when AC isn't up). [`57c6382`]
 - **`GET /api/audit/export?format=csv|json`** — streams the audit log for
   offline analysis with optional `since` / `until` / `actor` / `action`
   filters. CSV uses `better-sqlite3` `.iterate()` so a multi-year export
@@ -81,14 +90,33 @@ BeamMP sibling.
   SIEM ingestion prefers that over NDJSON. RFC 4180 quoting handles
   commas, quotes and newlines inside reason / detail fields. The export
   action is itself audit-logged with the chosen filter so an operator
-  scraping the table leaves a trace. [`2925ee8`]
+  scraping the table leaves a trace. [`2bee652`]
 - **Unit tests.** `npm run test:unit` loads `lib/pure.js` directly and
   asserts on the CSV-quoting + log-parsing invariants without booting
   the HTTP server / DB / log watcher. Runs in ~5 ms; chained ahead of
   the existing smoke run by `npm test` so a broken invariant fails fast.
-  [`5b12ecc`]
+  [`2a97d1f`]
+- **`POST /api/auth/2fa/rotate`** — replace the TOTP secret without
+  leaving the account second-factor-less in between. Staging the fresh
+  secret in `totp_pending` while `totp_secret` + `totp_enabled` stay
+  intact means the OLD authenticator code still logs you in until you
+  re-scan the new QR and finish through the existing
+  `/api/auth/2fa/confirm`. Requires `currentPassword` + a code from the
+  CURRENT secret to start; audit-logged as `user.2fa.rotate` and
+  rate-limited under the login bucket. Beats the old "disable → setup →
+  confirm" dance, which briefly cleared `totp_enabled` (any cookie left
+  on a stolen browser was suddenly past 2FA). [`88d0aac`]
 
 ### Changed
+
+- **Public-profile rate limit tightened from 120 to 30 req/min/IP.**
+  17-digit Steam GUIDs are guessable enough that a coordinated scraper
+  could enumerate every regular driver on a busy server in minutes — the
+  old budget let one IP pull ~7k profiles/hour without tripping the
+  throttle. The five `/api/public/players/*` callsites (JSON, HTML
+  profile, OG image, OG SVG, share card) share one bucket so a client
+  can't multiplex across endpoints. Honest traffic fits comfortably under
+  30/min. Only meaningful when `public_profiles_enabled=1`. [`7916745`]
 
 - **Boot banner surfaces silent `TRUST_PROXY` misconfigurations.** Before,
   setting `TRUST_PROXY=1` with a `TRUST_PROXY_FROM` that had typos or
@@ -103,7 +131,44 @@ BeamMP sibling.
   range count + source (`TRUST_PROXY_FROM` vs Cloudflare defaults), lists
   any unparseable entries by their original string, and warns again when
   the resulting allowlist is empty. See `docs/troubleshooting.md` for the
-  remediation paths. [`0053f54`]
+  remediation paths. [`ef78c94`]
+
+### Fixed
+
+- **CSRF check honours `X-Forwarded-Host` behind a trusted reverse
+  proxy.** `checkOrigin` compared the request's Origin/Referer host
+  against `req.headers.host` alone — fine when the panel is reached
+  directly, but it rejected every cookie-authenticated
+  POST/PUT/DELETE/PATCH with a bare `{"error":"Cross-origin request
+  blocked"}` when the upstream proxy rewrites Host to the socket address
+  (nginx without `proxy_set_header Host`, Caddy's default `reverse_proxy`,
+  cloudflared with `httpHostHeader: localhost`). It now accepts the
+  `X-Forwarded-Host` advertised by a trusted proxy (gated on
+  `TRUST_PROXY` + the `TRUST_PROXY_FROM` allowlist) and logs every
+  same-origin rejection with peer + headers so the next 403 is greppable.
+  [`d181696`]
+- **Sidebar credit centred.** The "Desarrollado por ayozetr" link in the
+  sidebar footer is now horizontally centred. [`fab3e22`]
+
+### Security
+
+- **`/api/setup/status` no longer leaks absolute filesystem paths to
+  unauthenticated callers.** The endpoint stays public (the login screen
+  reads it to render the first-run banner), but anonymous callers now see
+  only `{ exists, kind, ok, missing }` per probe instead of the full
+  `{ path: '/home/.../assettocorsa/...' }` shape, and `detectedAcRoot` is
+  nulled. Authenticated admins still get the absolute paths so the banner
+  stays actionable. Pure fingerprinting signal removed with zero loss to
+  a legitimate anonymous user. [`95bf1e4`]
+- **`isValidContentId` hardened against path-traversal and oversized
+  inputs.** The old single-regex check let a literal `.` / `..` id through
+  (degrades to "current directory" in any caller that joins it onto a
+  base path) and had no length cap (a 1-MB string of dashes could force
+  unbounded downstream work). Now five short-circuit guards — typeof /
+  non-empty / ≤256 chars / regex / not `.` or `..` / no `..` substring —
+  so a future edit can't collapse a check back into the regex and
+  reintroduce one of the gaps. Belt-and-braces with the existing
+  `path.resolve` + `startsWith` checks downstream. [`db5c44e`]
 
 ## [1.7.1] — 2026-05-20
 

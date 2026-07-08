@@ -7454,11 +7454,11 @@ async function apiDashboardExtra(req, res) {
     if (db) {
       activeDrivers24h = db.prepare(`
         SELECT COUNT(*) AS n FROM players
-        WHERE last_seen >= datetime('now', '-1 day')
+        WHERE last_seen >= date('now', '-1 day')
       `).get()?.n || 0;
       laps24h = db.prepare(`
         SELECT COUNT(*) AS n FROM laps
-        WHERE session_date >= datetime('now', '-1 day')
+        WHERE session_date >= date('now', '-1 day')
       `).get()?.n || 0;
       totalDrivers = db.prepare(`SELECT COUNT(*) AS n FROM players`).get()?.n || 0;
     }

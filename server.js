@@ -1166,7 +1166,11 @@ function formatName(id) {
 // Replacing all control chars with spaces makes it valid everywhere (tokens + string values).
 function parseLooseJson(raw, ctx) {
   try {
-    return JSON.parse(raw.replace(/[\x00-\x1f]/g, ' '));
+    // Cap input size — a crafted mod could ship a huge ui_*.json to blow up
+    // parse time/memory. 5 MB is far beyond any legitimate metadata file.
+    if (raw && raw.length > 5 * 1024 * 1024) throw new Error('metadata too large');
+    return JSON.parse(raw.replace(/[\x00-\x1f]/g, ' '), (k, v) =>
+      (k === '__proto__' || k === 'constructor' || k === 'prototype') ? undefined : v);
   } catch (e) {
     // Surface broken metadata so unrecognised mods can be debugged. The caller
     // wraps this in try/catch and falls back, so logging here is informational.
@@ -6819,6 +6823,10 @@ async function apiDiscordWebhookTest(req, res) {
 //     fieldName: 'string value'                 for plain text fields }
 //
 // Caller owns filePath and must unlink() it when done.
+// Non-file multipart fields are buffered in RAM (files stream to disk), so cap
+// them independently — a giant text part must not be allowed to buffer up to the
+// whole upload_max_mb in memory.
+const MAX_FIELD_BYTES = 1024 * 1024; // 1 MB per non-file field
 function parseMultipart(req, maxBytes) {
   return new Promise((resolve, reject) => {
     const ct = req.headers['content-type'] || '';
@@ -6936,6 +6944,7 @@ function parseMultipart(req, maxBytes) {
                 }
               } else {
                 fieldBuf = Buffer.concat([fieldBuf, slice]);
+                if (fieldBuf.length > MAX_FIELD_BYTES) return fail(Object.assign(new Error('Multipart field too large'), { status: 413 }));
               }
               buf = buf.slice(safe);
             }
@@ -6949,6 +6958,7 @@ function parseMultipart(req, maxBytes) {
             fileWriter.write(partData);
           } else {
             fieldBuf = Buffer.concat([fieldBuf, partData]);
+            if (fieldBuf.length > MAX_FIELD_BYTES) return fail(Object.assign(new Error('Multipart field too large'), { status: 413 }));
           }
           buf = buf.slice(idx + 2); // consume the leading \r\n; leave the boundary itself for next state
           finishPart();

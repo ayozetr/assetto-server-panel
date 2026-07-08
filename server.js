@@ -575,6 +575,15 @@ try {
               updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_session_presets_name_nocase ON session_presets(name COLLATE NOCASE);` },
+    { id: 13, name: 'laps_combo_ms_index',
+      // Covering index for per-(track, layout, car) record lookups. Serves the
+      // WHERE track/track_config/car/valid + MIN(ms) in maybeNotifyRecord (runs on
+      // every inserted lap) and the `WHERE valid=1 GROUP BY track, track_config,
+      // car` MIN(ms) subquery + correlated (track, track_config, car, ms) lookups
+      // behind public player records. Only idx_laps_track(track) existed, so those
+      // fell back to a scan + temp b-tree; this turns them into a covering range.
+      sql: `CREATE INDEX IF NOT EXISTS idx_laps_combo_ms
+              ON laps(track, track_config, car, valid, ms)` },
   ];
   const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
   const _applied = new Set(_appliedRows.map(r => r.id));

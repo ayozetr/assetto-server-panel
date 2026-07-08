@@ -5374,7 +5374,11 @@ function udpStartListener(listenHostPort, sendCommandsToPort) {
 
   const sock = dgram.createSocket('udp4');
   sock.on('error', e => log.error('[UDP] socket error:', e.message));
-  sock.on('message', (msg) => {
+  sock.on('message', (msg, rinfo) => {
+    // Only accept packets from the local acServer. The listener binds loopback
+    // (UDP_PLUGIN_ADDRESS defaults to 127.0.0.1), so a non-loopback source is
+    // spoofed — drop it so nobody can inject fake JOIN / LAP_COMPLETED events.
+    if (rinfo && rinfo.address !== '127.0.0.1' && rinfo.address !== '::1' && rinfo.address !== '::ffff:127.0.0.1') return;
     udpState.lastPacketAt = Date.now();
     try { udpParseEvent(msg); }
     catch (e) { log.warn('[UDP] parse error:', e.message, 'first_byte=' + (msg[0] ?? 'nil') + ' length=' + msg.length); }

@@ -23,7 +23,7 @@
 # server_cfg.ini + content tree and persists the DB to a named volume.
 # ───────────────────────────────────────────────────────────────────────────────
 
-ARG NODE_VERSION=20.20.2
+ARG NODE_VERSION=22
 
 # ── Builder ───────────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-bookworm-slim AS builder
@@ -55,6 +55,7 @@ RUN npm prune --omit=dev
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
+    SKIP_BUILD=1 \
     HOST=0.0.0.0 \
     PORT=3000 \
     DB_PATH=/data/assetto.db

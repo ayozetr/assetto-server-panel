@@ -82,8 +82,11 @@ async function build() {
     target:    ['es2020'],
     format:    'iife',  // wrap each file so internal lets/consts don't collide cross-file
     bundle:    false,
-    minify:    process.env.NODE_ENV === 'production',
-    sourcemap: process.env.NODE_ENV === 'production' ? false : 'inline',
+    // Production by default; only an explicit NODE_ENV=development opts into the
+    // unminified + inline-sourcemap build. A bare-metal `npm start` without
+    // NODE_ENV set used to ship the full unminified JSX sources to every admin.
+    minify:    process.env.NODE_ENV !== 'development',
+    sourcemap: process.env.NODE_ENV === 'development' ? 'inline' : false,
     logLevel:  'info',
   });
 

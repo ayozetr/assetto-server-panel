@@ -18,6 +18,7 @@ const { spawn, spawnSync } = require('child_process');
 // pulling new src/. Compare newest src/ mtime against the dist/app.js marker
 // and rebuild only when needed so warm restarts stay fast.
 (function ensureBuildFresh() {
+  if (process.env.SKIP_BUILD) return; // trust the pre-built dist/ (e.g. the runtime image where esbuild was pruned)
   const distMarker = path.join(__dirname, 'dist', 'app.js');
   const srcDir     = path.join(__dirname, 'src');
   if (!fs.existsSync(srcDir)) return; // not a source tree (e.g. extracted dist-only build)

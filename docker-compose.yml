@@ -15,9 +15,9 @@
 #     edits made via the panel land in the real files acServer reads.
 #   - Persists the SQLite DB + logs to named volumes so `docker compose down`
 #     never wipes state.
-#   - Sets HOST=127.0.0.1 inside the container and exposes port 3000 to the
-#     host only — combine with a reverse proxy (nginx / Caddy / Cloudflare
-#     Tunnel) if you need internet access.
+#   - Binds on 0.0.0.0 inside the container (required for Docker's port mapping)
+#     but publishes port 3000 to the host's 127.0.0.1 only — combine with a
+#     reverse proxy (nginx / Caddy / Cloudflare Tunnel) for internet access.
 # ───────────────────────────────────────────────────────────────────────────────
 
 services:

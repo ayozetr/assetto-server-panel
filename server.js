@@ -1021,6 +1021,11 @@ function setSecurityHeaders(req, res) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Isolate the panel's browsing context against Spectre-class cross-window
+  // attacks. COOP only affects documents, so the public OG images stay
+  // embeddable; CORP is deliberately NOT set globally — it would block the
+  // cross-origin card/og.png embeds that social platforms fetch.
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   // The panel is an admin tool, not a public website — keep it out of search
   // engines so the login URL never surfaces in Google/Bing results when an
   // operator forgets to gate the panel behind a private network. The meta tag

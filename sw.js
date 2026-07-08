@@ -33,6 +33,7 @@ const PRECACHE = [
   '/dist/pages/audit.js',
   '/dist/pages/laptimes.js',
   '/dist/pages/mods.js',
+  '/dist/pages/presets.js',
   '/dist/app.js',
   '/dist/sw-register.js',
   '/src/assets/icon.png',
@@ -134,7 +135,7 @@ self.addEventListener('fetch', (event) => {
         }
         return new Response(JSON.stringify({ error: 'Offline' }), {
           status: 503,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
         });
       }
     })());
@@ -155,7 +156,7 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       }).catch(() => caches.match('/index.html').then((cached) =>
-        cached || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
+        cached || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain', 'Retry-After': '30' } })
       ))
     );
     return;
@@ -183,8 +184,8 @@ self.addEventListener('fetch', (event) => {
           if (res.ok) cache.put(request, res.clone());
           return res;
         } catch {
-          const cached = await cache.match(request);
-          return cached || new Response('Offline', { status: 503 });
+          const cached = await cache.match(request, { ignoreSearch: true });
+          return cached || new Response('Offline', { status: 503, headers: { 'Retry-After': '30' } });
         }
       })
     );
@@ -194,7 +195,7 @@ self.addEventListener('fetch', (event) => {
   // Stale-while-revalidate for everything else local (icons, css, manifest).
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request);
+      const cached = await cache.match(request, { ignoreSearch: true });
       const networkFetch = fetch(request).then((res) => {
         if (res.ok) cache.put(request, res.clone());
         return res;

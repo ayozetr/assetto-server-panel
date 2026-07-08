@@ -2,6 +2,7 @@
   "name": "Assetto Server Panel",
   "short_name": "AC Panel",
   "description": "Administration panel for Assetto Corsa servers",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f1117",

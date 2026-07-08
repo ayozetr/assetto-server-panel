@@ -8515,6 +8515,20 @@ function sweepLoginAttempts() {
 sweepLoginAttempts();
 setInterval(sweepLoginAttempts, 30 * 60 * 1000);
 
+// The in-memory rate-limit / login / upload maps have no DB backing to sweep
+// from, so expired entries would otherwise accumulate forever — a scanner
+// rotating source IPs (resolved via CF-Connecting-IP), or just normal traffic
+// over weeks, grows them unbounded. Drop entries whose window has elapsed.
+function sweepMemoryMaps() {
+  const now = Date.now();
+  let removed = 0;
+  for (const [k, e]  of _rateBuckets)   if (!e || now >= e.resetAt) { _rateBuckets.delete(k);    removed++; }
+  for (const [ip, e] of _loginAttempts) if (!e || now >= e.resetAt) { _loginAttempts.delete(ip); removed++; }
+  for (const [u, e]  of _userUploads)   if (!e || now - e.lastChunkAt > 2 * 60 * 60 * 1000) { _userUploads.delete(u); removed++; }
+  _sweeperState.memory = { lastRunAt: Date.now(), lastRemoved: removed };
+}
+setInterval(sweepMemoryMaps, 10 * 60 * 1000);
+
 // Drop expired sessions every hour. createSession opportunistically clears
 // expired rows when minting a new token, but if the panel has zero logins
 // for weeks the table grows unbounded. getSession already filters by

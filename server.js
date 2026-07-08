@@ -1883,7 +1883,7 @@ async function apiMetrics(res) {
       httpPort:  AC_HTTP_PORT,
       players,
     });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 function apiLogs(req, res) {
@@ -1913,7 +1913,7 @@ function apiLogsClear(req, res) {
     }
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'logs.clear');
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Per-user concurrent SSE connection cap. Without this an authenticated user can
@@ -2185,7 +2185,7 @@ async function apiConfigUpdate(req, res) {
       }
     }
     json(res, 200, { ok: true, restarted, restartError, applied, rejected });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Fetch+parse a JSON path from the AC HTTP API. Resolves null on connection
@@ -2379,7 +2379,7 @@ function apiResults(req, res) {
       date:     r.session_date,
     }));
     json(res, 200, laps);
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Admin-only manual lap insert. Used by the "Añadir tiempo" popup on the
@@ -2476,7 +2476,7 @@ async function apiLapCreate(req, res) {
     }
 
     json(res, 200, { ok: true, id: ins.lastInsertRowid });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 function apiPlayersHistory(res) {
@@ -2516,7 +2516,7 @@ function apiPlayersHistory(res) {
       lastSeen:  p.last_seen || '—',
     }));
     json(res, 200, players);
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── Public player profiles ───────────────────────────────────────────────────
@@ -4186,7 +4186,7 @@ async function apiCars(res) {
     const sorted = cars.sort((a, b) => a.name.localeCompare(b.name));
     _contentCache.cars = { mtime: probe.mtime, data: sorted };
     json(res, 200, sorted);
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 async function apiTracks(res) {
@@ -4285,7 +4285,7 @@ async function apiTracks(res) {
     const sorted = tracks.sort((a, b) => a.name.localeCompare(b.name));
     _contentCache.tracks = { mtime: probe.mtime, data: sorted };
     json(res, 200, sorted);
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Admin-only recursive delete of a mod car or mod track from the AC content
@@ -4328,7 +4328,7 @@ async function apiContentDelete(req, res, kind, id) {
     await fsp.rm(target, { recursive: true, force: true });
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', isCar ? 'car.delete' : 'track.delete', id);
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Serve car badge image (badge.png/webp from ui folder), falling back to bundled Kunos assets
@@ -4547,7 +4547,7 @@ async function apiPlayerKick(req, res) {
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'player.kick', String(carId));
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Process-wide mutex chain used by every endpoint that mutates a flat-file
@@ -4629,7 +4629,7 @@ async function apiPlayerBan(req, res) {
     ].filter(Boolean).join(' · ');
     insertAuditLog(actor, 'player.ban', guid, detail);
     json(res, 200, { ok: true, expiresAt });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Lift a ban: remove the GUID from blacklist.txt AND drop the bans row.
@@ -4666,7 +4666,7 @@ async function apiPlayerUnban(req, res, guid) {
     const actor = checkAnyAuth(req)?.username || 'unknown';
     await _unbanInternal(guid, actor, 'player.unban');
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // List active + recently-expired bans. The UI builds its "Bans" view off
@@ -4693,7 +4693,7 @@ function apiBansList(req, res) {
       expired:     !!r.expires_at && (new Date(r.expires_at + 'Z').getTime() < now),
     }));
     json(res, 200, out);
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── Session presets (saved bundles of trackId + slots + weather + …) ─────────
@@ -4756,7 +4756,7 @@ function apiSessionPresetsList(req, res) {
       ORDER BY updated_at DESC, id DESC
     `).all();
     json(res, 200, rows.map(r => _shapePresetRow(r, false)));
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 function apiSessionPresetGet(req, res, id) {
@@ -4769,7 +4769,7 @@ function apiSessionPresetGet(req, res, id) {
     `).get(id);
     if (!row) return json(res, 404, { error: 'Not found' });
     json(res, 200, _shapePresetRow(row, true));
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 async function apiSessionPresetCreate(req, res) {
@@ -4795,7 +4795,7 @@ async function apiSessionPresetCreate(req, res) {
       }
       throw e;
     }
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 async function apiSessionPresetUpdate(req, res, id) {
@@ -4826,7 +4826,7 @@ async function apiSessionPresetUpdate(req, res, id) {
       }
       throw e;
     }
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 function apiSessionPresetDelete(req, res, id) {
@@ -4839,7 +4839,7 @@ function apiSessionPresetDelete(req, res, id) {
     const actor = checkAnyAuth(req)?.username || '';
     insertAuditLog(actor, 'preset.delete', row.name);
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Filename-safe version of the preset name for Content-Disposition. Strips
@@ -4913,7 +4913,7 @@ function apiSessionPresetExport(req, res, id) {
     res.end(JSON.stringify(envelope, null, 2));
     const actor = checkAnyAuth(req)?.username || '';
     insertAuditLog(actor, 'preset.export', row.name);
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 async function apiSessionPresetImport(req, res) {
@@ -4957,7 +4957,7 @@ async function apiSessionPresetImport(req, res) {
       renamed:  finalName !== v.name,
       original: v.name,
     });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Admin-set display name for a player — stored alongside the in-game name so
@@ -4980,7 +4980,7 @@ async function apiPlayerNickname(req, res, guid) {
     insertAuditLog(actor, 'player.nickname', guid, nickname);
     const row = db.prepare('SELECT guid, name, nickname FROM players WHERE guid = ?').get(guid);
     json(res, 200, { ok: true, player: row });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── Whitelist ─────────────────────────────────────────────────────────────────
@@ -5011,7 +5011,7 @@ async function apiWhitelistPut(req, res) {
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'whitelist.replace', '', `${before} ids`);
     json(res, 200, { ok: true, saved: clean.length });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Add a single GUID to the whitelist file. Used by the per-player button on the
@@ -5035,7 +5035,7 @@ async function apiWhitelistAdd(req, res) {
     const actor = checkAnyAuth(req)?.username || 'unknown';
     insertAuditLog(actor, 'whitelist.add', guid, body.name || '');
     json(res, 200, { ok: true, total: result.total });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── Session apply ─────────────────────────────────────────────────────────────
@@ -5268,7 +5268,7 @@ async function apiSessionApply(req, res) {
     const detail = [body.trackId, body.layout, ...(body.cars || [])].filter(Boolean).join(', ');
     insertAuditLog(actor, 'session.apply', body.trackId || '', detail);
     json(res, 200, { ok: true, restarted, restartError });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── UDP plugin (acServer live events) ────────────────────────────────────────
@@ -6307,7 +6307,7 @@ async function apiAuthLogin(req, res) {
       ? Object.fromEntries(ROLE_PERMISSIONS.map(p => [p, true]))
       : getUserRolePermissions();
     json(res, 200, { ok: true, user: { name: username, role: user.role, mustChangePassword: user.must_change_password === 1, twoFactorEnabled: user.totp_enabled === 1, permissions } });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── 2FA / TOTP endpoints ─────────────────────────────────────────────────────
@@ -6366,7 +6366,7 @@ async function apiAuth2faConfirm(req, res) {
     _clearLoginAttempt(ip);
     insertAuditLog(sess.username, 'user.2fa.enable', sess.username);
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 async function apiAuth2faDisable(req, res) {
@@ -6397,7 +6397,7 @@ async function apiAuth2faDisable(req, res) {
     _clearLoginAttempt(ip);
     insertAuditLog(sess.username, 'user.2fa.disable', sess.username);
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Rotate the TOTP secret without going through disable → setup. The user
@@ -6442,7 +6442,7 @@ async function apiAuth2faRotate(req, res) {
     _clearLoginAttempt(ip);
     insertAuditLog(sess.username, 'user.2fa.rotate', sess.username);
     json(res, 200, { ok: true, secret, otpauth, rotating: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Status endpoint for the Profile page UI — returns whether 2FA is on for the
@@ -6532,7 +6532,7 @@ async function apiAuthChangePassword(req, res) {
     _clearLoginAttempt(ip);
     insertAuditLog(username, 'user.update', username, 'self password change');
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── Panel users CRUD ─────────────────────────────────────────────────────────
@@ -6573,7 +6573,7 @@ async function apiPanelUserCreate(req, res) {
       .run(username, hashPassword(password, salt), salt, finalRole);
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.create', username, finalRole);
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 async function apiPanelUserUpdate(req, res, username) {
@@ -6615,7 +6615,7 @@ async function apiPanelUserUpdate(req, res, username) {
     }
     if (changes.length) insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'user.update', username, changes.join(', '));
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 function apiPanelUserDelete(req, res, username) {
@@ -6703,7 +6703,7 @@ async function apiPanelSettingsPut(req, res) {
       insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'panel.public_profiles', '', next === '1' ? 'enabled' : 'disabled');
     }
     json(res, 200, { ok: true });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // ── Role permissions ─────────────────────────────────────────────────────────
@@ -6728,7 +6728,7 @@ async function apiRolePermissionsPut(req, res) {
     insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'role.permissions.update', 'user',
       Object.entries(next).filter(([, v]) => v).map(([k]) => k).join(',') || '(none)');
     json(res, 200, { ok: true, permissions: next });
-  } catch (e) { json(res, 500, { error: e.message }); }
+  } catch (e) { json(res, e.status || 500, { error: e.message }); }
 }
 
 // Posts a synchronous test message to the Discord webhook. Accepts an optional
@@ -7112,6 +7112,9 @@ function insertModHistory(entry) {
 const AUDIT_CHAIN_VERSION = 1;
 function insertAuditLog(actor, action, target = '', detail = '') {
   if (!db) return;
+  // Cap free-form fields so a caller can't bloat the audit table / hash chain.
+  if (typeof detail === 'string' && detail.length > 2000) detail = detail.slice(0, 2000) + '…';
+  if (typeof target === 'string' && target.length > 512)  target = target.slice(0, 512);
   try {
     const tx = db.transaction(() => {
       const last = db.prepare('SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1').get();

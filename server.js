@@ -863,7 +863,7 @@ async function importResultFile(filename) {
         name       = excluded.name,
         nation     = CASE WHEN excluded.nation != '' THEN excluded.nation ELSE players.nation END,
         last_seen  = MAX(players.last_seen, excluded.last_seen),
-        first_seen = CASE WHEN players.first_seen = '' OR excluded.first_seen < players.first_seen
+        first_seen = CASE WHEN players.first_seen = '' OR (excluded.first_seen != '' AND excluded.first_seen < players.first_seen)
                           THEN excluded.first_seen ELSE players.first_seen END,
         total_laps = players.total_laps + excluded.total_laps,
         last_car   = excluded.last_car,

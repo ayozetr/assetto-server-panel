@@ -71,6 +71,7 @@ RUN apt-get update \
 
 COPY --from=builder --chown=panel:panel /app/server.js     ./server.js
 COPY --from=builder --chown=panel:panel /app/build.js      ./build.js
+COPY --from=builder --chown=panel:panel /app/lib           ./lib
 COPY --from=builder --chown=panel:panel /app/package.json  ./package.json
 COPY --from=builder --chown=panel:panel /app/index.html    ./index.html
 COPY --from=builder --chown=panel:panel /app/manifest.webmanifest ./manifest.webmanifest

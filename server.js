@@ -4991,7 +4991,11 @@ const AC_WHITELIST = path.resolve(
   || path.join(_AC_CFG_DIR_RESOLVED, 'whitelist.txt')
 );
 
-function apiWhitelistGet(res) {
+function apiWhitelistGet(req, res) {
+  // Reading the GUID list needs an admin-ish permission: whitelist managers, or
+  // Config-page viewers (serverConfig), since that page renders the list.
+  if (!checkPermission(req, 'whitelistManage') && !checkPermission(req, 'serverConfig'))
+    return json(res, 403, { error: 'Forbidden' });
   let raw = '';
   try { raw = fs.readFileSync(AC_WHITELIST, 'utf8'); } catch {}
   const ids = raw.split('\n').map(s => s.trim()).filter(Boolean);
@@ -6757,6 +6761,9 @@ async function apiDiscordWebhookTest(req, res) {
       return json(res, 400, { error: 'Invalid Discord webhook URL' });
     }
 
+    // Audit the test — host only, never the URL (it carries the secret token).
+    insertAuditLog(checkAnyAuth(req)?.username || 'unknown', 'discord.webhook_test', parsed.hostname, '');
+
     // Cap how much of Discord's response body we buffer. The previous code
     // sliced each chunk to 512 bytes but appended to `buf` without limit, so a
     // pathological server returning many tiny chunks could grow `buf`
@@ -7591,7 +7598,8 @@ function apiModHistoryGet(res) {
 function apiModHistoryDelete(req, res) {
   if (!checkAdminAuth(req)) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 200, { ok: true });
-  db.prepare('DELETE FROM mod_history').run();
+  const r = db.prepare('DELETE FROM mod_history').run();
+  insertAuditLog(checkAnyAuth(req)?.username || 'admin', 'mods.history_wipe', '', `${r.changes} rows`);
   json(res, 200, { ok: true });
 }
 
@@ -8251,7 +8259,7 @@ function handler(req, res) {
     if (playerNickMatch && req.method === 'PUT') return apiPlayerNickname(req, res, playerNickMatch[1]);
 
     // Whitelist
-    if (urlPath === '/api/whitelist'     && req.method === 'GET')  return apiWhitelistGet(res);
+    if (urlPath === '/api/whitelist'     && req.method === 'GET')  return apiWhitelistGet(req, res);
     if (urlPath === '/api/whitelist'     && req.method === 'PUT')  return apiWhitelistPut(req, res);
     if (urlPath === '/api/whitelist/add' && req.method === 'POST') return apiWhitelistAdd(req, res);
 

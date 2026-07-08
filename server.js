@@ -584,6 +584,8 @@ try {
       // fell back to a scan + temp b-tree; this turns them into a covering range.
       sql: `CREATE INDEX IF NOT EXISTS idx_laps_combo_ms
               ON laps(track, track_config, car, valid, ms)` },
+    { id: 14, name: 'panel_users_role_index',
+      sql: `CREATE INDEX IF NOT EXISTS idx_panel_users_role ON panel_users(role)` },
   ];
   const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
   const _applied = new Set(_appliedRows.map(r => r.id));
@@ -608,6 +610,10 @@ try {
       }
     }
   }
+
+  // Refresh SQLite's query-planner stats after migrations (cheap; pairs with the
+  // periodic optimize in sweepDbMaintenance).
+  try { db.pragma('optimize'); } catch {}
 
   // Seed default settings
   db.prepare(`INSERT OR IGNORE INTO panel_settings (key, value) VALUES ('upload_max_mb', '500')`).run();
@@ -8536,6 +8542,19 @@ function sweepMemoryMaps() {
   _sweeperState.memory = { lastRunAt: Date.now(), lastRemoved: removed };
 }
 setInterval(sweepMemoryMaps, 10 * 60 * 1000);
+
+// Daily DB hygiene: drop processed-results markers older than 90 days (those
+// result files are long gone from disk, and re-import is idempotent anyway) and
+// let SQLite refresh its query-planner stats.
+function sweepDbMaintenance() {
+  if (!db) return;
+  try {
+    const r = db.prepare("DELETE FROM processed_files WHERE processed_at < datetime('now','-90 days')").run();
+    db.pragma('optimize');
+    _sweeperState.dbMaintenance = { lastRunAt: Date.now(), lastRemoved: r.changes };
+  } catch {}
+}
+setInterval(sweepDbMaintenance, 24 * 60 * 60 * 1000);
 
 // Drop expired sessions every hour. createSession opportunistically clears
 // expired rows when minting a new token, but if the panel has zero logins

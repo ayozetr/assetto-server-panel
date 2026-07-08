@@ -335,6 +335,11 @@ input, select, textarea { font-family: inherit; color: inherit; }
 }
 
 /* ───── Tables ───── */
+/* Scroll wrapper: wide tables scroll inside their own box instead of bursting
+   the viewport on mobile. Every .table should be wrapped in one. Robust against
+   an ancestor card's overflow:hidden (which used to trap the table with no way
+   to scroll to the hidden columns). */
+.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table th, .table td {
   text-align: left;

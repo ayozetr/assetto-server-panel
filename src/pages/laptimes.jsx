@@ -456,6 +456,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
             <div className="empty">{t('common.not_found')}</div>
           ) : (
             <>
+              <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
@@ -499,6 +500,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
                   })}
                 </tbody>
               </table>
+              </div>
               {totalPages > 1 && (
                 <div className="pagination">
                   <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
@@ -533,6 +535,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
             <div className="empty">{t('common.not_found')}</div>
           ) : (
             <>
+              <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
@@ -572,6 +575,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
                   })}
                 </tbody>
               </table>
+              </div>
               {totalPagesAll > 1 && (
                 <div className="pagination">
                   <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
@@ -671,6 +675,7 @@ function ComparisonTable({ players, labelOf, tracks, laps, trackId, t }) {
         <div className="card-title">{t('times.compare.title')}</div>
         <span className="right muted" style={{fontSize: 11.5}}>{t('times.compare.tracks', { count: rows.length })}</span>
       </div>
+      <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
@@ -715,6 +720,7 @@ function ComparisonTable({ players, labelOf, tracks, laps, trackId, t }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

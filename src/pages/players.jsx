@@ -203,6 +203,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
               onChange={e=>setHistorySearch(e.target.value)} style={{height:28,fontSize:12}}/>
           </div>
         </div>
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -284,6 +285,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
             })}
           </tbody>
         </table>
+        </div>
         {totalPages > 1 && (
           <div className="pagination">
             <button className="btn btn-sm" disabled={page === 1} onClick={()=>setPage(1)}>«</button>
@@ -328,6 +330,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
           <div className="card-title">{t('pl.online', {count: players.length})}</div>
           <span className="badge badge-green right">{players.length}</span>
         </div>
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -400,6 +403,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
             ))}
           </tbody>
         </table>
+        </div>
       </div>
       {renderPast}
       {canModerate && <BansSection t={t} toast={toast}/>}
@@ -579,6 +583,7 @@ function BansSection({ t, toast }) {
         <span className="badge" style={{marginLeft: 'auto'}}>{bans.length}</span>
       </div>
       <div style={{overflowX: 'auto'}}>
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -616,6 +621,7 @@ function BansSection({ t, toast }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

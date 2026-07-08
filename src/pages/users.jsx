@@ -139,6 +139,7 @@ function PageUsers({ users, setUsers, isAdmin }) {
       </div>
 
       <div className="card">
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -175,6 +176,7 @@ function PageUsers({ users, setUsers, isAdmin }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <RolePermissionsCard/>

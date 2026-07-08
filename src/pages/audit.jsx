@@ -116,6 +116,7 @@ function PageAudit() {
         ) : rows.length === 0 ? (
           <div className="empty" style={{padding:32}}>{t('audit.empty')}</div>
         ) : (
+          <div className="table-wrap">
           <table className="table" style={{margin:0}}>
             <thead>
               <tr>
@@ -147,6 +148,7 @@ function PageAudit() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {hasMore && !loading && (
           <div style={{padding:12, textAlign:'center', borderTop:'1px solid var(--border)'}}>

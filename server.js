@@ -158,7 +158,7 @@ const _AC_CONTENT_DIR_RESOLVED = process.env.AC_CONTENT_DIR
 const AC_CARS_DIR  = path.join(_AC_CONTENT_DIR_RESOLVED, 'cars');
 const AC_TRACKS_DIR= path.join(_AC_CONTENT_DIR_RESOLVED, 'tracks');
 const DB_PATH      = process.env.DB_PATH || path.join(__dirname, 'assetto.db');
-const AC_BLACKLIST = process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt');
+const AC_BLACKLIST = path.resolve(process.env.AC_BLACKLIST_FILE || path.join(AC_BIN_DIR, 'blacklist.txt'));
 const ADMIN_TOKEN  = process.env.ADMIN_TOKEN || '';
 const ROOT            = __dirname;
 const KUNOS_ASSETS_DIR = path.join(__dirname, 'src/assets/kunos');
@@ -1537,10 +1537,20 @@ function parseINI(text) {
     const line = raw.trim();
     if (!line || line.startsWith(';') || line.startsWith('#')) continue;
     const m = line.match(/^\[(.+)\]$/);
-    if (m) { section = m[1]; result[section] = result[section] || {}; continue; }
+    if (m) {
+      section = m[1];
+      // Reject [__proto__]/[constructor]/[prototype] sections: a section named
+      // __proto__ would make result[section][k]=v write straight onto
+      // Object.prototype (prototype pollution from a crafted server_cfg.ini).
+      if (section === '__proto__' || section === 'constructor' || section === 'prototype') { section = null; continue; }
+      result[section] = result[section] || {};
+      continue;
+    }
     const eq = line.indexOf('=');
     if (eq > 0) {
+      if (section === null) continue; // key line inside a rejected section
       const k = line.slice(0, eq).trim();
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       const v = line.slice(eq + 1).trim();
       if (!result[section]) result[section] = {};
       result[section][k] = v;

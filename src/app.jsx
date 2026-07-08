@@ -536,7 +536,7 @@ function AppInner(props) {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
         const msgKey = id ? 'presets.toast.updated' : 'presets.toast.created';
-        toast.push(t(msgKey).replace('{name}', name), 'ok');
+        toast.push(t(msgKey).replace('{name}', name), 'success');
         try { window.dispatchEvent(new Event('app:preset-saved')); } catch {}
       })
       .catch(e => {
@@ -770,7 +770,7 @@ function AppInner(props) {
           user={user}
           onMenuClick={() => setMobileMenuOpen(o => !o)}
         />
-        <div className="content" id="ac-main-content">
+        <div className="content" id="ac-main-content" tabIndex={-1}>
           {offline && (
             <div className="alert-banner warn" role="status" aria-live="polite">
               <I.IconAlertTriangle size={14}/>

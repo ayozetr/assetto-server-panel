@@ -483,7 +483,7 @@ function PageMods({ isAdmin, canUpload = isAdmin, refreshContent }) {
               </div>
               <div>
                 {history.map((item, i) => (
-                  <HistoryItem key={i} item={item} t={t}/>
+                  <HistoryItem key={`${item.time || ''}|${item.filename || item.modId || i}`} item={item} t={t}/>
                 ))}
               </div>
             </div>

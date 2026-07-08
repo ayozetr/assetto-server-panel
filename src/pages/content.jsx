@@ -238,7 +238,9 @@ function CarCard({ car, count, onOpen, t }) {
   const initial = (car.brand || car.name || '?').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`car-card ${count > 0 ? 'selected' : ''}`} onClick={onOpen}>
+    <div className={`car-card ${count > 0 ? 'selected' : ''}`} onClick={onOpen}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
       <div className="car-thumb" style={{position:'relative', overflow:'hidden'}}>
         {car.thumb && !imgFailed ? (
           <>

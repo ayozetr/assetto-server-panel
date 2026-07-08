@@ -235,9 +235,8 @@ function AddLapModal({ cars, tracks, pastPlayers, onSave, onClose }) {
               <label className="field-label">{t('times.add.date')}</label>
               <input type="date" className="input" value={date} onChange={e=>setDate(e.target.value)}/>
             </div>
-            <label className="row" style={{gap: 6, fontSize: 13, cursor:'pointer', paddingBottom: 6}}
-                   onClick={()=>setValid(v=>!v)}>
-              <div className={`checkbox ${valid ? 'on' : ''}`}></div>
+            <label className="row" style={{gap: 6, fontSize: 13, cursor:'pointer', paddingBottom: 6}}>
+              <input type="checkbox" className={`checkbox ${valid ? 'on' : ''}`} checked={valid} onChange={()=>setValid(v=>!v)} />
               {t('times.add.valid')}
             </label>
           </div>
@@ -268,7 +267,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
   const [page,     setPage]     = uSt(1);
   const [selectedPlayers, setSelectedPlayers] = uSt([]);
   const [showAddModal, setShowAddModal] = uSt(false);
-  const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
+  const toast = window.AppShell.useToast();
 
   // Reset to page 1 whenever filters or view change
   uEt(() => { setPage(1); }, [trackId, carId, validOnly, dateFrom, dateTo, view]);
@@ -360,7 +359,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
     const url  = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `tiempos-${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `${t('times.export.filename')||'laptimes'}-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     // Free the blob URL — browsers can hold them until the tab closes
     // otherwise, leaking memory for every export.
@@ -401,8 +400,8 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
             <option value="all">{t('times.all_cars')}</option>
             {carsWithData.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <label className="row" style={{gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor:'pointer'}} onClick={()=>setValidOnly(v=>!v)}>
-            <div className={`checkbox ${validOnly ? 'on' : ''}`}></div>
+          <label className="row" style={{gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor:'pointer'}}>
+            <input type="checkbox" className={`checkbox ${validOnly ? 'on' : ''}`} checked={validOnly} onChange={()=>setValidOnly(v=>!v)} />
             {t('times.valid_only')}
           </label>
         </div>
@@ -460,16 +459,16 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
               <table className="table">
                 <thead>
                   <tr>
-                    <th style={{width: 50}}>#</th>
-                    <th>{t('times.col.driver')}</th>
-                    <th>{t('times.col.track')}</th>
-                    <th>{t('times.col.car')}</th>
-                    <th style={{width: 110}}>{t('times.col.best')}</th>
-                    <th style={{width: 90}}>S1</th>
-                    <th style={{width: 90}}>S2</th>
-                    <th style={{width: 90}}>S3</th>
-                    <th style={{width: 110}}>{t('times.col.delta')}</th>
-                    <th style={{width: 110}}>{t('times.col.date')}</th>
+                    <th scope="col" style={{width: 50}}>#</th>
+                    <th scope="col">{t('times.col.driver')}</th>
+                    <th scope="col">{t('times.col.track')}</th>
+                    <th scope="col">{t('times.col.car')}</th>
+                    <th scope="col" style={{width: 110}}>{t('times.col.best')}</th>
+                    <th scope="col" style={{width: 90}}>S1</th>
+                    <th scope="col" style={{width: 90}}>S2</th>
+                    <th scope="col" style={{width: 90}}>S3</th>
+                    <th scope="col" style={{width: 110}}>{t('times.col.delta')}</th>
+                    <th scope="col" style={{width: 110}}>{t('times.col.date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -625,7 +624,7 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
           pastPlayers={pastPlayers}
           onSave={() => {
             setShowAddModal(false);
-            toast.push(t('times.add.ok'), 'ok');
+            toast.push(t('times.add.ok'), 'success');
             if (typeof onLapAdded === 'function') onLapAdded();
           }}
           onClose={() => setShowAddModal(false)}

@@ -64,7 +64,7 @@ function NicknameModal({ player, onSave, onClose }) {
 function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, server, isAdmin, canModerate = isAdmin, canWhitelist = isAdmin, onKick, onBan }) {
   const showLiveActions = canModerate || canWhitelist;
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
-  const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
+  const toast = window.AppShell.useToast();
   const ConfirmModal = window.AppPagesSettings && window.AppPagesSettings.ConfirmModal;
   const [players, setPlayers] = usePlayersState(initialPlayers);
   const [historySearch, setHistorySearch] = usePlayersState('');
@@ -206,18 +206,18 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
         <table className="table">
           <thead>
             <tr>
-              <th>{t('pl.col.driver')}</th>
-              <th>{t('pl.col.car')}</th>
-              <th style={{width: 80}}>{t('pl.col.sessions')}</th>
-              <th style={{width: 80}}>{t('pl.col.laps')}</th>
-              <th style={{width: 110}}>{t('pl.col.best_lap')}</th>
-              <th style={{width: 100}}>{t('pl.col.time')}</th>
-              <th style={{width: 160}}>{t('pl.hist_col.date')}</th>
+              <th scope="col">{t('pl.col.driver')}</th>
+              <th scope="col">{t('pl.col.car')}</th>
+              <th scope="col" style={{width: 80}}>{t('pl.col.sessions')}</th>
+              <th scope="col" style={{width: 80}}>{t('pl.col.laps')}</th>
+              <th scope="col" style={{width: 110}}>{t('pl.col.best_lap')}</th>
+              <th scope="col" style={{width: 100}}>{t('pl.col.time')}</th>
+              <th scope="col" style={{width: 160}}>{t('pl.hist_col.date')}</th>
               {/* Actions column is always rendered — the share button is
                   visible to every panel user; the edit-nickname pencil is
                   layered on top only for moderators. Keeps the table header
                   stable across roles. */}
-              <th style={{width: canModerate ? 92 : 56}}></th>
+              <th scope="col" style={{width: canModerate ? 92 : 56}}></th>
             </tr>
           </thead>
           <tbody>
@@ -237,7 +237,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                       </div>
                       <div className="row" style={{gap:4, alignItems:'center', marginTop:2}}>
                         <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
-                        {p.steam && (
+                        {/^\d{17}$/.test(p.steam) && (
                           <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
                             style={{display:'flex', alignItems:'center', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
                             title="Steam">
@@ -352,7 +352,7 @@ function PagePlayers({ players: initialPlayers, pastPlayers, setPastPlayers, ser
                   </div>
                   <div className="row" style={{gap: 4, alignItems:'center', marginTop:2}}>
                     <div className="mono" style={{fontSize: 10.5, color: 'var(--text-faint)'}}>{p.steam}</div>
-                    {p.steam && (
+                    {/^\d{17}$/.test(p.steam) && (
                       <a href={`https://steamcommunity.com/profiles/${p.steam}`} target="_blank" rel="noreferrer"
                         style={{display:'flex', alignItems:'center', color:'var(--text-faint)', opacity:0.7, lineHeight:1}}
                         title="Steam">

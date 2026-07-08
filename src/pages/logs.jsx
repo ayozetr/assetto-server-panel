@@ -5,7 +5,7 @@ const I2L = window.AppIcons;
 
 function PageLogs({ server, isAdmin }) {
   const t = window.AppI18n ? window.AppI18n.t.bind(window.AppI18n) : (k)=>k;
-  const toast = window.AppShell ? window.AppShell.useToast() : { push: () => {} };
+  const toast = window.AppShell.useToast();
   const [paused, setPaused] = useLogsState(false);
   const [filter, setFilter] = useLogsState('all');
   const [logs, setLogs] = useLogsState([]);
@@ -62,7 +62,7 @@ function PageLogs({ server, isAdmin }) {
     }
   }, [logs, paused]);
 
-  const filtered = filter === 'all' ? logs : logs.filter(l => l.lvl === filter);
+  const filtered = filter === 'all' ? logs : logs.filter(l => (l.lvl || 'info') === filter);
 
   return (
     <>
@@ -88,11 +88,14 @@ function PageLogs({ server, isAdmin }) {
             </button>
           )}
           <button className="btn btn-sm" onClick={() => {
-            const text = filtered.map(l => `[${l.time}] [${l.lvl.toUpperCase()}] [${l.tag}] ${l.msg}`).join('\n');
+            const text = filtered.map(l => `[${l.time||''}] [${(l.lvl||'info').toUpperCase()}] [${l.tag||''}] ${l.msg}`).join('\n');
+            const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+            a.href = url;
             a.download = `ac-logs-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
             a.click();
+            // Free the blob URL after the download starts; mirrors the laptimes CSV export.
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
           }}>
             <I2L.IconDownload size={11}/> {t('log.export')}
           </button>
@@ -103,9 +106,9 @@ function PageLogs({ server, isAdmin }) {
         {filtered.length === 0 && <div style={{color:'#71717a'}}>{t('log.empty')}</div>}
         {filtered.map(l => (
           <div className="logs-line" key={l.id}>
-            <span className="logs-time">{l.time}</span>
-            <span className={`logs-level ${l.lvl}`}>{l.lvl.toUpperCase()}</span>
-            <span className="logs-tag">[{l.tag}]</span>
+            <span className="logs-time">{l.time || ''}</span>
+            <span className={`logs-level ${l.lvl || 'info'}`}>{(l.lvl || 'info').toUpperCase()}</span>
+            <span className="logs-tag">[{l.tag || ''}]</span>
             <span className="logs-msg">{l.msg}</span>
           </div>
         ))}

@@ -11,6 +11,7 @@ const useToast = () => useContext(ToastCtx);
 function ToastProvider({ children }) {
   const [list, setList] = useState([]);
   const push = (msg, kind = 'info') => {
+    if (kind === 'ok') kind = 'success';   // treat 'ok' emitters as success (same icon + style)
     const id = Math.random().toString(36).slice(2);
     setList(l => [...l, { id, msg, kind }]);
     const ttl = kind === 'error' ? 6000 : kind === 'warn' ? 4500 : kind === 'success' ? 2500 : 3200;
@@ -74,7 +75,7 @@ function Sidebar({ page, setPage, user, onLogout, playersCount, osInfo, mobileOp
       {mobileOpen && <div className="sidebar-backdrop" onClick={onCloseMobile}/>}
       <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="brand">
-        <img src="src/assets/icon.png" className="brand-mark" alt="logo"/>
+        <img src="src/assets/icon.png" className="brand-mark" alt="Assetto Server Panel"/>
         <div>
           <div className="brand-name">Assetto Server Panel</div>
           <div className="brand-sub" style={{display:'flex', alignItems:'center', gap: 4}}>
@@ -169,7 +170,7 @@ function Topbar({ theme, setTheme, server, onServerAction, user, onMenuClick }) 
 
   return (
     <div className="topbar">
-      <button className="hamburger" onClick={onMenuClick} aria-label="Menu" title="Menu">
+      <button className="hamburger" onClick={onMenuClick} aria-label={t('topbar.menu') || 'Menu'} title={t('topbar.menu') || 'Menu'}>
         <I.IconMenu size={18}/>
       </button>
       <div style={{display:'flex', alignItems:'center', gap: 10, minWidth: 0, flexShrink: 1}}>
@@ -321,7 +322,7 @@ function Login({ onLogin, setupStatus }) {
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">
-          <img src="src/assets/icon.png" className="login-mark" alt="logo"/>
+          <img src="src/assets/icon.png" className="login-mark" alt="Assetto Server Panel"/>
           <div>
             <div className="login-title">{t('login.title')}</div>
             <div className="login-sub">{t('login.subtitle')}</div>
@@ -332,8 +333,9 @@ function Login({ onLogin, setupStatus }) {
 
         <div className="login-fields">
           <div className="field">
-            <label className="field-label">{t('login.user')}</label>
+            <label className="field-label" htmlFor="login-user">{t('login.user')}</label>
             <input
+              id="login-user"
               ref={userRef}
               className="input"
               value={user}
@@ -342,9 +344,10 @@ function Login({ onLogin, setupStatus }) {
             />
           </div>
           <div className="field">
-            <label className="field-label">{t('login.password')}</label>
+            <label className="field-label" htmlFor="login-password">{t('login.password')}</label>
             <div style={{position:'relative'}}>
               <input
+                id="login-password"
                 ref={passRef}
                 className="input"
                 type={showPass ? 'text' : 'password'}
@@ -356,8 +359,8 @@ function Login({ onLogin, setupStatus }) {
               <button
                 type="button"
                 onClick={() => setShowPass(v => !v)}
-                aria-label={showPass ? 'Hide password' : 'Show password'}
-                title={showPass ? 'Hide' : 'Show'}
+                aria-label={showPass ? (t('common.hide_password') || 'Hide password') : (t('common.show_password') || 'Show password')}
+                title={showPass ? (t('common.hide') || 'Hide') : (t('common.show') || 'Show')}
                 style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}
               >
                 {showPass ? <I.IconEyeOff size={15}/> : <I.IconEye size={15}/>}
@@ -458,8 +461,8 @@ function ForcePasswordChange({ user, onDone, onLogout }) {
             <div style={{position:'relative'}}>
               <input className="input" type={show ? 'text' : 'password'} value={confirm} onChange={e=>setConfirm(e.target.value)} style={{paddingRight: 36}}/>
               <button type="button" onClick={() => setShow(v => !v)}
-                aria-label={show ? 'Hide password' : 'Show password'}
-                title={show ? 'Hide' : 'Show'}
+                aria-label={show ? (t('common.hide_password') || 'Hide password') : (t('common.show_password') || 'Show password')}
+                title={show ? (t('common.hide') || 'Hide') : (t('common.show') || 'Show')}
                 style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:0,display:'flex',alignItems:'center'}}>
                 {show ? <I.IconEyeOff size={15}/> : <I.IconEye size={15}/>}
               </button>

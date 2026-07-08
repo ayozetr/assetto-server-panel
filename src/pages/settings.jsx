@@ -479,18 +479,19 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
           </div>
           <div className="card-body col" style={{gap: 14}}>
             <div className="field">
-              <label className="field-label">{t('config.name')}</label>
-              <input className="input" value={config.name} onChange={e=>set('name', e.target.value)} disabled={!canEdit}/>
+              <label className="field-label" htmlFor="cfg-name">{t('config.name')}</label>
+              <input id="cfg-name" className="input" value={config.name} onChange={e=>set('name', e.target.value)} disabled={!canEdit}/>
             </div>
             <div className="field">
-              <label className="field-label">{t('config.welcome')}</label>
-              <input className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!canEdit}/>
+              <label className="field-label" htmlFor="cfg-welcome">{t('config.welcome')}</label>
+              <input id="cfg-welcome" className="input" value={config.welcome} onChange={e=>set('welcome', e.target.value)} disabled={!canEdit}/>
               <span className="field-hint">{t('config.welcome_hint') || 'Newlines are not preserved by Assetto Corsa.'}</span>
             </div>
             <div className="grid-2">
               <div className="field">
-                <label className="field-label">{t('config.country')}</label>
+                <label className="field-label" htmlFor="cfg-country">{t('config.country')}</label>
                 <select
+                  id="cfg-country"
                   className="select"
                   value={config.countryIso || ''}
                   disabled={!canEdit}
@@ -508,8 +509,9 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                 </select>
               </div>
               <div className="field">
-                <label className="field-label">{t('config.city')}</label>
+                <label className="field-label" htmlFor="cfg-city">{t('config.city')}</label>
                 <input
+                  id="cfg-city"
                   className="input" maxLength={64}
                   value={config.city || ''}
                   onChange={e=>set('city', e.target.value)}
@@ -522,7 +524,7 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                 <div style={{fontSize: 13, fontWeight: 500}}>{t('config.public')}</div>
                 <div className="muted" style={{fontSize: 11.5}}>{t('config.public_sub')}</div>
               </div>
-              <window.AppShell.Switch on={config.publicLobby} disabled={!canEdit} ariaLabel={t('config.public_lobby') || 'Public lobby'} onChange={v=>set('publicLobby', v)}/>
+              <window.AppShell.Switch on={config.publicLobby} disabled={!canEdit} ariaLabel={t('config.public') || 'Public lobby'} onChange={v=>set('publicLobby', v)}/>
             </div>
           </div>
         </div>
@@ -535,27 +537,27 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
           <div className="card-body col" style={{gap: 14}}>
             <div className="grid-2">
               <div className="field">
-                <label className="field-label">{t('config.tcp')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.tcp} onChange={e=>set('tcp', Number(e.target.value))} disabled={!canEdit}/>
+                <label className="field-label" htmlFor="cfg-tcp">{t('config.tcp')}</label>
+                <input id="cfg-tcp" className="input mono" type="number" inputMode="numeric" min="1" max="65535" value={config.tcp} onChange={e=>set('tcp', Number(e.target.value))} disabled={!canEdit}/>
               </div>
               <div className="field">
-                <label className="field-label">{t('config.udp')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.udp} onChange={e=>set('udp', Number(e.target.value))} disabled={!canEdit}/>
+                <label className="field-label" htmlFor="cfg-udp">{t('config.udp')}</label>
+                <input id="cfg-udp" className="input mono" type="number" inputMode="numeric" min="1" max="65535" value={config.udp} onChange={e=>set('udp', Number(e.target.value))} disabled={!canEdit}/>
               </div>
             </div>
             <div className="grid-2">
               <div className="field">
-                <label className="field-label">{t('config.http')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.http} onChange={e=>set('http', Number(e.target.value))} disabled={!canEdit}/>
+                <label className="field-label" htmlFor="cfg-http">{t('config.http')}</label>
+                <input id="cfg-http" className="input mono" type="number" inputMode="numeric" min="1" max="65535" value={config.http} onChange={e=>set('http', Number(e.target.value))} disabled={!canEdit}/>
               </div>
               <div className="field">
-                <label className="field-label">{t('config.tickrate')}</label>
-                <input className="input mono" type="number" inputMode="numeric" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!canEdit}/>
+                <label className="field-label" htmlFor="cfg-tickrate">{t('config.tickrate')}</label>
+                <input id="cfg-tickrate" className="input mono" type="number" inputMode="numeric" value={config.tickrate} onChange={e=>set('tickrate', Number(e.target.value))} disabled={!canEdit}/>
               </div>
             </div>
             <div className="field">
-              <label className="field-label">{t('config.max_clients')}</label>
-              <input className="input mono" type="number" inputMode="numeric" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!canEdit}/>
+              <label className="field-label" htmlFor="cfg-maxclients">{t('config.max_clients')}</label>
+              <input id="cfg-maxclients" className="input mono" type="number" inputMode="numeric" min="1" max="200" value={config.maxClients ?? 16} onChange={e=>set('maxClients', Number(e.target.value))} disabled={!canEdit}/>
             </div>
           </div>
         </div>
@@ -655,14 +657,14 @@ function PageConfig({ config, setConfig, isAdmin, perms = {}, canEdit = isAdmin,
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autostart')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.autostart_sub')}</div>
                 </div>
-                <window.AppShell.Switch on={config.autoStart} disabled={!canEdit} ariaLabel={t('config.auto_start') || 'Auto start'} onChange={v=>set('autoStart', v)}/>
+                <window.AppShell.Switch on={config.autoStart} disabled={!canEdit} ariaLabel={t('config.autostart') || 'Auto start'} onChange={v=>set('autoStart', v)}/>
               </div>
               <div className="row-between">
                 <div>
                   <div style={{fontSize: 13, fontWeight: 500}}>{t('config.autorestart')}</div>
                   <div className="muted" style={{fontSize: 11.5}}>{t('config.autorestart_sub')}</div>
                 </div>
-                <window.AppShell.Switch on={config.autoRestart} disabled={!canEdit} ariaLabel={t('config.auto_restart') || 'Auto restart'} onChange={v=>set('autoRestart', v)}/>
+                <window.AppShell.Switch on={config.autoRestart} disabled={!canEdit} ariaLabel={t('config.autorestart') || 'Auto restart'} onChange={v=>set('autoRestart', v)}/>
               </div>
               <div className="field" style={{gridColumn: 'span 2'}}>
                 <label className="field-label">{t('config.lang')}</label>

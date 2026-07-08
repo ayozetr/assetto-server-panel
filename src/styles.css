@@ -307,6 +307,7 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .switch.on::after { transform: translateX(14px); }
 
 .checkbox {
+  appearance: none; -webkit-appearance: none; margin: 0;
   width: 16px; height: 16px;
   border: 1.5px solid var(--border-strong);
   border-radius: 4px;
@@ -315,6 +316,14 @@ input, select, textarea { font-family: inherit; color: inherit; }
   cursor: pointer;
   flex-shrink: 0;
   transition: background 120ms ease, border-color 120ms ease;
+}
+.checkbox:checked { background: var(--red); border-color: var(--red); }
+.checkbox:checked::after {
+  content: "";
+  width: 8px; height: 4px;
+  border-left: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(-45deg) translate(1px, -1px);
 }
 .checkbox.on { background: var(--red); border-color: var(--red); }
 .checkbox.on::after {

@@ -139,26 +139,26 @@ function PageProfile({ user, setUser }) {
           </div>
           <form className="card-body col" style={{gap:14}} onSubmit={handleSubmit}>
             <div className="field">
-              <label className="field-label">{t('profile.cur_pw')}</label>
+              <label className="field-label" htmlFor="pf-cur-pw">{t('profile.cur_pw')}</label>
               <div style={{position:'relative'}}>
-                <input className="input" type={showCurrent ? 'text' : 'password'}
+                <input id="pf-cur-pw" className="input" type={showCurrent ? 'text' : 'password'}
                   value={currentPw} onChange={e=>setCurrentPw(e.target.value)}
                   placeholder="••••••••" style={{paddingRight:36}}/>
                 {eyeBtn(showCurrent, () => setShowCurrent(v=>!v))}
               </div>
             </div>
             <div className="field">
-              <label className="field-label">{t('profile.new_pw')}</label>
+              <label className="field-label" htmlFor="pf-new-pw">{t('profile.new_pw')}</label>
               <div style={{position:'relative'}}>
-                <input className="input" type={showNew ? 'text' : 'password'}
+                <input id="pf-new-pw" className="input" type={showNew ? 'text' : 'password'}
                   value={newPw} onChange={e=>setNewPw(e.target.value)}
                   placeholder="••••••••" style={{paddingRight:36}}/>
                 {eyeBtn(showNew, () => setShowNew(v=>!v))}
               </div>
             </div>
             <div className="field">
-              <label className="field-label">{t('profile.confirm_pw')}</label>
-              <input className="input" type="password"
+              <label className="field-label" htmlFor="pf-confirm-pw">{t('profile.confirm_pw')}</label>
+              <input id="pf-confirm-pw" className="input" type="password"
                 value={confirmPw} onChange={e=>setConfirmPw(e.target.value)}
                 placeholder="••••••••"/>
             </div>
@@ -347,8 +347,12 @@ function TwoFactorCard({ user, setUser, t }) {
   };
 
   const copyText = (s) => {
-    try { navigator.clipboard.writeText(s); toast.push(t('profile.copied') || 'Copied', 'success'); }
-    catch { toast.push(t('common.error'), 'error'); }
+    try {
+      navigator.clipboard.writeText(s).then(
+        () => toast.push(t('profile.tfa.secret_copied') || 'Copied', 'success'),
+        () => toast.push(t('common.error'), 'error')
+      );
+    } catch { toast.push(t('common.error'), 'error'); }
   };
 
   if (!loaded) return null;

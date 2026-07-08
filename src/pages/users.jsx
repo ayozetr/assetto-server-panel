@@ -110,11 +110,11 @@ function PageUsers({ users, setUsers, isAdmin }) {
         });
       }
       const d = await r.json();
-      if (d.error) { toast.push(d.error, 'error'); return; }
+      if (!r.ok || d.error) { toast.push(d.error || t('common.error'), 'error'); return; }
       toast.push(form.id ? t('users.updated') : t('users.created'), 'success');
       setEditing(null);
       loadUsers();
-    } catch { toast.push(t('common.net_error'), 'error'); }
+    } catch (e) { toast.push(e.message || t('common.net_error'), 'error'); }
   };
 
   const deleteUser = async (u) => {

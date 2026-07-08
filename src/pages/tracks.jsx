@@ -228,7 +228,9 @@ function TrackCard({ track, sessionCfg, setSessionCfg, onOpenModal, t }) {
   const trackInitial = (track.name || '??').slice(0,2).toUpperCase();
 
   return (
-    <div className={`track-card ${selected ? 'selected' : ''}`} onClick={handleClick}>
+    <div className={`track-card ${selected ? 'selected' : ''}`} onClick={handleClick}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}>
       <div className="track-thumb" style={{position:'relative', overflow:'hidden'}}>
         {!imgFailed ? (
           <>

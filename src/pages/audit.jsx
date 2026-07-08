@@ -1,6 +1,6 @@
 // Page: Audit log viewer. Split out of settings.jsx. The ACTION_ICONS /
 // ACTION_COLOR maps live next to their only consumer.
-const { useState: useStateA, useEffect: useEffectA } = React;
+const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 const I4A = window.AppIcons;
 
 const ACTION_ICONS = {
@@ -43,18 +43,25 @@ function PageAudit() {
   const [hasMore, setHasMore] = useStateA(false);
   const [nextCursor, setNextCursor] = useStateA(null);
 
+  // Monotonic request id: every load() bumps it, and only the response whose id
+  // still matches the latest is allowed to paint. Guards against a slow refresh
+  // landing after a newer one and clobbering the fresher rows out of order.
+  const reqIdRef = useRefA(0);
+
   const load = () => {
+    const reqId = ++reqIdRef.current;
     setLoading(true);
     fetch('/api/audit?limit=50')
       .then(r => r.json())
       .then(d => {
+        if (reqId !== reqIdRef.current) return; // stale response, a newer load() superseded it
         // Backwards-compatible: response is { rows, hasMore, nextCursor } now,
         // but old callers / older server might still return a bare array.
         if (Array.isArray(d)) { setRows(d); setHasMore(false); setNextCursor(null); }
         else if (d && Array.isArray(d.rows)) { setRows(d.rows); setHasMore(!!d.hasMore); setNextCursor(d.nextCursor); }
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (reqId === reqIdRef.current) setLoading(false); });
   };
 
   const loadMore = () => {
@@ -76,7 +83,14 @@ function PageAudit() {
   useEffectA(load, []);
 
   const fmt = (iso) => {
-    try { return new Date(iso + 'Z').toLocaleString(); } catch { return iso; }
+    try {
+      // Server timestamps are naive UTC ("2026-07-08 12:00:00") and need a 'Z'
+      // to be parsed as UTC instead of local. But if the string already carries
+      // zone info (trailing Z, or a ±HH:MM / ±HHMM offset), appending another
+      // 'Z' corrupts it — so only add it when the zone is missing.
+      const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
+      return new Date(hasZone ? iso : iso + 'Z').toLocaleString();
+    } catch { return iso; }
   };
 
   return (
@@ -105,11 +119,11 @@ function PageAudit() {
           <table className="table" style={{margin:0}}>
             <thead>
               <tr>
-                <th>{t('audit.col_time')}</th>
-                <th>{t('audit.col_actor')}</th>
-                <th>{t('audit.col_action')}</th>
-                <th>{t('audit.col_target')}</th>
-                <th>{t('audit.col_detail')}</th>
+                <th scope="col">{t('audit.col_time')}</th>
+                <th scope="col">{t('audit.col_actor')}</th>
+                <th scope="col">{t('audit.col_action')}</th>
+                <th scope="col">{t('audit.col_target')}</th>
+                <th scope="col">{t('audit.col_detail')}</th>
               </tr>
             </thead>
             <tbody>

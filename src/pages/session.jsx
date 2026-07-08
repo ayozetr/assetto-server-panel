@@ -48,6 +48,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
             <div className="card-body col" style={{gap: 12}}>
               {sessionRows.map(row => {
                 const enabled = !!sessionCfg[row.flag];
+                const inputId = `sess-dur-${row.key}`;
                 return (
                   <div key={row.key} className="row" style={{gap: 12, alignItems: 'center'}}>
                     {window.AppShell.Switch ? (
@@ -62,8 +63,9 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
                       <div className={`switch ${enabled ? 'on' : ''}`} style={{flexShrink: 0}}
                         onClick={() => canEdit && set(row.flag, !enabled)}/>
                     )}
-                    <div style={{flex: 1, fontSize: 13, fontWeight: 500, opacity: enabled ? 1 : 0.5}}>{row.label}</div>
+                    <label htmlFor={inputId} style={{flex: 1, fontSize: 13, fontWeight: 500, opacity: enabled ? 1 : 0.5}}>{row.label}</label>
                     <input
+                      id={inputId}
                       className="input" type="number" inputMode="numeric" min="1" max="9999"
                       style={{width: 90, opacity: enabled ? 1 : 0.5}}
                       value={sessionCfg[row.value] ?? 0}
@@ -159,7 +161,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
             {track ? (
               <div style={{padding: '0 18px 14px'}}>
                 <div style={{borderRadius: 6, overflow:'hidden', background: 'var(--bg-3)', marginTop: 14}}>
-                  <img src={track.thumb} style={{width:'100%', display:'block'}}
+                  <img src={track.thumb} alt={track.name} style={{width:'100%', display:'block'}}
                     onError={e => { e.target.style.display='none'; }}/>
                 </div>
                 <div style={{marginTop: 12}}>
@@ -204,7 +206,7 @@ function PageSession({ tracks, cars, sessionCfg, setSessionCfg, isAdmin, canEdit
                 <div key={idx} style={{display:'flex', alignItems:'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)'}}>
                   <div className="muted mono" style={{fontSize: 10, width: 22, textAlign:'right', flexShrink:0}}>{idx + 1}</div>
                   <div style={{width: 36, height: 22, borderRadius: 3, overflow:'hidden', background: 'var(--bg-3)', flexShrink: 0}}>
-                    {thumbSrc && <img src={thumbSrc} style={{width:'100%', height:'100%', objectFit:'cover'}}
+                    {thumbSrc && <img src={thumbSrc} alt={c.name} style={{width:'100%', height:'100%', objectFit:'cover'}}
                       onError={e => { e.target.style.display='none'; }}/>}
                   </div>
                   <div style={{flex: 1, minWidth: 0}}>

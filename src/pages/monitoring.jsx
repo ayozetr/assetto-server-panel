@@ -224,7 +224,7 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
   const configDiffers  = server.status === 'running' && server.liveTrack && server.liveTrack !== sessionCfg.trackId;
   const configuredTrack = configDiffers ? (tracks.find(t => t.id === sessionCfg.trackId)?.name || sessionCfg.trackId) : null;
   const carsCount = (sessionCfg.slots || []).length;
-  const toast = window.AppShell ? window.AppShell.useToast() : { push: ()=>{} };
+  const toast = window.AppShell.useToast();
 
   // Activity card defaults collapsed (same convention as the live-map card —
   // explicit opt-in via click). Persisted under `ac-activity-open`,
@@ -260,8 +260,8 @@ function PageDashboard({ server, players, sessionCfg, tracks, cars }) {
                     : sessionCfg.raceEnabled     ? { label: t('sess.row.race'),     value: `${sessionCfg.raceLaps     || 0} ${t('sess.unit.laps')}` }
                     : { label: '—', value: '' };
 
-  const joinUrl = server.publicIp ? `https://acstuff.club/s/q:race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';
-  const cmUrl = server.publicIp ? `acmanager://race/online/join?ip=${server.publicIp}&httpPort=${server.httpPort || 8081}` : '';
+  const joinUrl = server.publicIp ? `https://acstuff.club/s/q:race/online/join?ip=${encodeURIComponent(server.publicIp)}&httpPort=${encodeURIComponent(server.httpPort || 8081)}` : '';
+  const cmUrl = server.publicIp ? `acmanager://race/online/join?ip=${encodeURIComponent(server.publicIp)}&httpPort=${encodeURIComponent(server.httpPort || 8081)}` : '';
 
   const [activity, setActivity] = useState([]);
   useEffect(() => {

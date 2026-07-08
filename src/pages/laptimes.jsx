@@ -636,13 +636,8 @@ function PageTimes({ cars, tracks, lapTimes, lapTimesLoaded, pastPlayers, isAdmi
 }
 
 function ComparisonTable({ players, labelOf, tracks, laps, trackId, t }) {
-  if (players.length < 1) {
-    return (
-      <div className="card"><div className="empty">{t('times.compare.empty_sel')}</div></div>
-    );
-  }
-  const visibleTracks = trackId === 'all' ? tracks : tracks.filter(t => t.id === trackId);
-
+  // Hooks must run before any early return, or the hook count changes between
+  // renders (React #310) when the first/last driver is (de)selected.
   const bestMap = uMt(() => {
     const m = new Map();
     for (const l of laps) {
@@ -652,6 +647,13 @@ function ComparisonTable({ players, labelOf, tracks, laps, trackId, t }) {
     }
     return m;
   }, [laps]);
+
+  if (players.length < 1) {
+    return (
+      <div className="card"><div className="empty">{t('times.compare.empty_sel')}</div></div>
+    );
+  }
+  const visibleTracks = trackId === 'all' ? tracks : tracks.filter(t => t.id === trackId);
 
   const rows = visibleTracks.map(t => {
     const cells = players.map(p => bestMap.get(`${t.id}|${p}`));

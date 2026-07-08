@@ -7,7 +7,7 @@
 //   - same-origin static    : stale-while-revalidate
 
 // Bump on every behaviour change so old caches are dropped at activate-time.
-const CACHE_NAME  = 'ac-panel-v42';
+const CACHE_NAME  = 'ac-panel-v43';
 const API_PREFIX  = '/api/';
 
 // Static assets to pre-cache on install. JSX is now pre-transpiled into /dist/
@@ -195,7 +195,13 @@ self.addEventListener('fetch', (event) => {
   // Stale-while-revalidate for everything else local (icons, css, manifest).
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request, { ignoreSearch: true });
+      // Match by exact URL (including the ?v=<mtime> cache-buster) so a fresh
+      // build's versioned asset is fetched from the network instead of being
+      // served stale from a previous SW version's cache — the same pairing
+      // hazard that made /dist/ network-first. Using ignoreSearch here served an
+      // old styles.css that lacked `.btn.icon-btn{padding:0}`, collapsing the
+      // preset-card button icons. The query-less precache entry is offline-only.
+      const cached = await cache.match(request);
       const networkFetch = fetch(request).then((res) => {
         if (res.ok) cache.put(request, res.clone());
         return res;

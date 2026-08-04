@@ -273,16 +273,29 @@ async function loadKunosIds() {
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 const _sessionsMemory = new Map(); // fallback when DB not ready
 
+// Session tokens are stored HASHED. The cookie carries the raw token; the store
+// only ever sees sha256(token), so a leaked DB — backup, volume copy, stray file
+// read — hands an attacker no usable cookie. Plain sha256 without salt or
+// stretching is deliberate here: the token is 256 bits of CSPRNG output, so
+// there is no low-entropy secret to brute-force, and lookups stay a single
+// indexed exact match. Anything derived from the token (DB row, memory map key)
+// must go through this function; only the value returned by createSession() and
+// the value read off the cookie are ever in the clear.
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 function createSession(username, role) {
   const token = crypto.randomBytes(32).toString('hex');
+  const key = hashSessionToken(token);
   const expiresAt = Date.now() + SESSION_TTL;
   if (db) {
     try {
       db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
-      db.prepare('INSERT OR REPLACE INTO sessions (token, username, role, expires_at) VALUES (?, ?, ?, ?)').run(token, username, role, expiresAt);
-    } catch { _sessionsMemory.set(token, { username, role, expiresAt }); }
+      db.prepare('INSERT OR REPLACE INTO sessions (token, username, role, expires_at) VALUES (?, ?, ?, ?)').run(key, username, role, expiresAt);
+    } catch { _sessionsMemory.set(key, { username, role, expiresAt }); }
   } else {
-    _sessionsMemory.set(token, { username, role, expiresAt });
+    _sessionsMemory.set(key, { username, role, expiresAt });
   }
   return token;
 }
@@ -303,20 +316,22 @@ function readCookie(req, name) {
 function getSession(req) {
   const token = readCookie(req, 'sid');
   if (!token) return null;
+  const key = hashSessionToken(token);
   if (db) {
     try {
-      return db.prepare('SELECT username, role FROM sessions WHERE token = ? AND expires_at > ?').get(token, Date.now()) || null;
+      return db.prepare('SELECT username, role FROM sessions WHERE token = ? AND expires_at > ?').get(key, Date.now()) || null;
     } catch {}
   }
-  const s = _sessionsMemory.get(token);
+  const s = _sessionsMemory.get(key);
   if (!s) return null;
-  if (Date.now() > s.expiresAt) { _sessionsMemory.delete(token); return null; }
+  if (Date.now() > s.expiresAt) { _sessionsMemory.delete(key); return null; }
   return s;
 }
 
 function deleteSession(token) {
-  if (db) { try { db.prepare('DELETE FROM sessions WHERE token = ?').run(token); } catch {} }
-  _sessionsMemory.delete(token);
+  const key = hashSessionToken(token);
+  if (db) { try { db.prepare('DELETE FROM sessions WHERE token = ?').run(key); } catch {} }
+  _sessionsMemory.delete(key);
 }
 
 // True when the request arrived over TLS, either directly or via a trusted proxy
@@ -587,6 +602,13 @@ try {
               ON laps(track, track_config, car, valid, ms)` },
     { id: 14, name: 'panel_users_role_index',
       sql: `CREATE INDEX IF NOT EXISTS idx_panel_users_role ON panel_users(role)` },
+    { id: 15, name: 'purge_plaintext_sessions',
+      // sessions.token used to hold the raw cookie value, so any DB read was a
+      // ready-to-use admin cookie. It now holds sha256(token) — see
+      // hashSessionToken(). Rows written before this migration are unusable
+      // (they'd only match a cookie whose hash equals the old plaintext) and
+      // still carry live secrets, so drop them. Everyone logs in again once.
+      sql: `DELETE FROM sessions` },
   ];
   const _appliedRows = db.prepare('SELECT id FROM schema_migrations').all();
   const _applied = new Set(_appliedRows.map(r => r.id));

@@ -8363,7 +8363,26 @@ function handler(req, res) {
   // /src/assets/ is kept reachable for the bundled Kunos preview images only;
   // JSX is served from /dist/ now (pre-transpiled by build.js).
   const STATIC_ALLOWED_PREFIXES = ['/src/assets/', '/dist/'];
-  const requested = urlPath === '/' ? '/index.html' : urlPath;
+  // Node does NOT normalise req.url, so "/dist/../.env" arrives verbatim. It used
+  // to clear the allow-list (it does start with "/dist/") and only afterwards did
+  // path.resolve() collapse the "..", landing on ROOT — which is exactly where
+  // .env, the panel DB and server.js live, and the startsWith(ROOT) guard below
+  // happily allowed it. Decode and normalise FIRST, match the allow-list on the
+  // normalised path, then re-confirm the resolved file sits inside a public root.
+  let requested;
+  try {
+    requested = decodeURIComponent(urlPath);
+  } catch {
+    return respond(res, 400, 'text/plain', '400 Bad Request');
+  }
+  if (requested.includes('\0')) {
+    return respond(res, 400, 'text/plain', '400 Bad Request');
+  }
+  requested = path.posix.normalize(requested);
+  if (requested === '/') requested = '/index.html';
+  if (!requested.startsWith('/') || requested.split('/').includes('..')) {
+    return respond(res, 403, 'text/plain', '403 Forbidden');
+  }
   const isAllowed = STATIC_ALLOWED_FILES.has(requested)
     || STATIC_ALLOWED_PREFIXES.some(p => requested.startsWith(p));
   if (!isAllowed) {
@@ -8371,7 +8390,10 @@ function handler(req, res) {
   }
 
   const filePath = path.resolve(ROOT, '.' + requested);
-  if (!filePath.startsWith(ROOT + path.sep)) {
+  const STATIC_ALLOWED_ROOTS = [path.join(ROOT, 'src', 'assets'), path.join(ROOT, 'dist')];
+  const inAllowedRoot = STATIC_ALLOWED_FILES.has(requested)
+    || STATIC_ALLOWED_ROOTS.some(r => filePath.startsWith(r + path.sep));
+  if (!inAllowedRoot) {
     return respond(res, 403, 'text/plain', '403 Forbidden');
   }
 

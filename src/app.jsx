@@ -4,7 +4,18 @@ const { useState: uS, useEffect: uE, useRef: uR } = React;
 // Global fetch interceptor — when any /api/ call returns 401 the session is gone
 // (expired or revoked). Dispatch a custom event so App can clear user state and
 // re-render the Login screen instead of leaving the UI hanging on stale data.
-// Login attempts (which legitimately return 401 on bad credentials) are excluded.
+//
+// Endpoints that RE-VERIFY a credential the user just typed are excluded: they
+// answer 401 for "that password/code is wrong", not for "your session died".
+// Treating those as an expired session logged the user out mid-flow — typing the
+// wrong current password in the forced-change screen bounced you to Login with
+// the new password lost, and a mistyped TOTP code threw away the pending 2FA
+// setup (secret + QR) so you had to start over.
+const AUTH_CHALLENGE_PATHS = [
+  '/api/auth/login',
+  '/api/auth/change-password',
+  '/api/auth/2fa/',
+];
 if (!window.__acFetchPatched) {
   window.__acFetchPatched = true;
   const origFetch = window.fetch;
@@ -12,7 +23,8 @@ if (!window.__acFetchPatched) {
     const res = await origFetch.apply(this, args);
     try {
       const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
-      if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/auth/login')) {
+      const isCredentialChallenge = AUTH_CHALLENGE_PATHS.some(p => url.startsWith(p));
+      if (res.status === 401 && url.startsWith('/api/') && !isCredentialChallenge) {
         window.dispatchEvent(new CustomEvent('ac-session-expired'));
       }
     } catch {}

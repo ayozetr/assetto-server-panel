@@ -5875,10 +5875,50 @@ function apiPositionsStream(req, res) {
 // ── Server control ────────────────────────────────────────────────────────────
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Find acServer PID by name (for adoption when dashboard restarts mid-run)
-function findACPid() {
+// Find the acServer PID (for adoption when the dashboard restarts mid-run).
+//
+// This used to be `pidof -s acServer`, which matches on the process NAME —
+// hardcoded, even though AC_BIN is configurable, so a renamed binary or a
+// wrapper script made the panel blind to a server that was plainly running.
+// pidof also can't tell two AC installs on the same host apart, and its ENOENT
+// (no pidof on the box) was swallowed as "no process".
+//
+// /proc/<pid>/exe is the kernel's own answer: it resolves to the real binary
+// whatever the process is called. Reading it needs the same uid, so if that
+// fails anywhere we fall back to pidof on the configured basename.
+let _acPidCache = { at: 0, pid: null };
+const AC_PID_CACHE_MS = 1000;
+
+async function findACPid({ fresh = false } = {}) {
+  if (!fresh && Date.now() - _acPidCache.at < AC_PID_CACHE_MS) return _acPidCache.pid;
+  const pid = await _scanForACPid();
+  _acPidCache = { at: Date.now(), pid };
+  return pid;
+}
+function _invalidateACPidCache() { _acPidCache = { at: 0, pid: null }; }
+
+async function _scanForACPid() {
+  let target = AC_BIN;
+  try { target = await fsp.realpath(AC_BIN); } catch {}
+  let sawPermissionError = false;
+  try {
+    const entries = await fsp.readdir('/proc');
+    for (const name of entries) {
+      if (!/^\d+$/.test(name)) continue;
+      const pid = Number(name);
+      if (pid === process.pid) continue;
+      let exe;
+      try { exe = await fsp.readlink(`/proc/${pid}/exe`); }
+      catch (e) {
+        if (e.code === 'EACCES' || e.code === 'EPERM') sawPermissionError = true;
+        continue;
+      }
+      if (exe === target || exe === `${target} (deleted)`) return pid;
+    }
+    if (!sawPermissionError) return null;
+  } catch { /* no /proc — fall through */ }
   return new Promise(resolve => {
-    const p = spawn('pidof', ['-s', 'acServer']);
+    const p = spawn('pidof', ['-s', path.basename(AC_BIN)]);
     let out = '';
     p.stdout.on('data', d => out += d);
     p.on('close', () => {
@@ -5983,6 +6023,8 @@ function spawnAC() {
         }
       });
       acChild = child;
+      // Process table just changed; don't serve a stale "not running".
+      _invalidateACPidCache();
       // Give it a moment to confirm it didn't crash immediately.
       setTimeout(() => {
         if (settled) return;
@@ -6005,16 +6047,20 @@ async function killAC() {
     try { acChild.kill('SIGTERM'); } catch {}
   }
   // 2. adopted process (dashboard restarted while AC was running)
-  let adoptedPid = await findACPid();
+  let adoptedPid = await findACPid({ fresh: true });
   if (adoptedPid) {
     try { process.kill(adoptedPid, 'SIGTERM'); } catch {}
   }
 
   const deadline = Date.now() + 6000;
   while (Date.now() < deadline) {
-    const childAlive = acChild && !acChild.killed && pidAlive(acChild.pid);
+    // NOT `!acChild.killed`: that flag flips the instant kill() is called, so
+    // the very first pass declared a still-running server dead, dropped the
+    // handle, and left the SIGKILL fallback below with nothing to kill.
+    // pidAlive() asks the OS.
+    const childAlive = !!(acChild && pidAlive(acChild.pid));
     if (!childAlive) acChild = null;
-    adoptedPid = await findACPid();
+    adoptedPid = await findACPid({ fresh: true });
     if (!childAlive && !adoptedPid) {
       _acRunSince  = null;
       _acFailCount = 0;
@@ -6025,11 +6071,11 @@ async function killAC() {
 
   // SIGKILL fallback
   if (acChild) { try { acChild.kill('SIGKILL'); } catch {} acChild = null; }
-  adoptedPid = await findACPid();
+  adoptedPid = await findACPid({ fresh: true });
   if (adoptedPid) { try { process.kill(adoptedPid, 'SIGKILL'); } catch {} }
   await sleep(400);
 
-  const stillUp = await findACPid();
+  const stillUp = await findACPid({ fresh: true });
   _acRunSince  = null;
   _acFailCount = 0;
   if (stillUp) return { ok: false, error: 'Failed to terminate acServer' };

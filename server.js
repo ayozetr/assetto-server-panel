@@ -6878,6 +6878,10 @@ function parseMultipart(req, maxBytes) {
     let filePath   = null;
     let bytesWritten = 0;
     let aborted    = false;
+    // Close-promises for every file part written so far. resolve() must wait on
+    // these: end() only *schedules* the flush, so resolving straight after it
+    // let the caller readFile() a file the OS had not finished writing.
+    const pending  = [];
 
     const fail = (err) => {
       if (aborted) return;
@@ -6895,8 +6899,13 @@ function parseMultipart(req, maxBytes) {
       if (curFilename != null) {
         // Close file writer; record filePath/size in result
         if (fileWriter) {
-          fileWriter.end();
+          const w = fileWriter;
           fileWriter = null;
+          // Never rejects: a write error already went through the writer's
+          // 'error' handler → fail() → reject of the outer promise. Rejecting
+          // here too could surface as an unhandled rejection, since nothing
+          // observes `pending` until req 'end'.
+          pending.push(new Promise(done => { w.once('error', done); w.end(done); }));
         }
         result[curName] = { filename: curFilename, filePath, size: bytesWritten };
         filePath = null;
@@ -6922,7 +6931,11 @@ function parseMultipart(req, maxBytes) {
       if (aborted) return;
       processBuffer(true);
       finishPart();
-      resolve(result);
+      // Wait for every writer to actually hit 'finish' before handing the
+      // caller a filePath. Without this, a few-hundred-MB upload could be
+      // read back truncated — extractArchive() then reported "invalid zip"
+      // for a perfectly valid file, intermittently and only under disk load.
+      Promise.all(pending).then(() => { if (!aborted) resolve(result); });
     });
 
     function processBuffer(isEnd = false) {
@@ -6971,8 +6984,13 @@ function parseMultipart(req, maxBytes) {
               if (curFilename != null) {
                 bytesWritten += slice.length;
                 if (!fileWriter.write(slice)) {
-                  // backpressure — we don't drain since req.on('data') has already been delivered;
-                  // the writer is still buffering, esbuild ones are fine in practice
+                  // Respect backpressure: stop pulling from the socket until the
+                  // writer drains. Ignoring it (as this used to) let the writer
+                  // queue the whole upload in memory, which is both a heap spike
+                  // on large mods and the reason end() had so much left to flush.
+                  const w = fileWriter;
+                  req.pause();
+                  w.once('drain', () => { if (!aborted) req.resume(); });
                 }
               } else {
                 fieldBuf = Buffer.concat([fieldBuf, slice]);

@@ -22,7 +22,10 @@ logs/
 *.rar
 *.7z
 *.sh
-!tools/*.sh    # scripts in tools/ are part of the project and must ship
+# Scripts in tools/ are part of the project and must ship. The comment has to
+# live on its own line: git treats a trailing '#' as part of the pattern, so
+# the negation silently matched nothing and tools/*.sh stayed ignored.
+!tools/*.sh
 
 # Python
 bot.py
@@ -44,6 +47,7 @@ Thumbs.db
 CLAUDE.md
 TASKS.md
 ASSESSMENT.md
+AUDIT.md
 .claude/
 
 # Local dev fixture (server_cfg.ini copy + scratch DB + logs)

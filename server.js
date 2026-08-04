@@ -6203,20 +6203,39 @@ function _saveLoginAttempt(ip, e) {
       .run(ip, e.count, e.resetAt);
   } catch {}
 }
-function _clearLoginAttempt(ip) {
-  _loginAttempts.delete(ip);
-  if (!db) return;
-  try { db.prepare('DELETE FROM login_attempts WHERE ip = ?').run(ip); } catch {}
+// Login throttling is keyed by (ip, username), not by ip alone. Keyed by ip
+// only it failed in both directions at once:
+//
+//   - ANY successful login wiped the row, so a user holding valid credentials
+//     could reset the counter at will and keep grinding another account's
+//     password five guesses at a time, forever.
+//   - With TRUST_PROXY off — the default, and what .env.example recommends
+//     next to HOST=127.0.0.1 behind a reverse proxy — every request arrives
+//     from the same address, so the whole panel shared one bucket: five failed
+//     guesses by one anonymous visitor locked every account out for 15
+//     minutes, persisted in SQLite so a restart didn't clear it.
+//
+// The `ip` column now stores "<ip>|<username>", which keeps the existing
+// schema (and its primary key) untouched.
+function _loginKey(ip, username) {
+  return `${ip || '_'}|${String(username || '_').toLowerCase()}`;
 }
-function checkLoginRateLimit(ip) {
+function _clearLoginAttempt(ip, username) {
+  const key = _loginKey(ip, username);
+  _loginAttempts.delete(key);
+  if (!db) return;
+  try { db.prepare('DELETE FROM login_attempts WHERE ip = ?').run(key); } catch {}
+}
+function checkLoginRateLimit(ip, username) {
+  const key = _loginKey(ip, username);
   const now = Date.now();
-  const e   = _loadLoginAttempt(ip);
+  const e   = _loadLoginAttempt(key);
   if (e && now < e.resetAt) {
     if (e.count >= 5) return false;
     e.count++;
-    _saveLoginAttempt(ip, e);
+    _saveLoginAttempt(key, e);
   } else {
-    _saveLoginAttempt(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    _saveLoginAttempt(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
   }
   return true;
 }
@@ -6348,12 +6367,14 @@ function clientIp(req) {
 async function apiAuthLogin(req, res) {
   try {
     const ip   = clientIp(req);
-    if (!checkLoginRateLimit(ip))
-      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
-
+    // Read the body first: the bucket is per (ip, username), so we need the
+    // username before we can check it. readBody caps the payload itself.
     const body = await readBody(req);
     const { username, password } = body;
     if (!username || !password) return json(res, 400, { error: 'Username and password are required' });
+
+    if (!checkLoginRateLimit(ip, username))
+      return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
 
     if (!db) return json(res, 503, { error: 'Database unavailable' });
 
@@ -6392,7 +6413,7 @@ async function apiAuthLogin(req, res) {
         .run(hashPasswordScrypt(password, user.salt), username); } catch {}
     }
 
-    _clearLoginAttempt(ip); // reset on success
+    _clearLoginAttempt(ip, username); // reset on success
     const token = createSession(username, user.role);
     res.setHeader('Set-Cookie', sessionCookieHeader(token, requestIsHttps(req)));
     const permissions = user.role === 'admin'
@@ -6453,7 +6474,7 @@ async function apiAuth2faConfirm(req, res) {
     const sess = getSession(req);
     if (!sess) return json(res, 401, { error: 'Unauthorized' });
     const ip = clientIp(req);
-    if (!checkLoginRateLimit(ip))
+    if (!checkLoginRateLimit(ip, sess.username))
       return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
     const body = await readBody(req);
     const code = String(body.code || '').replace(/\s/g, '');
@@ -6467,7 +6488,7 @@ async function apiAuth2faConfirm(req, res) {
                        totp_pending = '',
                        totp_enabled = 1
                  WHERE username = ?`).run(sess.username);
-    _clearLoginAttempt(ip);
+    _clearLoginAttempt(ip, sess.username);
     insertAuditLog(sess.username, 'user.2fa.enable', sess.username);
     json(res, 200, { ok: true });
   } catch (e) { json(res, e.status || 500, { error: e.message }); }
@@ -6478,7 +6499,7 @@ async function apiAuth2faDisable(req, res) {
     const sess = getSession(req);
     if (!sess) return json(res, 401, { error: 'Unauthorized' });
     const ip = clientIp(req);
-    if (!checkLoginRateLimit(ip))
+    if (!checkLoginRateLimit(ip, sess.username))
       return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
     const body = await readBody(req);
     const currentPassword = String(body.currentPassword || '');
@@ -6498,7 +6519,7 @@ async function apiAuth2faDisable(req, res) {
                        totp_pending = '',
                        totp_enabled = 0
                  WHERE username = ?`).run(sess.username);
-    _clearLoginAttempt(ip);
+    _clearLoginAttempt(ip, sess.username);
     insertAuditLog(sess.username, 'user.2fa.disable', sess.username);
     json(res, 200, { ok: true });
   } catch (e) { json(res, e.status || 500, { error: e.message }); }
@@ -6521,7 +6542,7 @@ async function apiAuth2faRotate(req, res) {
     const sess = getSession(req);
     if (!sess) return json(res, 401, { error: 'Unauthorized' });
     const ip = clientIp(req);
-    if (!checkLoginRateLimit(ip))
+    if (!checkLoginRateLimit(ip, sess.username))
       return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
     const body = await readBody(req);
     const currentPassword = String(body.currentPassword || '');
@@ -6543,7 +6564,7 @@ async function apiAuth2faRotate(req, res) {
       account: sess.username,
       issuer:  'Assetto Server Panel',
     });
-    _clearLoginAttempt(ip);
+    _clearLoginAttempt(ip, sess.username);
     insertAuditLog(sess.username, 'user.2fa.rotate', sess.username);
     json(res, 200, { ok: true, secret, otpauth, rotating: true });
   } catch (e) { json(res, e.status || 500, { error: e.message }); }
@@ -6601,7 +6622,7 @@ async function apiAuthChangePassword(req, res) {
     if (!sess) return json(res, 401, { error: 'Unauthorized' });
 
     const ip = clientIp(req);
-    if (!checkLoginRateLimit(ip))
+    if (!checkLoginRateLimit(ip, sess.username))
       return json(res, 429, { error: 'Too many attempts. Wait 15 minutes.' });
 
     const body = await readBody(req);
@@ -6633,7 +6654,7 @@ async function apiAuthChangePassword(req, res) {
     const newToken = createSession(username, user.role);
     res.setHeader('Set-Cookie', sessionCookieHeader(newToken, requestIsHttps(req)));
 
-    _clearLoginAttempt(ip);
+    _clearLoginAttempt(ip, sess.username);
     insertAuditLog(username, 'user.update', username, 'self password change');
     json(res, 200, { ok: true });
   } catch (e) { json(res, e.status || 500, { error: e.message }); }

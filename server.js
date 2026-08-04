@@ -7120,6 +7120,20 @@ function isSafeEntry(entryName, destRoot) {
 const S_IFLNK = 0o120000;
 const S_IFMT  = 0o170000;
 
+// Refuse an archive on its declared contents, BEFORE anything is written to
+// disk or pulled into memory. The caps below used to be checked only after
+// extraction had already happened: 7za's extractFull() dumps the whole archive
+// into os.tmpdir() and node-unrar-js's extract() materialises every entry in
+// RAM, so a zip bomb had already done its damage — filling the disk or the
+// heap — by the time the entry count and the size total were looked at.
+function _assertArchiveWithinLimits(count, declaredBytes, kind) {
+  if (count > MAX_ARCHIVE_ENTRIES)
+    throw Object.assign(new Error(`Archive has too many entries (${count} > ${MAX_ARCHIVE_ENTRIES})`), { status: 413 });
+  if (declaredBytes > MAX_ARCHIVE_TOTAL_B)
+    throw Object.assign(new Error(`Archive declares ${declaredBytes} bytes uncompressed, over the ${MAX_ARCHIVE_TOTAL_B}-byte cap`), { status: 413 });
+  log.info(`${kind}: ${count} entries, ${Math.round(declaredBytes / 1024 / 1024)} MB declared uncompressed — within limits`);
+}
+
 async function extractZip(buffer) {
   if (!StreamZip) throw new Error('node-stream-zip not available');
   // node-stream-zip v1.x only accepts a file path, not a buffer
@@ -7127,6 +7141,18 @@ async function extractZip(buffer) {
   await fsp.writeFile(tmpIn, buffer);
   const zip = new StreamZip.async({ file: tmpIn });
   const entries = await zip.entries();
+  // The central directory already declares every entry's uncompressed size,
+  // so the caps can be applied before a single entryData() call. On rejection
+  // we own the cleanup: the caller never gets an archive handle, so its
+  // close() would never run and tmpIn would linger in os.tmpdir() forever.
+  const _all = Object.values(entries);
+  try {
+    _assertArchiveWithinLimits(_all.length, _all.reduce((n, e) => n + (Number(e.size) || 0), 0), 'zip');
+  } catch (e) {
+    await Promise.resolve(zip.close()).catch(() => {});
+    await fsp.rm(tmpIn, { force: true }).catch(() => {});
+    throw e;
+  }
   const list = [];
   for (const [name, entry] of Object.entries(entries)) {
     // ZIP stores Unix permissions in the high 16 bits of the external attrs.
@@ -7157,6 +7183,22 @@ async function extract7z(buffer) {
   const tmpIn  = path.join(os.tmpdir(), `ac-mod-${stamp}.7z`);
   const tmpOut = path.join(os.tmpdir(), `ac-mod-${stamp}`);
   await fsp.writeFile(tmpIn, buffer);
+  // `7za l` reads the archive header only. Do it first, so a bomb is refused
+  // before extractFull() writes a single byte into os.tmpdir().
+  try {
+    const listed = await new Promise((resolve, reject) => {
+      const out = [];
+      const stream = sevenZ.list(tmpIn, { $bin: sevenBin.path7za });
+      stream.on('data', d => out.push(d));
+      stream.on('end', () => resolve(out));
+      stream.on('error', reject);
+    });
+    _assertArchiveWithinLimits(listed.length, listed.reduce((n, e) => n + (Number(e.size) || 0), 0), '7z');
+  } catch (e) {
+    await fsp.rm(tmpIn, { force: true }).catch(() => {});
+    if (e.status) throw e;
+    throw Object.assign(new Error(`Cannot read 7z archive listing: ${e.message}`), { status: 400 });
+  }
   await fsp.mkdir(tmpOut, { recursive: true });
   await new Promise((resolve, reject) => {
     const stream = sevenZ.extractFull(tmpIn, tmpOut, { $bin: sevenBin.path7za });
@@ -7201,6 +7243,16 @@ async function extractRar(buffer) {
   if (!Unrar) throw new Error('node-unrar-js not available');
   // node-unrar-js v2 API
   const extractor = await Unrar.createExtractorFromData({ data: buffer });
+  // getFileList() walks headers only; extract() below builds a Buffer for every
+  // entry in memory, so this is the last point where a bomb can be refused
+  // without paying for it first.
+  try {
+    const headers = [...extractor.getFileList().fileHeaders];
+    _assertArchiveWithinLimits(headers.length, headers.reduce((n, h) => n + (Number(h.unpSize) || 0), 0), 'rar');
+  } catch (e) {
+    if (e.status) throw e;
+    throw Object.assign(new Error(`Cannot read rar archive listing: ${e.message}`), { status: 400 });
+  }
   const { files } = extractor.extract();
   const list = [];
   for (const file of files) {
@@ -7810,18 +7862,22 @@ async function processModBuffer(buffer, filename) {
     // Disk-space gate. Refuse the upload before extracting if the destination
     // looks dangerously full — running out of disk mid-extract leaves a
     // half-installed mod that's worse than a clean rejection.
-    const ext = path.extname(filename).toLowerCase();
-    const probeDir = ext === '.zip' || ext === '.rar' || ext === '.7z'
-      ? AC_CARS_DIR // either AC_CARS_DIR or AC_TRACKS_DIR works as a probe; both live on the same volume in practice
-      : os.tmpdir();
-    const space = await _checkFreeSpace(probeDir, buffer.length);
-    if (space && !space.ok) {
-      const freeMb = Math.floor(space.free / 1024 / 1024);
-      const needMb = Math.ceil(space.need / 1024 / 1024);
-      throw Object.assign(
-        new Error(`Not enough disk space (free=${freeMb} MB, estimated need=${needMb} MB)`),
-        { status: 507 } // 507 Insufficient Storage
-      );
+    // Probe BOTH volumes. Every supported format stages through os.tmpdir()
+    // — the upload is written there, and 7z extracts there too — before
+    // anything reaches the content directory, and the two are frequently
+    // different mounts, with /tmp often a small tmpfs living in RAM. The old
+    // ternary only ever probed the destination: its os.tmpdir() branch was
+    // unreachable, because any other extension is rejected downstream anyway.
+    for (const probeDir of new Set([os.tmpdir(), AC_CARS_DIR])) {
+      const space = await _checkFreeSpace(probeDir, buffer.length);
+      if (space && !space.ok) {
+        const freeMb = Math.floor(space.free / 1024 / 1024);
+        const needMb = Math.ceil(space.need / 1024 / 1024);
+        throw Object.assign(
+          new Error(`Not enough disk space on ${probeDir} (free=${freeMb} MB, estimated need=${needMb} MB)`),
+          { status: 507 } // 507 Insufficient Storage
+        );
+      }
     }
     return await _processModBufferInner(buffer, filename);
   } finally {
@@ -7957,6 +8013,34 @@ const CHUNK_TMP_DIR    = path.join(os.tmpdir(), 'ac-upload-chunks');
 // a misconfigured value (or hostile DB edit) cannot OOM the panel.
 const UPLOAD_HARD_CAP_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
+// Effective per-upload byte cap: the admin-configured upload_max_mb, floored by
+// the absolute UPLOAD_HARD_CAP_BYTES ceiling so a runaway setting can't OOM the
+// panel. Shared by both upload routes — the multipart one always applied it,
+// the chunked one didn't look at upload_max_mb at all.
+function effectiveUploadCapBytes() {
+  let maxMb = 500;
+  if (db) {
+    try {
+      const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
+      if (row) maxMb = parseInt(row.value, 10) || 500;
+    } catch {}
+  }
+  return Math.min(maxMb * 1024 * 1024, UPLOAD_HARD_CAP_BYTES);
+}
+
+// Bytes accepted so far per uploadId, so the cap is enforced on the way IN.
+// The assembly loop is the only place that used to add these up, and it only
+// runs once every chunk has arrived — so a client declaring totalChunks = 4096
+// and sending 4095 never reached it.
+//
+// The tally survives a rejection on purpose: the chunks on disk are deleted to
+// free the space, but the uploadId keeps failing instead of silently starting
+// over from zero, which would let the same caller cycle through the cap again
+// and again. Entries are swept by age alongside the chunk directories.
+const _uploadBytes = new Map(); // uploadId -> { bytes, at }
+function _uploadBytesGet(id)      { return _uploadBytes.get(id)?.bytes || 0; }
+function _uploadBytesSet(id, n)   { _uploadBytes.set(id, { bytes: n, at: Date.now() }); }
+
 // Atomic per-uploadId lock. Used to serialise every operation that touches the
 // same uploadId — chunk write, readdir count, and assembly all happen inside
 // the same critical section, so two concurrent final-chunk requests can never
@@ -8011,6 +8095,10 @@ async function cleanupOldChunks() {
       }
     }
   } catch {}
+  // Byte tallies outlive their chunk directory when an upload is refused, so
+  // sweep them by their own age instead of by the directory's.
+  const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+  for (const [id, v] of _uploadBytes) if (v.at < cutoff) _uploadBytes.delete(id);
   _sweeperState.chunks = { lastRunAt: Date.now(), lastRemoved: removed };
 }
 
@@ -8094,9 +8182,27 @@ async function apiModUploadChunk(req, res) {
       // an attacker (or buggy client) trying to swap chunk content with a
       // different payload gets 409.
       const chunkPath = path.join(uploadDir, `chunk-${chunkIndex}`);
+      // Enforce the size cap here, before the bytes hit the disk. Checking it
+      // only at assembly time meant an upload that never completes was never
+      // checked at all: 4096 declared chunks minus one is tens of GB parked in
+      // os.tmpdir(), and cleanupOldChunks won't touch it for two hours — a
+      // timer every new chunk refreshes.
+      const _capBytes = effectiveUploadCapBytes();
+      const _already  = _uploadBytesGet(uploadId);
+      if (_already + chunkData.length > _capBytes) {
+        // Keep counting even though we refuse the write, so further chunks for
+        // this uploadId stay refused rather than restarting the tally.
+        _uploadBytesSet(uploadId, _already + chunkData.length);
+        await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
+        clearUserUpload(uploadedBy);
+        return json(res, 413, { error: `Upload exceeds the ${Math.floor(_capBytes / 1024 / 1024)} MB limit` });
+      }
       try {
         const fh = await fsp.open(chunkPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL);
         try { await fh.writeFile(chunkData); } finally { await fh.close().catch(() => {}); }
+        // Only count bytes we actually wrote: an idempotent retry of the same
+        // chunk lands in the EEXIST branch and must not be counted twice.
+        _uploadBytesSet(uploadId, _already + chunkData.length);
       } catch (e) {
         if (e.code === 'EEXIST') {
           const existing = await fsp.readFile(chunkPath).catch(() => null);
@@ -8144,6 +8250,7 @@ async function apiModUploadChunk(req, res) {
         insertModHistory({ ok: true, filename, uploadedBy, ...result });
         insertAuditLog(uploadedBy || 'unknown', 'mod.install', result.modId || filename, `${result.modType}, ${result.filesExtracted} files`);
         clearUserUpload(uploadedBy);
+        _uploadBytes.delete(uploadId);
         return json(res, 200, { ok: true, done: true, ...result });
       } finally {
         await fsp.unlink(assembledPath).catch(() => {});
@@ -8152,6 +8259,7 @@ async function apiModUploadChunk(req, res) {
   } catch (e) {
     await fsp.rm(uploadDir, { recursive: true }).catch(() => {});
     clearUserUpload(uploadedBy);
+    _uploadBytes.delete(uploadId);
     insertModHistory({ ok: false, filename, uploadedBy, error: e.message });
     log.error('chunk upload failed:', e.message);
     json(res, e.status || 500, { error: e.message });
@@ -8164,14 +8272,7 @@ async function apiModUpload(req, res) {
   if (!checkRateLimit('mod-upload', clientIp(req), 30, 60 * 60 * 1000))
     return json(res, 429, { error: 'Rate limit: too many uploads (max 30/hour)' });
 
-  let maxMb = 500;
-  if (db) {
-    const row = db.prepare(`SELECT value FROM panel_settings WHERE key = 'upload_max_mb'`).get();
-    if (row) maxMb = parseInt(row.value, 10) || 500;
-  }
-  // Cap whatever the admin configured — UPLOAD_HARD_CAP_BYTES is the absolute
-  // ceiling so a runaway setting cannot OOM the panel.
-  const effectiveCap = Math.min(maxMb * 1024 * 1024, UPLOAD_HARD_CAP_BYTES);
+  const effectiveCap = effectiveUploadCapBytes();
 
   let parts;
   try { parts = await parseMultipart(req, effectiveCap); }

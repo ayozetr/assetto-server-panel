@@ -6376,6 +6376,18 @@ async function apiAuth2faSetup(req, res) {
   const sess = getSession(req);
   if (!sess) return json(res, 401, { error: 'Unauthorized' });
   if (!db) return json(res, 503, { error: 'Database unavailable' });
+  // Enrolling on an account that already has 2FA would overwrite the secret
+  // with one only the caller holds, and confirm() promotes it without ever
+  // asking for the current password or a current code. That is exactly the
+  // "a stolen session cookie can't replace the secret" property /2fa/rotate
+  // is written to protect: it demands currentPassword + a valid code first.
+  // Without this check the pair setup+confirm walked straight around it, and
+  // the legitimate owner was left unable to disable 2FA either, since disable
+  // also needs a code from the authenticator they no longer control.
+  const _existing2fa = db.prepare('SELECT totp_enabled FROM panel_users WHERE username = ?').get(sess.username);
+  if (_existing2fa?.totp_enabled) {
+    return json(res, 409, { error: '2FA is already enabled — use /api/auth/2fa/rotate to replace the secret' });
+  }
   // 20 random bytes → 32-char base32 secret (RFC 4226 minimum is 16 bytes for
   // SHA-1; 20 matches what most authenticator apps assume).
   const secret = _base32Encode(crypto.randomBytes(20));
